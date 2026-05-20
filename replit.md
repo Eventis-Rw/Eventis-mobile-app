@@ -1,45 +1,69 @@
-# [Project name]
+# Eventis
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A full-featured event discovery and booking mobile app built with Expo/React Native.
 
 ## Run & Operate
 
+- Mobile app runs via the `artifacts/mobile: expo` workflow
+- `pnpm --filter @workspace/mobile run typecheck` — typecheck the mobile app
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
+- Mobile: Expo SDK 54, React Native, Expo Router
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/mobile/` — Expo mobile app (main product)
+  - `app/` — Expo Router screens
+    - `(tabs)/` — Home, Search, Tickets, Chat, Profile tabs
+    - `auth/` — Welcome, Register, OTP screens
+    - `event/[id].tsx` — Event detail
+    - `booking/[id].tsx` — Booking confirmation modal
+    - `business/` — Register, Dashboard, Create Event
+  - `components/` — EventCard, BannerCarousel, CategoryPill, TicketCard, OTPInput, SkeletonLoader
+  - `constants/colors.ts` — Design tokens (dark midnight + electric violet)
+  - `constants/mockData.ts` — Mock events, categories, conversations
+  - `context/` — AuthContext, BookingsContext, EventsContext
+  - `hooks/useColors.ts` — Theme hook (dark/light aware)
+  - `assets/images/` — App icon + banner images (concert, tech, food)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Auth redirect handled exclusively in `app/_layout.tsx` via `useSegments` + `useRouter` — screens do not self-redirect
+- No direct payment processing — paid events redirect to organizer's external website via `Linking.openURL`
+- OTP verification is demo-only (any 6-digit code accepted) — hook is `useAuth().requestOTP` / `verifyOTP`
+- `EventsContext` provides filtered events app-wide; local state used on Home for category filter
+- iOS 26+: NativeTabs with liquid glass; older iOS / Android / Web: classic Tabs with BlurView / solid bg
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **Customer flow**: Welcome → Register/Sign In → OTP → Browse events → View details → Book → Pay via redirect → Chat with organizer → Leave review
+- **Business flow**: Register as poster → Create events → View analytics dashboard
+- **Design**: Dark midnight background (#0c0c1a), electric violet primary (#7c3aed), liquid glass tab bar on iOS 26+
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Dark midnight + electric violet design throughout
+- No emojis in UI
+- `useColors()` for all colors — no hardcoded hex values in screens
+- `useSafeAreaInsets()` for safe area handling
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- `SymbolView` (SF Symbols) renders only on iOS — use `Platform.OS === "ios"` ternary with `Feather` for web/Android
+- NativeTabs do NOT use `useBottomTabBarHeight()` — use `contentInsetAdjustmentBehavior="automatic"` instead
+- Badge in NativeTabs requires a string child, not a number
 
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See the `expo` skill for mobile-specific patterns
+- See the `mobile-ui` skill for tabs configuration (tabs.md)
