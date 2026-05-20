@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -14,9 +15,9 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { MOCK_EVENTS } from "@/constants/mockData";
 import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
+import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 import { EventCard } from "@/components/EventCard";
 
@@ -26,11 +27,12 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout, isAuthenticated } = useAuth();
   const { bookings } = useBookings();
+  const { events } = useEvents();
   const [activeSection, setActiveSection] = useState<"saved" | "settings">("saved");
 
   const headerTop = Platform.OS === "web" ? 67 : insets.top;
 
-  const savedEvents = MOCK_EVENTS.filter((e) =>
+  const savedEvents = events.filter((e) =>
     user?.savedEvents.includes(e.id)
   );
 
@@ -117,7 +119,10 @@ export default function ProfileScreen() {
               )}
             </View>
           </View>
-          <Pressable style={[styles.editBtn, { borderColor: colors.border }]}>
+          <Pressable
+            style={[styles.editBtn, { borderColor: colors.border }]}
+            onPress={() => router.push("/profile/edit" as any)}
+          >
             <Ionicons name="pencil-outline" size={16} color={colors.foreground} />
           </Pressable>
         </Animated.View>
@@ -193,7 +198,7 @@ export default function ProfileScreen() {
             <SettingRow
               icon="person-outline"
               label="Edit Profile"
-              onPress={() => {}}
+              onPress={() => router.push("/profile/edit" as any)}
               colors={colors}
             />
             <SettingRow
@@ -212,25 +217,37 @@ export default function ProfileScreen() {
             <SettingRow
               icon="notifications-outline"
               label="Notifications"
-              onPress={() => {}}
+              onPress={() =>
+                Alert.alert(
+                  "Notifications",
+                  "Manage notification preferences in your device settings.",
+                  [{ text: "OK" }]
+                )
+              }
               colors={colors}
             />
             <SettingRow
               icon="lock-closed-outline"
               label="Privacy & Security"
-              onPress={() => {}}
+              onPress={() =>
+                Alert.alert(
+                  "Privacy & Security",
+                  "Your data is encrypted and never shared with third parties.",
+                  [{ text: "Got it" }]
+                )
+              }
               colors={colors}
             />
             <SettingRow
               icon="help-circle-outline"
               label="Help & Support"
-              onPress={() => {}}
+              onPress={() => Linking.openURL("mailto:support@eventis.app")}
               colors={colors}
             />
             <SettingRow
               icon="document-text-outline"
               label="Terms & Privacy"
-              onPress={() => {}}
+              onPress={() => Linking.openURL("https://eventis.app/terms")}
               colors={colors}
             />
             <Pressable

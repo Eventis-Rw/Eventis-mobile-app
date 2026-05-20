@@ -15,9 +15,9 @@ import {
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { MOCK_EVENTS } from "@/constants/mockData";
 import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
+import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 
 const EVENT_IMAGES: Record<string, number> = {
@@ -33,10 +33,11 @@ export default function BookingScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { addBooking, hasBookedEvent } = useBookings();
+  const { getEventById } = useEvents();
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  const event = MOCK_EVENTS.find((e) => e.id === id);
+  const event = getEventById(id ?? "");
   const isAlreadyBooked = hasBookedEvent(id ?? "");
 
   if (!event) {
@@ -58,7 +59,6 @@ export default function BookingScreen() {
     }
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const code = "EVT" + event.id.padStart(4, "0") + "-" + Date.now().toString().slice(-6).toUpperCase();
     await addBooking({
       eventId: event.id,
       eventTitle: event.title,
@@ -67,8 +67,6 @@ export default function BookingScreen() {
       eventLocation: event.location,
       eventImage: event.image,
       userId: user.id,
-      status: "confirmed",
-      ticketCode: code,
       quantity,
       totalPrice: total,
       currency: event.currency,

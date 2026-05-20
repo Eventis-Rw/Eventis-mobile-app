@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   CATEGORIES,
@@ -6,6 +13,7 @@ import {
   type Event,
   type EventCategory,
 } from "@/constants/mockData";
+import { api } from "@/utils/apiClient";
 
 interface EventsContextValue {
   events: Event[];
@@ -17,21 +25,73 @@ interface EventsContextValue {
   setSearchQuery: (query: string) => void;
   getEventById: (id: string) => Event | undefined;
   categories: EventCategory[];
+  isLoading: boolean;
+  refreshEvents: () => Promise<void>;
 }
 
 const EventsContext = createContext<EventsContextValue | null>(null);
 
+function normaliseEvent(raw: Record<string, unknown>): Event {
+  return {
+    id: String(raw.id ?? ""),
+    title: String(raw.title ?? ""),
+    category: String(raw.category ?? "") as EventCategory,
+    description: String(raw.description ?? ""),
+    location: String(raw.location ?? ""),
+    city: String(raw.city ?? ""),
+    date: String(raw.date ?? ""),
+    time: String(raw.time ?? ""),
+    endTime: String(raw.endTime ?? (raw.end_time ?? "")),
+    price: Number(raw.price ?? 0),
+    currency: String(raw.currency ?? "GBP"),
+    organizer: String(raw.organizer ?? ""),
+    organizerWebsite: raw.organizerWebsite
+      ? String(raw.organizerWebsite)
+      : (raw.organizer_website ? String(raw.organizer_website) : undefined),
+    attendees: Number(raw.attendees ?? 0),
+    capacity: Number(raw.capacity ?? 0),
+    image: String(raw.image ?? "concert"),
+    tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : [],
+    isFeatured: Boolean(raw.isFeatured ?? raw.is_featured),
+    isSponsored: Boolean(raw.isSponsored ?? raw.is_sponsored),
+    isPaid: Boolean(raw.isPaid ?? raw.is_paid),
+    distance: Number(raw.distance ?? 0),
+    rating: Number(raw.rating ?? 0),
+    reviewCount: Number(raw.reviewCount ?? raw.review_count ?? 0),
+  };
+}
+
 export function EventsProvider({ children }: { children: React.ReactNode }) {
+  const [events, setEvents] = useState<Event[]>(MOCK_EVENTS);
   const [activeCategory, setActiveCategory] = useState<EventCategory>("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const refreshEvents = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await api.get<{ events: Record<string, unknown>[] }>("/events");
+      if (data.events?.length) {
+        setEvents(data.events.map(normaliseEvent));
+      }
+    } catch {
+      setEvents(MOCK_EVENTS);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshEvents();
+  }, [refreshEvents]);
 
   const featuredEvents = useMemo(
-    () => MOCK_EVENTS.filter((e) => e.isFeatured),
-    []
+    () => events.filter((e) => e.isFeatured),
+    [events]
   );
 
   const filteredEvents = useMemo(() => {
-    let results = MOCK_EVENTS;
+    let results = events;
     if (activeCategory !== "All") {
       results = results.filter((e) => e.category === activeCategory);
     }
@@ -46,14 +106,17 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
       );
     }
     return results;
-  }, [activeCategory, searchQuery]);
+  }, [events, activeCategory, searchQuery]);
 
-  const getEventById = (id: string) => MOCK_EVENTS.find((e) => e.id === id);
+  const getEventById = useCallback(
+    (id: string) => events.find((e) => e.id === id),
+    [events]
+  );
 
   return (
     <EventsContext.Provider
       value={{
-        events: MOCK_EVENTS,
+        events,
         featuredEvents,
         activeCategory,
         setActiveCategory,
@@ -62,6 +125,8 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
         setSearchQuery,
         getEventById,
         categories: CATEGORIES,
+        isLoading,
+        refreshEvents,
       }}
     >
       {children}

@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -15,9 +16,9 @@ import {
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { MOCK_EVENTS } from "@/constants/mockData";
 import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
+import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 
 const EVENT_IMAGES: Record<string, number> = {
@@ -33,9 +34,10 @@ export default function EventDetailScreen() {
   const router = useRouter();
   const { user, toggleSaveEvent, requestOTP } = useAuth();
   const { hasBookedEvent, addBooking } = useBookings();
+  const { getEventById } = useEvents();
   const [bookingLoading, setBookingLoading] = useState(false);
 
-  const event = MOCK_EVENTS.find((e) => e.id === id);
+  const event = getEventById(id ?? "");
   const isBooked = hasBookedEvent(id ?? "");
   const isSaved = user?.savedEvents.includes(id ?? "") ?? false;
 
@@ -73,7 +75,6 @@ export default function EventDetailScreen() {
     }
     setBookingLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const code = "EVT" + event.id.padStart(4, "0") + "-" + Date.now().toString().slice(-6).toUpperCase();
     await addBooking({
       eventId: event.id,
       eventTitle: event.title,
@@ -82,8 +83,6 @@ export default function EventDetailScreen() {
       eventLocation: event.location,
       eventImage: event.image,
       userId: user.id,
-      status: "confirmed",
-      ticketCode: code,
       quantity: 1,
       totalPrice: event.price,
       currency: event.currency,
@@ -97,6 +96,16 @@ export default function EventDetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     toggleSaveEvent(event.id);
   }, [toggleSaveEvent, event.id]);
+
+  const handleShare = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await Share.share({
+        title: event.title,
+        message: `Check out "${event.title}" on ${event.date} at ${event.location}${event.organizerWebsite ? " — " + event.organizerWebsite : ""}`,
+      });
+    } catch {}
+  }, [event]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -125,7 +134,10 @@ export default function EventDetailScreen() {
                   color={isSaved ? colors.primary : colors.foreground}
                 />
               </Pressable>
-              <Pressable style={[styles.navBtn, { backgroundColor: colors.surface }]}>
+              <Pressable
+                style={[styles.navBtn, { backgroundColor: colors.surface }]}
+                onPress={handleShare}
+              >
                 <Ionicons name="share-outline" size={20} color={colors.foreground} />
               </Pressable>
             </View>
@@ -185,7 +197,13 @@ export default function EventDetailScreen() {
                 </Text>
               </View>
             </View>
-            <Pressable style={[styles.mapBtn, { backgroundColor: colors.primary }]}>
+            <Pressable
+              style={[styles.mapBtn, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                const q = encodeURIComponent(`${event.location}, ${event.city}`);
+                Linking.openURL(`https://maps.google.com/?q=${q}`);
+              }}
+            >
               <Text style={styles.mapBtnText}>Map</Text>
             </Pressable>
           </View>

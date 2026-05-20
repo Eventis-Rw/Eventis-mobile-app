@@ -7,6 +7,8 @@ import React, {
   useState,
 } from "react";
 
+import { api, ApiError, clearToken, getToken, setToken } from "@/utils/apiClient";
+
 export interface User {
   id: string;
   username: string;
@@ -15,6 +17,9 @@ export interface User {
   isPhoneVerified: boolean;
   isBusinessAccount: boolean;
   bio?: string;
+  businessName?: string;
+  businessType?: string;
+  businessWebsite?: string;
   savedEvents: string[];
   joinedDate: string;
 }
@@ -36,7 +41,7 @@ interface AuthContextType {
   requestOTP: (purpose: "register" | "payment" | "chat", eventId?: string) => void;
   clearOTPContext: () => void;
   toggleSaveEvent: (eventId: string) => void;
-  updateProfile: (data: Partial<User>) => void;
+  updateProfile: (data: Partial<User>) => Promise<void>;
   registerBusiness: (data: {
     businessName: string;
     type: "business" | "individual";
@@ -45,8 +50,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
-
-const STORAGE_KEY = "@eventis_user";
+const USER_CACHE_KEY = "@eventis_user_cache";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -59,72 +63,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (stored) setUser(JSON.parse(stored));
+        const token = await getToken();
+        if (token) {
+          try {
+            const data = await api.get<{ user: User }>("/auth/me");
+            setUser(data.user);
+            await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user));
+          } catch {
+            const cached = await AsyncStorage.getItem(USER_CACHE_KEY);
+            if (cached) setUser(JSON.parse(cached));
+          }
+        }
       } catch {}
       setIsLoading(false);
     })();
   }, []);
 
   const persistUser = useCallback(async (u: User) => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+    await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(u));
     setUser(u);
   }, []);
 
   const login = useCallback(
-    async (identifier: string, _password: string) => {
-      const newUser: User = {
-        id: Date.now().toString(),
-        username: identifier.split("@")[0] || identifier,
-        email: identifier.includes("@") ? identifier : `${identifier}@eventis.app`,
-        isPhoneVerified: false,
-        isBusinessAccount: false,
-        savedEvents: [],
-        joinedDate: new Date().toISOString(),
-      };
-      await persistUser(newUser);
+    async (identifier: string, password: string) => {
+      const data = await api.post<{ token: string; user: User }>("/auth/login", {
+        identifier,
+        password,
+      });
+      await setToken(data.token);
+      await persistUser(data.user);
     },
     [persistUser]
   );
 
   const register = useCallback(
-    async (data: { username: string; email: string; phone?: string; password: string }) => {
-      const newUser: User = {
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-        username: data.username,
-        email: data.email,
-        phone: data.phone,
-        isPhoneVerified: false,
-        isBusinessAccount: false,
-        savedEvents: [],
-        joinedDate: new Date().toISOString(),
-      };
-      await persistUser(newUser);
+    async (regData: { username: string; email: string; phone?: string; password: string }) => {
+      const data = await api.post<{ token: string; user: User }>("/auth/register", regData);
+      await setToken(data.token);
+      await persistUser(data.user);
     },
     [persistUser]
   );
 
   const logout = useCallback(async () => {
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    try {
+      await api.post("/auth/logout");
+    } catch {}
+    await clearToken();
+    await AsyncStorage.removeItem(USER_CACHE_KEY);
     setUser(null);
   }, []);
 
   const verifyOTP = useCallback(
     async (code: string): Promise<boolean> => {
-      if (code.length === 6 && user) {
-        const updated = { ...user, isPhoneVerified: true };
-        await persistUser(updated);
+      if (code.length !== 6 || !/^\d{6}$/.test(code)) return false;
+      try {
+        const data = await api.post<{ user: User }>("/auth/verify-otp", { code });
+        await persistUser(data.user);
         setPendingOTPContext(null);
         return true;
+      } catch {
+        return false;
       }
-      return false;
     },
-    [user, persistUser]
+    [persistUser]
   );
 
   const requestOTP = useCallback(
     (purpose: "register" | "payment" | "chat", eventId?: string) => {
       setPendingOTPContext({ purpose, eventId });
+      api.post("/auth/request-otp").catch(() => {});
     },
     []
   );
@@ -136,11 +144,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const toggleSaveEvent = useCallback(
     async (eventId: string) => {
       if (!user) return;
-      const saved = user.savedEvents.includes(eventId)
+      const isSaved = user.savedEvents.includes(eventId);
+      const optimistic = isSaved
         ? user.savedEvents.filter((id) => id !== eventId)
         : [...user.savedEvents, eventId];
-      const updated = { ...user, savedEvents: saved };
+      const updated = { ...user, savedEvents: optimistic };
       await persistUser(updated);
+      try {
+        if (isSaved) {
+          await api.delete<{ savedEvents: string[] }>(
+            `/users/me/saved-events/${eventId}`
+          );
+        } else {
+          await api.post<{ savedEvents: string[] }>(
+            `/users/me/saved-events/${eventId}`
+          );
+        }
+      } catch {
+        await persistUser(user);
+      }
     },
     [user, persistUser]
   );
@@ -148,8 +170,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = useCallback(
     async (data: Partial<User>) => {
       if (!user) return;
-      const updated = { ...user, ...data };
-      await persistUser(updated);
+      try {
+        const resp = await api.put<{ user: User }>("/users/me", data);
+        await persistUser(resp.user);
+      } catch {
+        await persistUser({ ...user, ...data });
+      }
     },
     [user, persistUser]
   );
@@ -157,8 +183,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const registerBusiness = useCallback(
     async (data: { businessName: string; type: "business" | "individual"; website?: string }) => {
       if (!user) return;
-      const updated = { ...user, isBusinessAccount: true };
-      await persistUser(updated);
+      const resp = await api.post<{ user: User }>("/users/me/business", data);
+      await persistUser(resp.user);
     },
     [user, persistUser]
   );
