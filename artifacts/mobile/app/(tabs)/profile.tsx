@@ -4,11 +4,11 @@ import React, { useState } from "react";
 import {
   Alert,
   Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
@@ -29,6 +29,7 @@ export default function ProfileScreen() {
   const { bookings } = useBookings();
   const { events } = useEvents();
   const [activeSection, setActiveSection] = useState<"saved" | "settings">("saved");
+  const [showOrganizerModal, setShowOrganizerModal] = useState(false);
 
   const headerTop = Platform.OS === "web" ? 67 : insets.top;
 
@@ -52,6 +53,30 @@ export default function ProfileScreen() {
     { label: "Saved", value: user?.savedEvents.length ?? 0 },
     { label: "Reviews", value: 4 },
   ];
+
+  // Guest view
+  if (!isAuthenticated) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: headerTop + 8, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+          <Text style={[styles.title, { color: colors.foreground }]}>Profile</Text>
+        </View>
+        <View style={styles.guestContainer}>
+          <View style={[styles.guestAvatar, { backgroundColor: colors.secondary }]}>
+            <Ionicons name="person-outline" size={40} color={colors.mutedForeground} />
+          </View>
+          <Text style={[styles.guestTitle, { color: colors.foreground }]}>You're browsing as a guest</Text>
+          <Text style={[styles.guestSubtitle, { color: colors.mutedForeground }]}>Sign in to save events, book tickets and more</Text>
+          <Pressable
+            style={[styles.signInBtn, { backgroundColor: colors.primary }]}
+            onPress={() => router.push("/auth/register" as any)}
+          >
+            <Text style={styles.signInBtnText}>Sign In / Register</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -146,6 +171,27 @@ export default function ProfileScreen() {
             </View>
           ))}
         </Animated.View>
+
+        {/* Become an Organiser banner */}
+        {!user?.isBusinessAccount && (
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(160).springify() : undefined}
+          >
+            <Pressable
+              style={[styles.organiserBanner, { backgroundColor: colors.primary }]}
+              onPress={() => setShowOrganizerModal(true)}
+            >
+              <View style={styles.organiserBannerLeft}>
+                <Ionicons name="megaphone-outline" size={22} color="#fff" />
+                <View>
+                  <Text style={styles.organiserBannerTitle}>Become an Organiser</Text>
+                  <Text style={styles.organiserBannerSub}>Host your own events on Eventis</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+            </Pressable>
+          </Animated.View>
+        )}
 
         {/* Section tabs */}
         <View style={[styles.sectionTabs, { backgroundColor: colors.secondary }]}>
@@ -262,6 +308,42 @@ export default function ProfileScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Organiser Modal */}
+      <Modal visible={showOrganizerModal} transparent animationType="slide" onRequestClose={() => setShowOrganizerModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowOrganizerModal(false)}>
+          <Pressable style={[styles.modalSheet, { backgroundColor: colors.card }]} onPress={() => {}}>
+            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+            <View style={[styles.modalIconWrap, { backgroundColor: colors.primary }]}>
+              <Ionicons name="megaphone" size={32} color="#fff" />
+            </View>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Become an Organiser</Text>
+            <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>
+              List your events, manage bookings, and reach thousands of people near you. It's free to get started.
+            </Text>
+            <View style={styles.modalFeatures}>
+              {["Create & manage events", "Sell tickets or list free events", "View attendee analytics"].map((f) => (
+                <View key={f} style={styles.modalFeatureRow}>
+                  <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                  <Text style={[styles.modalFeatureText, { color: colors.foreground }]}>{f}</Text>
+                </View>
+              ))}
+            </View>
+            <Pressable
+              style={[styles.modalCta, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                setShowOrganizerModal(false);
+                router.push("/business/register" as any);
+              }}
+            >
+              <Text style={styles.modalCtaText}>Get Started as Organiser</Text>
+            </Pressable>
+            <Pressable onPress={() => setShowOrganizerModal(false)}>
+              <Text style={[styles.modalDismiss, { color: colors.mutedForeground }]}>Maybe later</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -443,4 +525,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   logoutText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  // Guest
+  guestContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, gap: 16 },
+  guestAvatar: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center" },
+  guestTitle: { fontSize: 20, fontFamily: "Inter_700Bold", textAlign: "center" },
+  guestSubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 22 },
+  signInBtn: { paddingHorizontal: 32, paddingVertical: 16, borderRadius: 16, marginTop: 8 },
+  signInBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
+  // Organiser banner
+  organiserBanner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16, borderRadius: 16 },
+  organiserBannerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  organiserBannerTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
+  organiserBannerSub: { color: "rgba(255,255,255,0.75)", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, alignItems: "center", gap: 12 },
+  modalHandle: { width: 40, height: 4, borderRadius: 2, marginBottom: 8 },
+  modalIconWrap: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center" },
+  modalTitle: { fontSize: 22, fontFamily: "Inter_700Bold", textAlign: "center" },
+  modalBody: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 22 },
+  modalFeatures: { alignSelf: "stretch", gap: 10, marginVertical: 4 },
+  modalFeatureRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  modalFeatureText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  modalCta: { alignSelf: "stretch", alignItems: "center", paddingVertical: 16, borderRadius: 16 },
+  modalCtaText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
+  modalDismiss: { fontSize: 14, fontFamily: "Inter_400Regular", paddingVertical: 8 },
 });

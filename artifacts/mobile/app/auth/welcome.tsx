@@ -111,16 +111,16 @@ export default function WelcomeScreen() {
         >
           <Pressable
             style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-            onPress={() => router.push("/auth/register" as any)}
+            onPress={() => router.replace("/(tabs)" as any)}
           >
-            <Text style={styles.primaryBtnText}>Get Started</Text>
+            <Text style={styles.primaryBtnText}>Explore Events</Text>
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </Pressable>
           <Pressable
             style={[styles.secondaryBtn, { borderColor: "rgba(255,255,255,0.3)" }]}
             onPress={() => router.push("/auth/register" as any)}
           >
-            <Text style={styles.secondaryBtnText}>Sign In</Text>
+            <Text style={styles.secondaryBtnText}>Sign In / Register</Text>
           </Pressable>
         </Animated.View>
 

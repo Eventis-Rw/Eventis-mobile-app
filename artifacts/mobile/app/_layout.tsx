@@ -30,7 +30,9 @@ function RootLayoutNav() {
   useEffect(() => {
     if (isLoading) return;
     const inAuthGroup = segments[0] === "auth";
-    if (!isAuthenticated && !inAuthGroup) {
+    const inTabsGroup = segments[0] === "(tabs)";
+    // Only redirect to welcome if user lands on root with no segment
+    if (!isAuthenticated && !inAuthGroup && !inTabsGroup && segments[0] === undefined) {
       router.replace("/auth/welcome" as any);
     } else if (isAuthenticated && inAuthGroup) {
       router.replace("/(tabs)" as any);

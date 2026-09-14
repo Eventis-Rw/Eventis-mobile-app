@@ -47,3 +47,16 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# secrets — never commit. This repository is public.
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.p12
+*.key
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
