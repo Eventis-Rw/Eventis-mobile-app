@@ -7,7 +7,8 @@
     "start": "concurrently --kill-others --names API,MOBILE --prefix-colors cyan,magenta \"cd artifacts/api-server && pnpm run dev\" \"cd artifacts/mobile && EXPO_PUBLIC_API_URL=http://localhost:3000 pnpm run dev:local\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "typecheck:ci": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/mobile\" --filter \"./artifacts/api-server\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
   "devDependencies": {
