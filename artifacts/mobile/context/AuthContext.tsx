@@ -28,14 +28,16 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  hasCompletedOnboarding: boolean;
   pendingOTPContext: { purpose: "register" | "payment" | "chat"; eventId?: string } | null;
   login: (identifier: string, password: string) => Promise<void>;
   register: (data: {
     username: string;
-    email: string;
+    email?: string;
     phone?: string;
     password: string;
   }) => Promise<void>;
+  completeOnboarding: () => Promise<void>;
   logout: () => Promise<void>;
   verifyOTP: (code: string) => Promise<boolean>;
   requestOTP: (purpose: "register" | "payment" | "chat", eventId?: string) => void;
@@ -51,10 +53,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 const USER_CACHE_KEY = "@eventis_user_cache";
+const ONBOARDING_KEY = "@eventis_onboarding_complete";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [pendingOTPContext, setPendingOTPContext] = useState<{
     purpose: "register" | "payment" | "chat";
     eventId?: string;
@@ -62,7 +66,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      try {
+      try {        const onboardingState = await AsyncStorage.getItem(ONBOARDING_KEY);
+        setHasCompletedOnboarding(onboardingState === 'true');
         const token = await getToken();
         if (token) {
           try {
@@ -97,14 +102,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const register = useCallback(
-    async (regData: { username: string; email: string; phone?: string; password: string }) => {
+    async (regData: { username: string; email?: string; phone?: string; password: string }) => {
       const data = await api.post<{ token: string; user: User }>("/auth/register", regData);
       await setToken(data.token);
       await persistUser(data.user);
     },
     [persistUser]
   );
-
+  const completeOnboarding = useCallback(async () => {
+    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+    setHasCompletedOnboarding(true);
+  }, []);
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
@@ -195,9 +203,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         isAuthenticated: !!user,
         isLoading,
+        hasCompletedOnboarding,
         pendingOTPContext,
         login,
         register,
+        completeOnboarding,
         logout,
         verifyOTP,
         requestOTP,
