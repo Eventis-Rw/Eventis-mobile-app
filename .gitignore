@@ -1,54 +1,19 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
-
-# compiled output
-dist
-tmp
-out-tsc
+# Dependencies and generated output
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+static-build/
+expo-env.d.ts
+.metro-health-check*
 *.tsbuildinfo
-.expo
-.expo-shared
 
-# dependencies
-node_modules
+# Generated native projects
+android/
+ios/
 
-# IDEs and editors
-/.idea
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
-
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-
-# misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
-/typings
-
-# System Files
-.DS_Store
-Thumbs.db
-
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-
-# Replit
-.cache/
-.local/
-
-# secrets — never commit. This repository is public.
+# Local environment and signing files
 .env
 .env.*
 !.env.example
@@ -58,5 +23,14 @@ Thumbs.db
 *.key
 *.keystore
 *.jks
+*.mobileprovision
 google-services.json
 GoogleService-Info.plist
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+npm-debug.log
+yarn-error.log
