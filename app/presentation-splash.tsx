@@ -13,10 +13,13 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useColors } from "@/hooks/useColors";
+
 const SPLASH_DURATION_MS = 1250;
 
 export default function PresentationSplashScreen() {
   const router = useRouter();
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const logoScale = useSharedValue(0.82);
 
@@ -37,7 +40,7 @@ export default function PresentationSplashScreen() {
   const logoAnimation = useAnimatedStyle(() => ({ transform: [{ scale: logoScale.value }] }));
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: colors.background }]}>
       <View style={styles.center}>
         <Animated.View entering={FadeInUp.duration(450)} style={logoAnimation}>
           <Image
@@ -47,8 +50,8 @@ export default function PresentationSplashScreen() {
             accessibilityLabel="Eventis logo"
           />
         </Animated.View>
-        <Animated.Text entering={FadeInDown.delay(140).duration(420)} style={styles.name}>eventis</Animated.Text>
-        <Animated.Text entering={FadeInDown.delay(260).duration(420)} style={styles.tagline}>Where moments happen</Animated.Text>
+        <Animated.Text entering={FadeInDown.delay(140).duration(420)} style={[styles.name, { color: colors.primary }]}>eventis</Animated.Text>
+        <Animated.Text entering={FadeInDown.delay(260).duration(420)} style={[styles.tagline, { color: colors.mutedForeground }]}>Where moments happen</Animated.Text>
       </View>
     </View>
   );

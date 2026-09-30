@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInLeft, FadeInRight, FadeOutLeft, FadeOutRight, LinearTransition } from "react-native-reanimated";
 
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
+import { useColors } from "@/hooks/useColors";
 
 const PAGES = [
   {
@@ -46,6 +47,7 @@ const PAGES = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const [pageIndex, setPageIndex] = useState(0);
@@ -82,11 +84,11 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12, paddingHorizontal: horizontalPadding }]}>
         <View style={styles.brand}>
           <Image source={require("../assets/images/icon.png")} style={styles.brandIcon} />
-          <Text style={styles.brandName}>eventis</Text>
+          <Text style={[styles.brandName, { color: colors.primary }]}>eventis</Text>
         </View>
         <Pressable
           onPress={() => void finish()}
@@ -95,7 +97,7 @@ export default function OnboardingScreen() {
           accessibilityLabel="Skip onboarding"
           style={styles.skipButton}
         >
-          <Text style={styles.skipText}>Skip</Text>
+          <Text style={[styles.skipText, { color: colors.mutedForeground }]}>Skip</Text>
         </Pressable>
       </View>
 
@@ -109,7 +111,7 @@ export default function OnboardingScreen() {
           entering={direction === "forward" ? FadeInRight.duration(320) : FadeInLeft.duration(320)}
           exiting={direction === "forward" ? FadeOutLeft.duration(220) : FadeOutRight.duration(220)}
         >
-        <View style={[styles.hero, { height: imageHeight }]}>
+        <View style={[styles.hero, { height: imageHeight, backgroundColor: colors.muted }]}>
           <Image
             source={page.image}
             style={styles.heroImage}
@@ -127,25 +129,30 @@ export default function OnboardingScreen() {
         </View>
 
         <View style={[styles.copy, compact && styles.copyCompact]}>
-          <Text style={styles.kicker}>WELCOME TO EVENTIS</Text>
-          <Text style={[styles.title, width < 360 && styles.titleSmall, compact && styles.titleCompact]}>{page.title}</Text>
-          <Text style={[styles.description, compact && styles.descriptionCompact]}>{page.description}</Text>
+          <Text style={[styles.kicker, { color: colors.primary }]}>WELCOME TO EVENTIS</Text>
+          <Text style={[styles.title, width < 360 && styles.titleSmall, compact && styles.titleCompact, { color: colors.foreground }]}>{page.title}</Text>
+          <Text style={[styles.description, compact && styles.descriptionCompact, { color: colors.mutedForeground }]}>{page.description}</Text>
         </View>
         </Animated.View>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingHorizontal: horizontalPadding, paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
+      <View style={[styles.footer, { paddingHorizontal: horizontalPadding, paddingBottom: Math.max(insets.bottom, 16) + 12, backgroundColor: colors.background }]}>
         <View style={styles.indicators} accessibilityLabel={"Onboarding page " + (pageIndex + 1) + " of " + PAGES.length}>
           {PAGES.map((item, index) => (
             <Animated.View
               key={item.eyebrow}
               layout={LinearTransition.duration(220)}
-              style={[styles.dot, index === pageIndex && styles.activeDot]}
+              style={[
+                styles.dot,
+                { backgroundColor: colors.disabled },
+                index === pageIndex && styles.activeDot,
+                index === pageIndex && { backgroundColor: colors.primary },
+              ]}
             />
           ))}
         </View>
         {error && (
-          <Text style={styles.error} accessibilityRole="alert">
+          <Text style={[styles.error, { color: colors.destructive }]} accessibilityRole="alert">
             Could not save your progress. Please try again.
           </Text>
         )}
@@ -160,15 +167,15 @@ export default function OnboardingScreen() {
               accessibilityRole="button"
               accessibilityLabel="Previous onboarding page"
             >
-              <Ionicons name="arrow-back" size={20} color="#1932A6" />
-              <Text style={styles.backText}>Back</Text>
+              <Ionicons name="arrow-back" size={20} color={colors.primary} />
+              <Text style={[styles.backText, { color: colors.primary }]}>Back</Text>
             </Pressable>
           ) : (
             <View style={styles.backPlaceholder} />
           )}
           <Pressable
             onPress={next}
-            style={styles.nextButton}
+            style={[styles.nextButton, { backgroundColor: colors.primary }]}
             accessibilityRole="button"
             accessibilityLabel={isLast ? "Get started" : "Next onboarding page"}
           >

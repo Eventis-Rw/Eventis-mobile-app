@@ -8,6 +8,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -15,13 +16,18 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { ThemeProvider } from "@/context/ThemeContext";
+import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 import { BookingsProvider } from "@/context/BookingsContext";
 import { EventsProvider } from "@/context/EventsContext";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+function ThemedStatusBar() {
+  const { scheme } = useTheme();
+  return <StatusBar style={scheme === "dark" ? "light" : "dark"} />;
+}
 
 function RootLayoutNav() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -75,6 +81,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
+        <ThemedStatusBar />
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <GestureHandlerRootView style={{ flex: 1 }}>

@@ -6,11 +6,13 @@ import Animated, { Easing, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValu
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
+import { useColors } from "@/hooks/useColors";
 
 const SPLASH_DURATION_MS = 1100;
 
 export default function AppEntryScreen() {
   const router = useRouter();
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const logoScale = useSharedValue(0.82);
 
@@ -48,7 +50,7 @@ export default function AppEntryScreen() {
   }, [router]);
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: colors.background }]}>
       <View style={styles.center}>
         <Animated.View entering={FadeInUp.duration(450)} style={logoAnimation}>
           <Image
@@ -58,8 +60,8 @@ export default function AppEntryScreen() {
             accessibilityLabel="Eventis logo"
           />
         </Animated.View>
-        <Animated.Text entering={FadeInDown.delay(140).duration(420)} style={styles.name}>eventis</Animated.Text>
-        <Animated.Text entering={FadeInDown.delay(260).duration(420)} style={styles.tagline}>Where moments happen</Animated.Text>
+        <Animated.Text entering={FadeInDown.delay(140).duration(420)} style={[styles.name, { color: colors.primary }]}>eventis</Animated.Text>
+        <Animated.Text entering={FadeInDown.delay(260).duration(420)} style={[styles.tagline, { color: colors.mutedForeground }]}>Where moments happen</Animated.Text>
       </View>
     </View>
   );

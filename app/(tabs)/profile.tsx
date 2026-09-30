@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
 import { useEvents } from "@/context/EventsContext";
-import { useTheme, type ColorScheme } from "@/context/ThemeContext";
+import { useTheme, type ThemePreference } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { EventCard } from "@/components/EventCard";
 
@@ -364,8 +364,9 @@ export default function ProfileScreen() {
 }
 
 function ColorModeSwitcher({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const { scheme, setScheme } = useTheme();
-  const options: { id: ColorScheme; label: string }[] = [
+  const { preference, setPreference } = useTheme();
+  const options: { id: ThemePreference; label: string }[] = [
+    { id: "system", label: "System" },
     { id: "light", label: "Light" },
     { id: "dark", label: "Dark" },
   ];
@@ -380,11 +381,13 @@ function ColorModeSwitcher({ colors }: { colors: ReturnType<typeof useColors> })
       </View>
       <View style={[styles.modeOptions, { backgroundColor: colors.secondary }]}>
         {options.map((option) => {
-          const selected = scheme === option.id;
+          const selected = preference === option.id;
           return (
             <Pressable
               key={option.id}
-              onPress={() => setScheme(option.id)}
+              onPress={() => setPreference(option.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
               style={[
                 styles.modeOption,
                 selected && { backgroundColor: colors.primary },
@@ -592,18 +595,15 @@ const styles = StyleSheet.create({
   signInBtn: { paddingHorizontal: 32, paddingVertical: 16, borderRadius: 16, marginTop: 8 },
   signInBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
   modeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     gap: 12,
     padding: 12,
     borderRadius: 16,
     borderWidth: 1,
     alignSelf: "stretch",
   },
-  modeLabel: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  modeLabel: { flexDirection: "row", alignItems: "center", gap: 12 },
   modeOptions: { flexDirection: "row", borderRadius: 12, padding: 3 },
-  modeOption: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+  modeOption: { flex: 1, alignItems: "center", paddingVertical: 8, borderRadius: 10 },
   // Organiser banner
   organiserBanner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16, borderRadius: 16 },
   organiserBannerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
