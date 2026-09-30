@@ -1,10 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Logo } from "@/components/Logo";
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import { useColors } from "@/hooks/useColors";
 
@@ -53,12 +54,7 @@ export default function AppEntryScreen() {
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: colors.background }]}>
       <View style={styles.center}>
         <Animated.View entering={FadeInUp.duration(450)} style={logoAnimation}>
-          <Image
-            source={require("../assets/images/icon.png")}
-            style={styles.logo}
-            resizeMode="contain"
-            accessibilityLabel="Eventis logo"
-          />
+          <Logo style={styles.logo} />
         </Animated.View>
         <Animated.Text entering={FadeInDown.delay(140).duration(420)} style={[styles.name, { color: colors.primary }]}>eventis</Animated.Text>
         <Animated.Text entering={FadeInDown.delay(260).duration(420)} style={[styles.tagline, { color: colors.mutedForeground }]}>Where moments happen</Animated.Text>

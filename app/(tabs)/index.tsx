@@ -7,7 +7,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  Image,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +16,7 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BannerCarousel } from "@/components/BannerCarousel";
+import { Logo } from "@/components/Logo";
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
 import { EventCardSkeleton, FeaturedCardSkeleton } from "@/components/SkeletonLoader";
@@ -73,12 +73,8 @@ export default function HomeScreen() {
       >
         <View style={styles.headerRow}>
           <View style={styles.brandRow}>
-            <View style={styles.logoPlate}>
-              <Image
-                source={require("../../assets/images/icon.png")}
-                style={styles.logo}
-                resizeMode="contain"
-              />
+            <View style={[styles.logoPlate, { backgroundColor: colors.background }]}>
+              <Logo style={styles.logo} />
             </View>
             <View>
               <Text style={[styles.greeting, { color: colors.mutedForeground }]}>

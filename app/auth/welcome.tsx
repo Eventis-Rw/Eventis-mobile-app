@@ -4,7 +4,6 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import {
   Dimensions,
-  Image,
   ImageBackground,
   Platform,
   Pressable,
@@ -24,6 +23,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Logo } from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -82,12 +82,8 @@ export default function WelcomeScreen() {
           entering={Platform.OS !== "web" ? FadeIn.delay(100) : undefined}
           style={styles.logoSection}
         >
-          <Animated.View style={[styles.logoCircle, pulseStyle]}>
-            <Image
-              source={require("../../assets/images/icon.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
+          <Animated.View style={[styles.logoCircle, pulseStyle, { backgroundColor: colors.background }]}>
+            <Logo style={styles.logoImage} />
           </Animated.View>
           <Text style={styles.appName}>eventis</Text>
           <Text style={styles.tagline}>Where moments happen</Text>

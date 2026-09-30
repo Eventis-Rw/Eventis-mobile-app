@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInLeft, FadeInRight, FadeOutLeft, FadeOutRight, LinearTransition } from "react-native-reanimated";
 
+import { Logo } from "@/components/Logo";
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import { useColors } from "@/hooks/useColors";
 
@@ -87,7 +88,7 @@ export default function OnboardingScreen() {
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12, paddingHorizontal: horizontalPadding }]}>
         <View style={styles.brand}>
-          <Image source={require("../assets/images/icon.png")} style={styles.brandIcon} />
+          <Logo style={styles.brandIcon} />
           <Text style={[styles.brandName, { color: colors.primary }]}>eventis</Text>
         </View>
         <Pressable
