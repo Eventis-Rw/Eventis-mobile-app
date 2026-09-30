@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 
+import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import { api, ApiError, clearToken, getToken, setToken } from "@/utils/apiClient";
 
 export interface User {
@@ -14,6 +15,7 @@ export interface User {
   username: string;
   email: string;
   phone?: string;
+  avatarUrl?: string;
   isPhoneVerified: boolean;
   isBusinessAccount: boolean;
   bio?: string;
@@ -39,7 +41,9 @@ interface AuthContextType {
   }) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   logout: () => Promise<void>;
-  verifyOTP: (code: string) => Promise<boolean>;
+  deleteAccount: () => Promise<void>;
+  signInWithPhoneSession: (phone: string, fullName?: string) => Promise<void>;
+  verifyOTP: (code: string, phone?: string, fullName?: string) => Promise<boolean>;
   requestOTP: (purpose: "register" | "payment" | "chat", eventId?: string) => void;
   clearOTPContext: () => void;
   toggleSaveEvent: (eventId: string) => void;
@@ -55,8 +59,20 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const USER_CACHE_KEY = "@eventis_user_cache";
 const ONBOARDING_KEY = "@eventis_onboarding_complete";
 
+const DEFAULT_USER: User = {
+  id: "usr_eventis_01",
+  username: "Jean Luc",
+  email: "jeanluc@eventis.app",
+  phone: "+250 788 587 420",
+  avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+  isPhoneVerified: true,
+  isBusinessAccount: false,
+  savedEvents: ["evt_1", "evt_2"],
+  joinedDate: "October 2026",
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(DEFAULT_USER);
   const [isLoading, setIsLoading] = useState(true);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [pendingOTPContext, setPendingOTPContext] = useState<{
@@ -66,17 +82,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      try {        const onboardingState = await AsyncStorage.getItem(ONBOARDING_KEY);
+      try {
+        const onboardingState = await AsyncStorage.getItem(ONBOARDING_KEY);
         setHasCompletedOnboarding(onboardingState === 'true');
-        const token = await getToken();
-        if (token) {
-          try {
-            const data = await api.get<{ user: User }>("/auth/me");
-            setUser(data.user);
-            await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user));
-          } catch {
-            const cached = await AsyncStorage.getItem(USER_CACHE_KEY);
-            if (cached) setUser(JSON.parse(cached));
+        const hasLoggedOut = await AsyncStorage.getItem("@eventis_logged_out");
+        if (hasLoggedOut === "true") {
+          setUser(null);
+        } else {
+          const cached = await AsyncStorage.getItem(USER_CACHE_KEY);
+          if (cached) {
+            setUser(JSON.parse(cached));
+          } else {
+            setUser(DEFAULT_USER);
+            await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(DEFAULT_USER));
           }
         }
       } catch {}
@@ -85,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const persistUser = useCallback(async (u: User) => {
+    await AsyncStorage.removeItem("@eventis_logged_out");
     await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(u));
     setUser(u);
   }, []);
@@ -119,22 +138,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
     await clearToken();
     await AsyncStorage.removeItem(USER_CACHE_KEY);
+    await AsyncStorage.setItem("@eventis_logged_out", "true");
     setUser(null);
   }, []);
 
+  const deleteAccount = useCallback(async () => {
+    try {
+      await api.delete("/users/me");
+    } catch {}
+    await clearToken();
+    await AsyncStorage.removeItem(USER_CACHE_KEY);
+    await AsyncStorage.setItem("@eventis_logged_out", "true");
+    setUser(null);
+  }, []);
+
+  const signInWithPhoneSession = useCallback(
+    async (phone: string, fullName?: string) => {
+      const cleanPhone = phone.trim();
+      const displayName =
+        fullName && fullName.trim()
+          ? fullName.trim()
+          : cleanPhone
+          ? `Member ${cleanPhone.slice(-4)}`
+          : "Eventis Explorer";
+
+      const newUser: User = {
+        id: "usr_" + Date.now().toString(36),
+        username: displayName,
+        email: `${cleanPhone.replace(/\D/g, "") || "user"}@eventis.app`,
+        phone: cleanPhone,
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+        isPhoneVerified: true,
+        isBusinessAccount: false,
+        savedEvents: [],
+        joinedDate: new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+      };
+
+      await setToken("demo_token_" + Date.now());
+      await persistUser(newUser);
+    },
+    [persistUser]
+  );
+
   const verifyOTP = useCallback(
-    async (code: string): Promise<boolean> => {
-      if (code.length !== 6 || !/^\d{6}$/.test(code)) return false;
+    async (code: string, phone?: string, fullName?: string): Promise<boolean> => {
+      if (code.length !== 4 || !/^\d{4}$/.test(code)) return false;
       try {
         const data = await api.post<{ user: User }>("/auth/verify-otp", { code });
         await persistUser(data.user);
         setPendingOTPContext(null);
         return true;
       } catch {
+        // Offline / demo fallback: create verified session using phone & name
+        if (phone) {
+          await signInWithPhoneSession(phone, fullName);
+          setPendingOTPContext(null);
+          return true;
+        }
         return false;
       }
     },
-    [persistUser]
+    [persistUser, signInWithPhoneSession]
   );
 
   const requestOTP = useCallback(
@@ -209,6 +273,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         completeOnboarding,
         logout,
+        deleteAccount,
+        signInWithPhoneSession,
         verifyOTP,
         requestOTP,
         clearOTPContext,

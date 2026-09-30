@@ -22,7 +22,7 @@ interface OTPInputProps {
   error?: boolean;
 }
 
-export function OTPInput({ length = 6, onComplete, error }: OTPInputProps) {
+export function OTPInput({ length = 4, onComplete, error }: OTPInputProps) {
   const colors = useColors();
   const [otp, setOtp] = useState<string[]>(Array(length).fill(""));
   const [focused, setFocused] = useState(-1);
@@ -139,18 +139,18 @@ export function OTPInput({ length = 6, onComplete, error }: OTPInputProps) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    gap: 10,
+    gap: 14,
     justifyContent: "center",
   },
   cell: {
-    width: 48,
-    height: 56,
-    borderRadius: 12,
+    width: 62,
+    height: 68,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   input: {
-    fontSize: 22,
+    fontSize: 26,
     fontFamily: "Inter_700Bold",
     textAlign: "center",
     width: "100%",

@@ -1,48 +1,47 @@
-import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
+  FlatList,
   Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { FadeInLeft, FadeInRight, FadeOutLeft, FadeOutRight, LinearTransition } from "react-native-reanimated";
 
-import { Logo } from "@/components/Logo";
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import { useColors } from "@/hooks/useColors";
 
-const PAGES = [
+interface SlideData {
+  id: string;
+  title: string;
+  description: string;
+  image: any;
+  primaryActionLabel: string;
+}
+
+const SLIDES: SlideData[] = [
   {
-    title: "Discover moments worth going out for.",
-    description: "Find concerts, festivals, and experiences you'll be talking about long after they're over.",
-    image: require("../assets/images/onboarding-concert.jpg"),
-    eyebrow: "DISCOVER EVENTS",
-    imageLabel: "Concert crowd under colorful stage lights",
-    icon: "sparkles-outline" as const,
+    id: "slide-1",
+    title: "EXPLORE EVENTS.\nLIST YOUR OWN.\nLIVE THE MOMENT.",
+    description:
+      "Find unforgettable concerts, vibrant nightlife, and local gatherings, or list and sell out your own events in seconds.",
+    image: require("../assets/images/splash1.png"),
+    primaryActionLabel: "NEXT",
   },
   {
-    title: "See what's happening around you.",
-    description: "Explore nearby food, culture, and community events that fit your mood and your schedule.",
-    image: require("../assets/images/onboarding-food.jpg"),
-    eyebrow: "EXPLORE NEARBY",
-    imageLabel: "People enjoying an outdoor food festival",
-    icon: "location-outline" as const,
-  },
-  {
-    title: "Find your people. Make it memorable.",
-    description: "Connect with fellow attendees and keep all your favorite experiences in one place.",
-    image: require("../assets/images/onboarding-tech.jpg"),
-    eyebrow: "CONNECT & ENJOY",
-    imageLabel: "Audience at a technology conference",
-    icon: "people-outline" as const,
+    id: "slide-2",
+    title: "CONNECT, MATCH\nAND FIND LOVE\nAT LIVE EVENTS.",
+    description:
+      "Meet people going to the same concerts and gatherings. Spark genuine connections and find someone special where moments happen.",
+    image: require("../assets/images/splash2.png"),
+    primaryActionLabel: "GET STARTED",
   },
 ];
 
@@ -52,222 +51,242 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const [pageIndex, setPageIndex] = useState(0);
-  const [direction, setDirection] = useState<"forward" | "backward">("forward");
-  const [error, setError] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
   const finishing = useRef(false);
-  const page = PAGES[pageIndex];
-  const isLast = pageIndex === PAGES.length - 1;
-  const compact = height < 650;
-  const imageHeight = compact ? Math.min(180, height * 0.29) : Math.min(270, Math.max(210, height * 0.30));
-  const horizontalPadding = width < 360 ? 18 : 24;
 
-  async function finish() {
+  const finish = useCallback(async () => {
     if (finishing.current) return;
     finishing.current = true;
-    setError(false);
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
-      router.replace("/(tabs)");
+      router.replace("/auth/login" as any);
     } catch {
       finishing.current = false;
-      setError(true);
     }
-  }
+  }, [router]);
 
-  function next() {
-    if (isLast) {
-      void finish();
+  const handlePrimaryPress = (index: number) => {
+    if (index < SLIDES.length - 1) {
+      flatListRef.current?.scrollToIndex({
+        index: index + 1,
+        animated: true,
+      });
+      setPageIndex(index + 1);
     } else {
-      setDirection("forward");
-      setPageIndex((current) => current + 1);
-      setError(false);
+      void finish();
     }
-  }
+  };
+
+  const onScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+      if (slideIndex !== pageIndex && slideIndex >= 0 && slideIndex < SLIDES.length) {
+        setPageIndex(slideIndex);
+      }
+    },
+    [width, pageIndex]
+  );
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 12, paddingHorizontal: horizontalPadding }]}>
-        <View style={styles.brand}>
-          <Logo style={styles.brandIcon} />
-          <Text style={[styles.brandName, { color: colors.primary }]}>eventis</Text>
-        </View>
-        <Pressable
-          onPress={() => void finish()}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Skip onboarding"
-          style={styles.skipButton}
-        >
-          <Text style={[styles.skipText, { color: colors.mutedForeground }]}>Skip</Text>
-        </Pressable>
-      </View>
+    <View style={styles.root}>
+      {/* Full-bleed Horizontal Pager */}
+      <FlatList
+        ref={flatListRef}
+        data={SLIDES}
+        keyExtractor={(item) => item.id}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        bounces={false}
+        onMomentumScrollEnd={onScroll}
+        getItemLayout={(_, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+        renderItem={({ item, index }) => (
+          <View style={[styles.slide, { width, height }]}>
+            {/* 100% Full-bleed Background Image */}
+            <Image
+              source={item.image}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+            />
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact, { paddingHorizontal: horizontalPadding }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View
-          key={pageIndex}
-          entering={direction === "forward" ? FadeInRight.duration(320) : FadeInLeft.duration(320)}
-          exiting={direction === "forward" ? FadeOutLeft.duration(220) : FadeOutRight.duration(220)}
-        >
-        <View style={[styles.hero, { height: imageHeight, backgroundColor: colors.muted }]}>
-          <Image
-            source={page.image}
-            style={styles.heroImage}
-            resizeMode="stretch"
-            accessibilityLabel={page.imageLabel}
-          />
+            {/* Cinematic Gradient Overlays */}
             <LinearGradient
-              colors={["rgba(12,12,26,0)", "rgba(12,12,26,0.65)"]}
-              style={styles.heroGradient}
-            />
-            <View style={styles.heroBadge}>
-              <Ionicons name={page.icon} size={18} color="#FFFFFF" />
-              <Text style={styles.heroBadgeText}>{page.eyebrow}</Text>
-            </View>
-        </View>
-
-        <View style={[styles.copy, compact && styles.copyCompact]}>
-          <Text style={[styles.kicker, { color: colors.primary }]}>WELCOME TO EVENTIS</Text>
-          <Text style={[styles.title, width < 360 && styles.titleSmall, compact && styles.titleCompact, { color: colors.foreground }]}>{page.title}</Text>
-          <Text style={[styles.description, compact && styles.descriptionCompact, { color: colors.mutedForeground }]}>{page.description}</Text>
-        </View>
-        </Animated.View>
-      </ScrollView>
-
-      <View style={[styles.footer, { paddingHorizontal: horizontalPadding, paddingBottom: Math.max(insets.bottom, 16) + 12, backgroundColor: colors.background }]}>
-        <View style={styles.indicators} accessibilityLabel={"Onboarding page " + (pageIndex + 1) + " of " + PAGES.length}>
-          {PAGES.map((item, index) => (
-            <Animated.View
-              key={item.eyebrow}
-              layout={LinearTransition.duration(220)}
-              style={[
-                styles.dot,
-                { backgroundColor: colors.disabled },
-                index === pageIndex && styles.activeDot,
-                index === pageIndex && { backgroundColor: colors.primary },
+              colors={[
+                "rgba(0,0,0,0.6)",
+                "rgba(0,0,0,0.15)",
+                "rgba(12,12,26,0.65)",
+                "rgba(12,12,26,0.95)",
               ]}
+              locations={[0, 0.3, 0.6, 0.95]}
+              style={StyleSheet.absoluteFill}
             />
-          ))}
-        </View>
-        {error && (
-          <Text style={[styles.error, { color: colors.destructive }]} accessibilityRole="alert">
-            Could not save your progress. Please try again.
-          </Text>
-        )}
-        <View style={styles.actions}>
-          {pageIndex > 0 ? (
-            <Pressable
-              onPress={() => {
-                setDirection("backward");
-                setPageIndex((current) => current - 1);
-              }}
-              style={styles.backButton}
-              accessibilityRole="button"
-              accessibilityLabel="Previous onboarding page"
+
+            {/* Slide Content */}
+            <View
+              style={[
+                styles.container,
+                {
+                  paddingTop: insets.top + 16,
+                  paddingBottom: Math.max(insets.bottom, 16) + 16,
+                },
+              ]}
             >
-              <Ionicons name="arrow-back" size={20} color={colors.primary} />
-              <Text style={[styles.backText, { color: colors.primary }]}>Back</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.backPlaceholder} />
-          )}
-          <Pressable
-            onPress={next}
-            style={[styles.nextButton, { backgroundColor: colors.primary }]}
-            accessibilityRole="button"
-            accessibilityLabel={isLast ? "Get started" : "Next onboarding page"}
-          >
-            <Text style={styles.nextText}>{isLast ? "Get Started" : "Next"}</Text>
-            <Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
-          </Pressable>
-        </View>
-      </View>
+              {/* Top Row with Skip CTA */}
+              <View style={styles.topRow}>
+                <Pressable
+                  onPress={() => void finish()}
+                  hitSlop={16}
+                  style={styles.skipBtn}
+                >
+                  <Text style={styles.skipBtnText}>Skip</Text>
+                </Pressable>
+              </View>
+
+              {/* Bottom Block: Typography & Action Controls */}
+              <View style={styles.bottomBlock}>
+                <View style={styles.copySection}>
+                  <Text style={styles.heading}>{item.title}</Text>
+                  {item.description ? (
+                    <Text style={styles.description}>{item.description}</Text>
+                  ) : null}
+                </View>
+
+                {/* Bottom Actions */}
+                <View style={styles.bottomSection}>
+                  {/* Pagination Dots */}
+                  <View style={styles.dotsRow}>
+                    {SLIDES.map((_, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          styles.dot,
+                          i === index
+                            ? [styles.activeDot, { backgroundColor: colors.primary }]
+                            : styles.inactiveDot,
+                        ]}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Primary CTA */}
+                  <Pressable
+                    style={[styles.primaryPill, { backgroundColor: colors.primary }]}
+                    onPress={() => handlePrimaryPress(index)}
+                  >
+                    <Text style={styles.primaryPillText}>
+                      {item.primaryActionLabel}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#FFFFFF" },
-  header: {
-    minHeight: 66,
-    flexDirection: "row",
-    alignItems: "center",
+  root: {
+    flex: 1,
+    backgroundColor: "#0c0c1a",
+  },
+  slide: {
+    overflow: "hidden",
+  },
+  container: {
+    flex: 1,
     justifyContent: "space-between",
+    paddingHorizontal: 28,
   },
-  brand: { flexDirection: "row", alignItems: "center", gap: 7 },
-  brandIcon: { width: 34, height: 34 },
-  brandName: { color: "#1932A6", fontSize: 21, fontFamily: "Inter_700Bold", letterSpacing: -0.7 },
-  skipButton: { paddingVertical: 12, paddingLeft: 16 },
-  skipText: { color: "#4F4F63", fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  scroll: { flex: 1 },
-  scrollContent: { flexGrow: 1, justifyContent: "center", paddingTop: 16, paddingBottom: 20 },
-  scrollContentCompact: { paddingTop: 8, paddingBottom: 4 },
-  hero: { overflow: "hidden", borderRadius: 28, backgroundColor: "#E0E6F7" },
-  heroImage: { width: "100%", height: "100%" },
-  heroGradient: { ...StyleSheet.absoluteFill },
-  heroBadge: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    margin: 22,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: "rgba(12,12,26,0.55)",
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "flex-end",
+    paddingTop: 8,
   },
-  heroBadgeText: { color: "#FFFFFF", fontSize: 11, fontFamily: "Inter_700Bold", letterSpacing: 1.1 },
-  copy: { paddingTop: 27, paddingBottom: 12 },
-  copyCompact: { paddingTop: 16, paddingBottom: 0 },
-  kicker: { color: "#1932A6", fontSize: 11, fontFamily: "Inter_700Bold", letterSpacing: 2 },
-  title: {
-    color: "#0C0C1A",
-    fontSize: 31,
-    lineHeight: 38,
+  skipBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  skipBtnText: {
+    fontSize: 17,
     fontFamily: "Inter_700Bold",
-    letterSpacing: -1.1,
-    marginTop: 12,
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    textShadowColor: "rgba(0, 0, 0, 0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
-  titleSmall: { fontSize: 27, lineHeight: 34 },
-  titleCompact: { fontSize: 24, lineHeight: 30, marginTop: 8 },
+  bottomBlock: {
+    gap: 20,
+    width: "100%",
+  },
+  copySection: {
+    gap: 12,
+  },
+  heading: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontFamily: "Inter_900Black",
+    letterSpacing: -0.8,
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0, 0, 0, 0.5)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
+  },
   description: {
-    color: "#4F4F63",
     fontSize: 15,
-    lineHeight: 24,
+    lineHeight: 23,
     fontFamily: "Inter_400Regular",
-    marginTop: 14,
+    color: "rgba(255, 255, 255, 0.82)",
+    maxWidth: 340,
   },
-  descriptionCompact: { fontSize: 13, lineHeight: 20, marginTop: 8 },
-  footer: { paddingTop: 12, backgroundColor: "#FFFFFF" },
-  indicators: { flexDirection: "row", justifyContent: "center", gap: 8, paddingBottom: 22 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#D4DCF5" },
-  activeDot: { width: 28, backgroundColor: "#1932A6" },
-  error: { textAlign: "center", color: "#C33434", marginBottom: 10, fontSize: 13 },
-  actions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  backButton: {
-    minWidth: 80,
-    minHeight: 52,
-    flexDirection: "row",
+  bottomSection: {
+    gap: 14,
     alignItems: "center",
-    gap: 7,
+    width: "100%",
   },
-  backPlaceholder: { width: 80 },
-  backText: { color: "#1932A6", fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  nextButton: {
-    minHeight: 56,
-    minWidth: 160,
-    paddingHorizontal: 22,
-    borderRadius: 17,
-    backgroundColor: "#1932A6",
+  dotsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
+    marginBottom: 4,
   },
-  nextText: { color: "#FFFFFF", fontSize: 16, fontFamily: "Inter_700Bold" },
+  dot: {
+    height: 7,
+    borderRadius: 3.5,
+  },
+  activeDot: {
+    width: 22,
+  },
+  inactiveDot: {
+    width: 7,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+  },
+  primaryPill: {
+    width: "100%",
+    height: 54,
+    borderRadius: 27,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  primaryPillText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
 });
