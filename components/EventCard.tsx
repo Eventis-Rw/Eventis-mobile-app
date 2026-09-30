@@ -27,7 +27,9 @@ const EVENT_IMAGES: Record<string, number> = {
   food: require("../assets/images/banner-food.png"),
 };
 
+// Mock events use bundled image keys; API events are expected to send a URL.
 function getEventImage(image: string) {
+  if (/^https?:\/\//.test(image)) return { uri: image };
   return EVENT_IMAGES[image] ?? EVENT_IMAGES["concert"];
 }
 
@@ -123,23 +125,31 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
             <View style={styles.featuredMeta}>
               <View style={styles.metaRow}>
                 <Ionicons name="calendar-outline" size={13} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.metaText}>
+                <Text style={[styles.metaText, styles.flexText]} numberOfLines={1}>
                   {formatDate(event.date)} · {event.time}
                 </Text>
               </View>
               <View style={styles.metaRow}>
                 <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.metaText} numberOfLines={1}>
-                  {event.city} · {event.distance}km away
+                <Text style={[styles.metaText, styles.flexText]} numberOfLines={1}>
+                  {event.location}, {event.city}
                 </Text>
               </View>
             </View>
             <View style={styles.featuredBottom}>
-              <View style={styles.attendeeRow}>
-                <Ionicons name="people-outline" size={13} color="rgba(255,255,255,0.7)" />
-                <Text style={styles.attendeeText}>
-                  {event.attendees.toLocaleString()} attending
-                </Text>
+              <View style={styles.featuredStats}>
+                <View style={styles.attendeeRow}>
+                  <Ionicons name="people-outline" size={13} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.attendeeText}>
+                    {formatCount(event.attendees)} attending
+                  </Text>
+                </View>
+                {event.viewCount != null && (
+                  <View style={styles.attendeeRow}>
+                    <Ionicons name="eye-outline" size={13} color="rgba(255,255,255,0.7)" />
+                    <Text style={styles.attendeeText}>{formatCount(event.viewCount)}</Text>
+                  </View>
+                )}
               </View>
               <View
                 style={[
@@ -182,17 +192,36 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
           >
             {event.title}
           </Text>
-          <Text style={[styles.compactDate, { color: colors.mutedForeground }]}>
-            {formatDate(event.date)}
+          <Text
+            style={[styles.compactDate, { color: colors.mutedForeground }]}
+            numberOfLines={1}
+          >
+            {formatDate(event.date)} · {event.time}
           </Text>
           <Text
-            style={[
-              styles.compactPrice,
-              { color: event.price === 0 ? colors.success : colors.accent },
-            ]}
+            style={[styles.compactMeta, { color: colors.mutedForeground }]}
+            numberOfLines={1}
           >
-            {priceLabel}
+            {event.location}, {event.city}
           </Text>
+          <View style={styles.compactFooter}>
+            <Text
+              style={[
+                styles.compactPrice,
+                { color: event.price === 0 ? colors.success : colors.accent },
+              ]}
+            >
+              {priceLabel}
+            </Text>
+            {event.viewCount != null && (
+              <View style={styles.ratingRow}>
+                <Ionicons name="eye-outline" size={12} color={colors.mutedForeground} />
+                <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
+                  {formatCount(event.viewCount)}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
       </AnimatedPressable>
     );
@@ -237,11 +266,21 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
           >
             {event.category}
           </Text>
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={12} color={colors.accent} />
-            <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
-              {event.rating}
-            </Text>
+          <View style={styles.statsRow}>
+            {event.viewCount != null && (
+              <View style={styles.ratingRow}>
+                <Ionicons name="eye-outline" size={13} color={colors.mutedForeground} />
+                <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
+                  {formatCount(event.viewCount)}
+                </Text>
+              </View>
+            )}
+            <View style={styles.ratingRow}>
+              <Ionicons name="star" size={12} color={colors.accent} />
+              <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
+                {event.rating}
+              </Text>
+            </View>
           </View>
         </View>
         <Text
@@ -258,8 +297,14 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
         </View>
         <View style={styles.metaRow2}>
           <Ionicons name="location-outline" size={13} color={colors.mutedForeground} />
-          <Text style={[styles.standardMeta, { color: colors.mutedForeground }]} numberOfLines={1}>
-            {event.city} · {event.distance}km
+          <Text
+            style={[styles.standardMeta, styles.flexText, { color: colors.mutedForeground }]}
+            numberOfLines={1}
+          >
+            {event.location}, {event.city}
+          </Text>
+          <Text style={[styles.standardMeta, { color: colors.mutedForeground }]}>
+            {event.distance}km
           </Text>
         </View>
       </View>
@@ -276,13 +321,27 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(n);
+}
+
 const styles = StyleSheet.create({
+  // Width comes from the container (BannerCarousel sizes each slide).
   featured: {
-    width: 300,
-    height: 200,
+    width: "100%",
+    height: 220,
     borderRadius: 20,
     overflow: "hidden",
-    marginRight: 14,
+  },
+  flexText: {
+    flexShrink: 1,
+  },
+  featuredStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   featuredImage: {
     flex: 1,
@@ -421,10 +480,19 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
+  compactMeta: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+  },
+  compactFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
   compactPrice: {
     fontSize: 12,
     fontFamily: "Inter_700Bold",
-    marginTop: 2,
   },
   standard: {
     borderRadius: 16,
@@ -464,6 +532,11 @@ const styles = StyleSheet.create({
   standardCategory: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
+  },
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   ratingRow: {
     flexDirection: "row",

@@ -21,14 +21,13 @@
       [
         "expo-splash-screen",
         {
-"image": "./assets/images/logo-primary.png",
-"imageWidth": 130,
-"resizeMode": "contain",
-"backgroundColor": "#FFFFFF",
-"dark": {
-  "backgroundColor": "#000000",
-  "image": "./assets/images/logo-primary.png"
-}
+          "image": "./assets/images/logo-primary.png",
+          "imageWidth": 130,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF",
+          "dark": {
+            "backgroundColor": "#000000",
+            "image": "./assets/images/logo-primary.png"
           }
         }
       ]
@@ -38,4 +37,5 @@
       "reactCompiler": true
     }
   }
+
 }

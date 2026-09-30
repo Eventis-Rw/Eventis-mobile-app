@@ -69,12 +69,8 @@ export function EventCardSkeleton() {
   );
 }
 
-export function FeaturedCardSkeleton() {
-  return (
-    <View style={styles.featured}>
-      <Skeleton width={300} height={200} borderRadius={20} />
-    </View>
-  );
+export function FeaturedCardSkeleton({ width = 300 }: { width?: number }) {
+  return <Skeleton width={width} height={220} borderRadius={20} />;
 }
 
 const styles = StyleSheet.create({
@@ -93,8 +89,5 @@ const styles = StyleSheet.create({
   },
   gap: {
     marginTop: 8,
-  },
-  featured: {
-    marginRight: 14,
   },
 });

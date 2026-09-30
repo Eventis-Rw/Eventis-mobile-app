@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  FlatList,
   Image,
   Platform,
   Pressable,
@@ -10,48 +9,50 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BannerCarousel } from "@/components/BannerCarousel";
-import { Logo } from "@/components/Logo";
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
-import { EventCardSkeleton, FeaturedCardSkeleton } from "@/components/SkeletonLoader";
-import { MOCK_EVENTS } from "@/constants/mockData";
+import { EventCardSkeleton } from "@/components/SkeletonLoader";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
+
+const PAGE_PADDING = 20;
 
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { categories, refreshEvents } = useEvents();
+  const { events, categories, isLoading, error, refreshEvents } = useEvents();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(false);
+
+  // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
+  const showSkeletons = isLoading && !refreshing;
 
   const featured = useMemo(
-    () => MOCK_EVENTS.filter((e) => e.isFeatured || e.isSponsored),
-    []
+    () => events.filter((e) => e.isFeatured || e.isSponsored),
+    [events]
   );
 
+  // "All" skips events already shown in Featured so the page doesn't repeat them.
   const filtered = useMemo(
     () =>
       selectedCategory === "All"
-        ? MOCK_EVENTS.filter((e) => !e.isFeatured)
-        : MOCK_EVENTS.filter((e) => e.category === selectedCategory),
-    [selectedCategory]
+        ? events.filter((e) => !e.isFeatured && !e.isSponsored)
+        : events.filter((e) => e.category === selectedCategory),
+    [events, selectedCategory]
   );
 
   const nearby = useMemo(
-    () => [...MOCK_EVENTS].sort((a, b) => a.distance - b.distance).slice(0, 6),
-    []
+    () => [...events].sort((a, b) => a.distance - b.distance).slice(0, 6),
+    [events]
   );
 
   const onRefresh = useCallback(async () => {
@@ -59,6 +60,120 @@ export default function HomeScreen() {
     await refreshEvents();
     setRefreshing(false);
   }, [refreshEvents]);
+
+  const openSearch = useCallback(() => {
+    router.push("/(tabs)/search" as any);
+  }, [router]);
+
+  const renderBody = () => {
+    if (error && !events.length) {
+      return (
+        <StateMessage
+          icon="cloud-offline-outline"
+          title="Couldn't load events"
+          text="Check your connection and try again."
+          actionLabel="Try again"
+          onAction={refreshEvents}
+        />
+      );
+    }
+
+    if (!showSkeletons && !events.length) {
+      return (
+        <StateMessage
+          icon="calendar-clear-outline"
+          title="No events yet"
+          text="New events will show up here as soon as they're published."
+          actionLabel="Refresh"
+          onAction={refreshEvents}
+        />
+      );
+    }
+
+    return (
+      <>
+        {/* Featured / Sponsored */}
+        {(showSkeletons || featured.length > 0) && (
+          <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(100).springify() : undefined}>
+            <SectionHeader title="Featured" subtitle="Handpicked by Eventis" />
+            <BannerCarousel events={featured} loading={showSkeletons} inset={PAGE_PADDING} />
+          </Animated.View>
+        )}
+
+        {/* Nearby events */}
+        {!showSkeletons && nearby.length > 0 && (
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(180).springify() : undefined}
+            style={styles.section}
+          >
+            <SectionHeader title="Nearby" subtitle="Events close to you" />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.bleed}
+              contentContainerStyle={styles.bleedContent}
+            >
+              {nearby.map((event) => (
+                <EventCard key={event.id} event={event} variant="compact" />
+              ))}
+            </ScrollView>
+          </Animated.View>
+        )}
+
+        {/* Browse: the category filter sits with the list it filters */}
+        <Animated.View
+          entering={Platform.OS !== "web" ? FadeInDown.delay(240).springify() : undefined}
+          style={styles.section}
+        >
+          <SectionHeader
+            title={selectedCategory === "All" ? "All Events" : selectedCategory}
+            trailing={
+              showSkeletons ? undefined : (
+                <Text style={[styles.countText, { color: colors.mutedForeground }]}>
+                  {filtered.length} {filtered.length === 1 ? "event" : "events"}
+                </Text>
+              )
+            }
+          />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={[styles.bleed, styles.categoryScroll]}
+            contentContainerStyle={styles.bleedContent}
+          >
+            {categories.map((cat) => (
+              <CategoryPill
+                key={cat}
+                category={cat}
+                isSelected={selectedCategory === cat}
+                onPress={setSelectedCategory}
+              />
+            ))}
+          </ScrollView>
+
+          {showSkeletons ? (
+            <>
+              <EventCardSkeleton />
+              <EventCardSkeleton />
+            </>
+          ) : filtered.length ? (
+            filtered.map((event) => (
+              <EventCard key={event.id} event={event} variant="standard" />
+            ))
+          ) : (
+            <StateMessage
+              icon="search-outline"
+              title={`No ${selectedCategory} events`}
+              text="Try another category or browse everything."
+              actionLabel="Show all events"
+              onAction={() => setSelectedCategory("All")}
+              compact
+            />
+          )}
+        </Animated.View>
+      </>
+    );
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -74,33 +189,36 @@ export default function HomeScreen() {
       >
         <View style={styles.headerRow}>
           <View style={styles.brandRow}>
-<Pressable
-  onPress={() => router.push("/(tabs)/profile" as any)}
-  style={[
-    styles.avatarBtn,
-    {
-      backgroundColor: user?.avatarUrl ? colors.card : colors.primary,
-      borderColor: colors.border,
-    },
-  ]}
-  accessibilityRole="button"
-  accessibilityLabel="View profile"
->
-  {user?.avatarUrl ? (
-    <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />
-  ) : user?.username ? (
-    <Text style={styles.avatarText}>
-      {user.username.charAt(0).toUpperCase()}
-    </Text>
-  ) : (
-    <Ionicons name="person" size={20} color="#FFFFFF" />
-  )}
-</Pressable>
-            <View>
+            <Pressable
+              onPress={() => router.push("/(tabs)/profile" as any)}
+              style={[
+                styles.avatarBtn,
+                {
+                  backgroundColor: user?.avatarUrl ? colors.card : colors.primary,
+                  borderColor: colors.border,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="View profile"
+            >
+              {user?.avatarUrl ? (
+                <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />
+              ) : user?.username ? (
+                <Text style={styles.avatarText}>
+                  {user.username.charAt(0).toUpperCase()}
+                </Text>
+              ) : (
+                <Ionicons name="person" size={20} color="#FFFFFF" />
+              )}
+            </Pressable>
+            <View style={styles.greetingBlock}>
               <Text style={[styles.greeting, { color: colors.mutedForeground }]}>
                 Good{getTimeGreeting()},
               </Text>
-              <Text style={[styles.userName, { color: colors.foreground }]}>
+              <Text
+                style={[styles.userName, { color: colors.foreground }]}
+                numberOfLines={1}
+              >
                 {user?.username ?? "Explorer"}
               </Text>
             </View>
@@ -108,12 +226,8 @@ export default function HomeScreen() {
           <View style={styles.headerActions}>
             <Pressable
               style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => router.push("/(tabs)/search" as any)}
-            >
-              <Ionicons name="search-outline" size={20} color={colors.foreground} />
-            </Pressable>
-            <Pressable
-              style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
             >
               <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
             </Pressable>
@@ -122,7 +236,9 @@ export default function HomeScreen() {
 
         <Pressable
           style={[styles.searchBar, { backgroundColor: colors.input, borderColor: colors.border }]}
-          onPress={() => router.push("/(tabs)/search" as any)}
+          onPress={openSearch}
+          accessibilityRole="search"
+          accessibilityLabel="Search events"
         >
           <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
           <Text style={[styles.searchPlaceholder, { color: colors.mutedForeground }]}>
@@ -139,7 +255,6 @@ export default function HomeScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: 16,
             paddingBottom: Platform.OS === "web" ? 84 + 20 : 100,
           },
         ]}
@@ -152,86 +267,69 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* Featured / Sponsored */}
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(100).springify() : undefined}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-              Featured
-            </Text>
-            <Pressable>
-              <Text style={[styles.seeAll, { color: colors.primary }]}>See all</Text>
-            </Pressable>
-          </View>
-          {loading ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skeletonRow}>
-              <FeaturedCardSkeleton />
-              <FeaturedCardSkeleton />
-            </ScrollView>
-          ) : (
-            <BannerCarousel events={featured} />
-          )}
-        </Animated.View>
-
-        {/* Categories */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(180).springify() : undefined}
-          style={styles.sectionSpacing}
-        >
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-            {categories.map((cat) => (
-              <CategoryPill
-                key={cat}
-                category={cat}
-                isSelected={selectedCategory === cat}
-                onPress={setSelectedCategory}
-              />
-            ))}
-          </ScrollView>
-        </Animated.View>
-
-        {/* Nearby events */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(240).springify() : undefined}
-          style={styles.sectionSpacing}
-        >
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                Nearby
-              </Text>
-              <Text style={[styles.sectionSubtitle, { color: colors.mutedForeground }]}>
-                Events close to you
-              </Text>
-            </View>
-            <Pressable>
-              <Text style={[styles.seeAll, { color: colors.primary }]}>View map</Text>
-            </Pressable>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.nearbyRow}>
-            {nearby.map((event) => (
-              <EventCard key={event.id} event={event} variant="compact" />
-            ))}
-          </ScrollView>
-        </Animated.View>
-
-        {/* Filtered events */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(300).springify() : undefined}
-          style={styles.sectionSpacing}
-        >
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-              {selectedCategory === "All" ? "All Events" : selectedCategory}
-            </Text>
-            <Text style={[styles.countText, { color: colors.mutedForeground }]}>
-              {filtered.length} events
-            </Text>
-          </View>
-          {filtered.map((event) => (
-            <EventCard key={event.id} event={event} variant="standard" />
-          ))}
-        </Animated.View>
+        {renderBody()}
       </ScrollView>
+    </View>
+  );
+}
+
+function SectionHeader({
+  title,
+  subtitle,
+  trailing,
+}: {
+  title: string;
+  subtitle?: string;
+  trailing?: React.ReactNode;
+}) {
+  const colors = useColors();
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeading}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={[styles.sectionSubtitle, { color: colors.mutedForeground }]}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {trailing}
+    </View>
+  );
+}
+
+function StateMessage({
+  icon,
+  title,
+  text,
+  actionLabel,
+  onAction,
+  compact = false,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  title: string;
+  text: string;
+  actionLabel: string;
+  onAction: () => void;
+  compact?: boolean;
+}) {
+  const colors = useColors();
+  return (
+    <View style={[styles.state, compact && styles.stateCompact]}>
+      <Ionicons name={icon} size={40} color={colors.border} />
+      <Text style={[styles.stateTitle, { color: colors.foreground }]}>{title}</Text>
+      <Text style={[styles.stateText, { color: colors.mutedForeground }]}>{text}</Text>
+      <Pressable
+        style={[styles.stateBtn, { backgroundColor: colors.primary }]}
+        onPress={onAction}
+        accessibilityRole="button"
+      >
+        <Text style={[styles.stateBtnText, { color: colors.primaryForeground }]}>
+          {actionLabel}
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -248,7 +346,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 20,
+    paddingHorizontal: PAGE_PADDING,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
@@ -256,12 +354,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
     marginBottom: 12,
   },
   brandRow: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  greetingBlock: {
+    flexShrink: 1,
   },
   avatarBtn: {
     width: 44,
@@ -286,12 +389,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   userName: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: "Inter_700Bold",
     marginTop: 1,
   },
   headerActions: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   iconBtn: {
@@ -327,13 +431,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: PAGE_PADDING,
+    paddingTop: 20,
+  },
+  section: {
+    marginTop: 32,
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    marginBottom: 14,
+    gap: 12,
+    marginBottom: 12,
+  },
+  sectionHeading: {
+    flexShrink: 1,
   },
   sectionTitle: {
     fontSize: 20,
@@ -344,24 +456,48 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
-  seeAll: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
   countText: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
   },
-  sectionSpacing: {
-    marginTop: 28,
+  // Horizontal rows scroll edge to edge but start aligned with the page padding.
+  bleed: {
+    marginHorizontal: -PAGE_PADDING,
   },
-  categoryRow: {
-    paddingRight: 20,
+  bleedContent: {
+    paddingHorizontal: PAGE_PADDING,
   },
-  nearbyRow: {
-    paddingRight: 20,
+  categoryScroll: {
+    marginBottom: 16,
   },
-  skeletonRow: {
-    gap: 0,
+  state: {
+    alignItems: "center",
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  stateCompact: {
+    paddingTop: 24,
+    paddingBottom: 12,
+  },
+  stateTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+    textAlign: "center",
+  },
+  stateText: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+  },
+  stateBtn: {
+    marginTop: 4,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  stateBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
   },
 });

@@ -19,16 +19,19 @@ function NativeTabLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: "house", selected: "house.fill" }} />
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="search" role="search">
-        <NativeTabs.Trigger.Icon sf={{ default: "magnifyingglass", selected: "magnifyingglass" }} />
-        <NativeTabs.Trigger.Label>Search</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="chat">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "bubble.left.and.bubble.right", selected: "bubble.left.and.bubble.right.fill" }}
+        />
+        <NativeTabs.Trigger.Label>Chat</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="findlove">
         <NativeTabs.Trigger.Icon sf={{ default: "heart", selected: "heart.fill" }} />
         <NativeTabs.Trigger.Label>FindLove</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="tickets" hidden />
-      <NativeTabs.Trigger name="chat" hidden />
+      {/* Search opens from the Events page instead of the tab bar */}
+      <NativeTabs.Trigger name="search" hidden />
       <NativeTabs.Trigger name="profile">
         <NativeTabs.Trigger.Icon sf={{ default: "person", selected: "person.fill" }} />
         <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
@@ -88,14 +91,14 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="search"
+        name="chat"
         options={{
-          title: "Search",
+          title: "Chat",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="magnifyingglass" tintColor={color} size={24} />
+              <SymbolView name="bubble.left.and.bubble.right" tintColor={color} size={24} />
             ) : (
-              <Feather name="search" size={22} color={color} />
+              <Feather name="message-circle" size={22} color={color} />
             ),
         }}
       />
@@ -112,7 +115,8 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen name="tickets" options={{ href: null }} />
-      <Tabs.Screen name="chat" options={{ href: null }} />
+      {/* Search opens from the Events page instead of the tab bar */}
+      <Tabs.Screen name="search" options={{ href: null }} />
       <Tabs.Screen
         name="profile"
         options={{
