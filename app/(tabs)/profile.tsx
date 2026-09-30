@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   Linking,
   Modal,
   Platform,
@@ -126,9 +127,13 @@ export default function ProfileScreen() {
           style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
           <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <Text style={styles.avatarLetter}>
-              {(user?.username ?? "U").charAt(0).toUpperCase()}
-            </Text>
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />
+            ) : (
+              <Text style={styles.avatarLetter}>
+                {(user?.username ?? "U").charAt(0).toUpperCase()}
+              </Text>
+            )}
           </View>
           <View style={styles.profileInfo}>
             <Text style={[styles.profileName, { color: colors.foreground }]}>
@@ -485,6 +490,11 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarImg: {
+    width: "100%",
+    height: "100%",
   },
   avatarLetter: {
     fontSize: 28,

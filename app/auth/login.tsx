@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -6,152 +5,131 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useAuth } from "@/context/AuthContext";
+import { Logo } from "@/components/Logo";
+import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
 import { useColors } from "@/hooks/useColors";
 
 export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { login } = useAuth();
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const [phone, setPhone] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // Rwanda (+250) default
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const validate = () => {
-    const nextErrors: Record<string, string> = {};
-    if (!identifier.trim()) nextErrors.identifier = "Username or email required";
-    if (!password) nextErrors.password = "Password required";
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  const handleSubmit = async () => {
-    if (!validate()) return;
-    setLoading(true);
-    try {
-      await login(identifier.trim(), password);
-      router.replace("/(tabs)" as any);
-    } catch (err) {
-      setErrors({ general: "Invalid login details. Please try again." });
+  const handleSubmit = () => {
+    const cleaned = phone.replace(/\D/g, "");
+    if (!cleaned || cleaned.length < 7) {
+      setError("Please enter a valid phone number");
+      return;
     }
-    setLoading(false);
+    setError("");
+    setLoading(true);
+
+    const fullPhone = `${selectedCountry.code} ${phone.trim()}`;
+
+    // Frontend flow: transition directly to SMS verification screen
+    setTimeout(() => {
+      setLoading(false);
+      router.push({
+        pathname: "/auth/otp",
+        params: {
+          purpose: "login",
+          phone: fullPhone,
+        },
+      } as any);
+    }, 300);
   };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View
-        style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: colors.background }]}
-      >
-        <Pressable onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color={colors.foreground} />
-        </Pressable>
-      </View>
-
       <KeyboardAwareScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.form, { paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[
+          styles.form,
+          {
+            paddingTop: insets.top + 28,
+            paddingBottom: Math.max(insets.bottom, 16) + 12,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         bottomOffset={20}
       >
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(100).springify() : undefined}
-          style={styles.brandWrap}
-        >
-          <Text
-            style={[
-              styles.logoText,
-              {
-                color: colors.foreground,
-                textShadowColor: colors.primary,
-              },
-            ]}
+        <View style={styles.mainContent}>
+          {/* Brand Icon & Heading */}
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(80).springify() : undefined}
+            style={styles.brandSection}
           >
-            EVENTIS
-          </Text>
-        </Animated.View>
-
-        {errors.general && (
-          <View
-            style={[
-              styles.errorBanner,
-              { backgroundColor: `${colors.destructive}18`, borderColor: colors.destructive },
-            ]}
-          >
-            <Ionicons name="alert-circle-outline" size={16} color={colors.destructive} />
-            <Text style={[styles.errorBannerText, { color: colors.destructive }]}>
-              {errors.general}
+            <Logo style={styles.brandLogo} />
+            <Text style={[styles.title, { color: colors.foreground }]}>
+              Welcome back
             </Text>
-          </View>
-        )}
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+              Enter your phone number to sign in to Eventis.
+            </Text>
+          </Animated.View>
 
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(160).springify() : undefined}>
-          <FieldLabel label="Username or email" colors={colors} />
-          <InputField
-            value={identifier}
-            onChange={setIdentifier}
-            placeholder="Enter your username or email"
-            icon="person-outline"
-            error={errors.identifier}
-            colors={colors}
-            autoCapitalize="none"
-          />
-        </Animated.View>
-
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(220).springify() : undefined}>
-          <FieldLabel label="Password" colors={colors} />
-          <View style={styles.passwordWrap}>
-            <InputField
-              value={password}
-              onChange={setPassword}
-              placeholder="Your password"
-              icon="lock-closed-outline"
-              secureTextEntry={!showPassword}
-              error={errors.password}
-              colors={colors}
+          {/* Phone Input Field */}
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(160).springify() : undefined}
+            style={styles.fieldSection}
+          >
+            <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
+              Phone number
+            </Text>
+            <PhoneInput
+              value={phone}
+              onChangeText={(text) => {
+                setPhone(text);
+                if (error) setError("");
+              }}
+              selectedCountry={selectedCountry}
+              onSelectCountry={setSelectedCountry}
+              error={error}
+              placeholder="7XX XXX XXX"
             />
-            <Pressable
-              style={styles.eyeBtn}
-              onPress={() => setShowPassword((value) => !value)}
-            >
-              <Ionicons
-                name={showPassword ? "eye-off-outline" : "eye-outline"}
-                size={20}
-                color={colors.mutedForeground}
-              />
-            </Pressable>
-          </View>
-        </Animated.View>
+          </Animated.View>
 
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(300).springify() : undefined}>
-          <Pressable
-            style={[
-              styles.submitBtn,
-              { backgroundColor: colors.primary, opacity: loading ? 0.75 : 1 },
-            ]}
-            onPress={handleSubmit}
-            disabled={loading}
+          {/* Submit Button */}
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(240).springify() : undefined}
           >
-            <Text style={styles.submitBtnText}>
-              {loading ? "Signing in..." : "Sign In"}
-            </Text>
-          </Pressable>
-        </Animated.View>
+            <Pressable
+              style={[
+                styles.submitBtn,
+                { backgroundColor: colors.primary, opacity: loading ? 0.75 : 1 },
+              ]}
+              onPress={handleSubmit}
+              disabled={loading}
+            >
+              <Text style={styles.submitBtnText}>
+                {loading ? "Sending code..." : "Continue"}
+              </Text>
+            </Pressable>
+          </Animated.View>
+        </View>
 
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(360).springify() : undefined}>
+        {/* Footer Link to Register (Anchored to bottom) */}
+        <Animated.View
+          entering={Platform.OS !== "web" ? FadeInDown.delay(300).springify() : undefined}
+        >
           <View style={styles.footerRow}>
-            <Text style={[styles.footerText, { color: colors.mutedForeground }]}>New here?</Text>
+            <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
+              Don't have an account?
+            </Text>
             <Pressable onPress={() => router.push("/auth/register" as any)}>
-              <Text style={[styles.footerLink, { color: colors.primary }]}>Create account</Text>
+              <Text style={[styles.footerLink, { color: colors.primary }]}>
+                Create account
+              </Text>
             </Pressable>
           </View>
         </Animated.View>
@@ -160,148 +138,75 @@ export default function LoginScreen() {
   );
 }
 
-function FieldLabel({ label, colors }: { label: string; colors: ReturnType<typeof useColors> }) {
-  return <Text style={[fieldStyles.label, { color: colors.foreground }]}>{label}</Text>;
-}
-
-function InputField({
-  value,
-  onChange,
-  placeholder,
-  icon,
-  error,
-  secureTextEntry,
-  keyboardType,
-  autoCapitalize,
-  colors,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  icon: string;
-  error?: string;
-  secureTextEntry?: boolean;
-  keyboardType?: any;
-  autoCapitalize?: any;
-  colors: ReturnType<typeof useColors>;
-}) {
-  return (
-    <>
-      <View
-        style={[
-          fieldStyles.field,
-          {
-            backgroundColor: colors.input,
-            borderColor: error ? colors.destructive : colors.border,
-          },
-        ]}
-      >
-        <Ionicons name={icon as any} size={18} color={colors.mutedForeground} />
-        <TextInput
-          style={[fieldStyles.input, { color: colors.foreground }]}
-          placeholder={placeholder}
-          placeholderTextColor={colors.mutedForeground}
-          value={value}
-          onChangeText={onChange}
-          secureTextEntry={secureTextEntry}
-          keyboardType={keyboardType}
-          autoCapitalize={autoCapitalize ?? "sentences"}
-        />
-      </View>
-      {error && <Text style={[fieldStyles.error, { color: colors.destructive }]}>{error}</Text>}
-    </>
-  );
-}
-
-const fieldStyles = StyleSheet.create({
-  label: { fontSize: 14, fontFamily: "Inter_500Medium", marginBottom: 8 },
-  field: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 12,
-    marginBottom: 4,
-  },
-  input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
-  error: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 8 },
-});
-
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    gap: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  root: {
+    flex: 1,
   },
   scroll: {
     flex: 1,
   },
   form: {
-    paddingHorizontal: 20,
-    paddingTop: 28,
-    gap: 18,
+    flexGrow: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
   },
-  brandWrap: {
+  mainContent: {
+    gap: 24,
+  },
+  brandSection: {
     alignItems: "center",
-    justifyContent: "center",
+    gap: 10,
     marginBottom: 8,
   },
-  logoText: {
-    fontSize: 32,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 4,
-    textTransform: "uppercase",
-    includeFontPadding: false,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-    transform: [{ scaleY: 1.08 }],
+  brandLogo: {
+    width: 68,
+    height: 68,
+    marginBottom: 6,
   },
-  errorBanner: {
-    flexDirection: "row",
-    alignItems: "center",
+  title: {
+    fontSize: 28,
+    fontFamily: "Inter_900Black",
+    letterSpacing: -0.5,
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    maxWidth: 290,
+    lineHeight: 21,
+  },
+  fieldSection: {
     gap: 8,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
   },
-  errorBannerText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    flexShrink: 1,
-  },
-  passwordWrap: {
-    position: "relative",
-  },
-  eyeBtn: {
-    position: "absolute",
-    right: 14,
-    top: 14,
-    padding: 6,
+  fieldLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
   },
   submitBtn: {
-    borderRadius: 16,
-    paddingVertical: 18,
+    width: "100%",
+    height: 54,
+    borderRadius: 27,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+    marginTop: 4,
   },
   submitBtnText: {
-    color: "#fff",
-    fontSize: 17,
+    color: "#FFFFFF",
+    fontSize: 16,
     fontFamily: "Inter_700Bold",
   },
   footerRow: {
     flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
-    paddingTop: 8,
+    paddingTop: 10,
   },
   footerText: {
     fontSize: 14,
@@ -309,6 +214,6 @@ const styles = StyleSheet.create({
   },
   footerLink: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_700Bold",
   },
 });

@@ -1,88 +1,150 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import React, { useCallback, useEffect, useRef } from "react";
+import { Image, StyleSheet, Text, useColorScheme } from "react-native";
+import Animated, {
+  Easing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 
-import { Logo } from "@/components/Logo";
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
-import { useColors } from "@/hooks/useColors";
-
-const SPLASH_DURATION_MS = 1100;
+import { useTheme } from "@/context/ThemeContext";
 
 export default function AppEntryScreen() {
   const router = useRouter();
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const logoScale = useSharedValue(0.82);
+  const systemScheme = useColorScheme();
+  const { scheme } = useTheme();
+  const isDark = (scheme ?? systemScheme) === "dark";
+  const hasNavigated = useRef(false);
 
-  React.useEffect(() => {
-    logoScale.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }),
-        withTiming(1.06, { duration: 850, easing: Easing.inOut(Easing.quad) }),
-        withTiming(1, { duration: 850, easing: Easing.inOut(Easing.quad) }),
-      ),
-      -1,
-    );
-  }, [logoScale]);
+  const logoScale = useSharedValue(1);
+  const logoOpacity = useSharedValue(1);
+  const containerOpacity = useSharedValue(1);
 
-  const logoAnimation = useAnimatedStyle(() => ({ transform: [{ scale: logoScale.value }] }));
+  const navigateNext = useCallback(async () => {
+    if (hasNavigated.current) return;
+    hasNavigated.current = true;
+
+    try {
+      const completed = await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY);
+      if (completed === "true") {
+        router.replace("/(tabs)");
+      } else {
+        router.replace("/onboarding" as any);
+      }
+    } catch {
+      router.replace("/onboarding" as any);
+    }
+  }, [router]);
 
   useEffect(() => {
     let mounted = true;
 
-    async function openApp() {
-      const [completed] = await Promise.all([
-        AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY).catch(() => null),
-        new Promise((resolve) => setTimeout(resolve, SPLASH_DURATION_MS)),
-      ]);
-
+    const onComplete = () => {
       if (mounted) {
-        router.replace((completed === "true" ? "/(tabs)" : "/onboarding") as any);
+        void navigateNext();
       }
-    }
+    };
 
-    void openApp();
+    // 1. Prominent living resting phase (~900ms) with gentle pulse
+    // 2. Anticipation shrink (iconic X "inhale")
+    // 3. Punch-through explosive zoom (scale 36x)
+    logoScale.value = withSequence(
+      withTiming(1.05, { duration: 450, easing: Easing.inOut(Easing.quad) }),
+      withTiming(1.0, { duration: 450, easing: Easing.inOut(Easing.quad) }),
+      withTiming(0.88, { duration: 180, easing: Easing.bezier(0.25, 0.1, 0.25, 1) }),
+      withTiming(36, { duration: 420, easing: Easing.bezier(0.65, 0, 0.35, 1) })
+    );
+
+    // Fade logo out as it punches through the screen
+    logoOpacity.value = withSequence(
+      withDelay(
+        1100,
+        withTiming(0, { duration: 250, easing: Easing.out(Easing.ease) })
+      )
+    );
+
+    // Fade container to reveal next screen smoothly
+    containerOpacity.value = withSequence(
+      withDelay(
+        1220,
+        withTiming(0, { duration: 200, easing: Easing.linear }, (finished) => {
+          if (finished) {
+            runOnJS(onComplete)();
+          }
+        })
+      )
+    );
+
+    // Fallback timer
+    const fallbackTimer = setTimeout(() => {
+      if (mounted) {
+        void navigateNext();
+      }
+    }, 1750);
+
     return () => {
       mounted = false;
+      clearTimeout(fallbackTimer);
     };
-  }, [router]);
+  }, [containerOpacity, logoOpacity, logoScale, navigateNext]);
+
+  const animatedLogoStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: logoScale.value }],
+    opacity: logoOpacity.value,
+  }));
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    opacity: containerOpacity.value,
+  }));
+
+  // Background takes the color theme set on the phone (dark on dark phone, white on light phone)
+  const bgColor = isDark ? "#000000" : "#FFFFFF";
+  const textColor = isDark ? "#FFFFFF" : "#0C0C1A";
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: colors.background }]}>
-      <View style={styles.center}>
-        <Animated.View entering={FadeInUp.duration(450)} style={logoAnimation}>
-          <Logo style={styles.logo} />
-        </Animated.View>
-        <Animated.Text entering={FadeInDown.delay(140).duration(420)} style={[styles.name, { color: colors.primary }]}>eventis</Animated.Text>
-        <Animated.Text entering={FadeInDown.delay(260).duration(420)} style={[styles.tagline, { color: colors.mutedForeground }]}>Where moments happen</Animated.Text>
-      </View>
-    </View>
+    <Animated.View style={[styles.root, { backgroundColor: bgColor }, animatedContainerStyle]}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <Animated.View style={[styles.center, animatedLogoStyle]}>
+        <Image
+          source={require("../assets/images/logo-primary.png")}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="Eventis"
+        />
+        <Text style={[styles.brandText, { color: textColor }]}>
+          eventis
+        </Text>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
   },
-  center: { alignItems: "center" },
-  logo: { width: 132, height: 132 },
-  name: {
-    marginTop: 12,
-    fontSize: 38,
-    letterSpacing: -1.5,
-    color: "#1932A6",
-    fontFamily: "Inter_700Bold",
+  center: {
+    alignItems: "center",
+    justifyContent: "center",
   },
-  tagline: {
-    marginTop: 5,
-    color: "#4F4F63",
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+  logo: {
+    width: 108,
+    height: 108,
+  },
+  brandText: {
+    fontSize: 34,
+    lineHeight: 38,
+    fontFamily: "Inter_900Black",
+    letterSpacing: -1.2,
+    marginTop: 14,
   },
 });
