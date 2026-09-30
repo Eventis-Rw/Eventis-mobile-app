@@ -5,7 +5,6 @@ import React, { useCallback } from "react";
 import {
   ImageBackground,
   Pressable,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -76,33 +75,27 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
   if (variant === "featured") {
     return (
       <AnimatedPressable
-        style={[styles.featured, animatedStyle]}
+        className="mr-3.5 h-[200px] w-[300px] overflow-hidden rounded-2xl"
+        style={animatedStyle}
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
         <ImageBackground
           source={getEventImage(event.image)}
-          style={styles.featuredImage}
-          imageStyle={styles.featuredImageStyle}
+          className="flex-1 justify-end"
+          imageStyle={{ borderRadius: 20 }}
         >
-          <View
-            style={[
-              styles.featuredOverlay,
-              { backgroundColor: colors.overlay },
-            ]}
-          />
+          <View className="absolute inset-0 bg-overlay opacity-40 dark:bg-overlay-dark" />
           {event.isSponsored && (
-            <View
-              style={[styles.sponsoredBadge, { backgroundColor: colors.accent }]}
-            >
-              <Text style={[styles.sponsoredText, { color: colors.accentForeground }]}>
+            <View className="absolute left-3 top-3 rounded-md bg-accent px-2 py-[3px]">
+              <Text className="font-semibold text-[11px] text-accent-foreground dark:text-accent-foreground-dark">
                 Sponsored
               </Text>
             </View>
           )}
           <Pressable
-            style={[styles.saveBtn, { backgroundColor: colors.surface }]}
+            className="absolute right-3 top-3 h-8 w-8 items-center justify-center rounded-full bg-surface dark:bg-surface-dark"
             onPress={handleSave}
           >
             <Ionicons
@@ -111,46 +104,45 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
               color={isSaved ? colors.primary : colors.foreground}
             />
           </Pressable>
-          <View style={styles.featuredContent}>
-            <View style={[styles.categoryBadge, { backgroundColor: colors.glass }]}>
-              <Text style={[styles.categoryText, { color: "#fff" }]}>
+          <View className="p-3.5">
+            <View className="mb-1.5 self-start rounded-md border border-white/20 bg-glass px-2 py-[3px] dark:bg-glass-dark">
+              <Text className="font-semibold text-[11px] text-white">
                 {event.category}
               </Text>
             </View>
-            <Text style={styles.featuredTitle} numberOfLines={2}>
+            <Text
+              className="mb-2 font-bold text-[17px] leading-[22px] text-white"
+              numberOfLines={2}
+            >
               {event.title}
             </Text>
-            <View style={styles.featuredMeta}>
-              <View style={styles.metaRow}>
+            <View className="mb-2.5 gap-1">
+              <View className="flex-row items-center gap-[5px]">
                 <Ionicons name="calendar-outline" size={13} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.metaText}>
+                <Text className="font-sans text-xs text-white/80">
                   {formatDate(event.date)} · {event.time}
                 </Text>
               </View>
-              <View style={styles.metaRow}>
+              <View className="flex-row items-center gap-[5px]">
                 <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.metaText} numberOfLines={1}>
+                <Text className="font-sans text-xs text-white/80" numberOfLines={1}>
                   {event.city} · {event.distance}km away
                 </Text>
               </View>
             </View>
-            <View style={styles.featuredBottom}>
-              <View style={styles.attendeeRow}>
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center gap-1">
                 <Ionicons name="people-outline" size={13} color="rgba(255,255,255,0.7)" />
-                <Text style={styles.attendeeText}>
+                <Text className="font-sans text-xs text-white/70">
                   {event.attendees.toLocaleString()} attending
                 </Text>
               </View>
               <View
-                style={[
-                  styles.pricePill,
-                  {
-                    backgroundColor:
-                      event.price === 0 ? colors.success : colors.primary,
-                  },
-                ]}
+                className={`rounded-[20px] px-2.5 py-1 ${
+                  event.price === 0 ? "bg-success" : "bg-primary"
+                }`}
               >
-                <Text style={styles.priceText}>{priceLabel}</Text>
+                <Text className="font-bold text-xs text-white">{priceLabel}</Text>
               </View>
             </View>
           </View>
@@ -162,34 +154,37 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
   if (variant === "compact") {
     return (
       <AnimatedPressable
-        style={[styles.compact, animatedStyle, { backgroundColor: colors.card }]}
+        className="mr-3 w-40 overflow-hidden rounded-xl bg-card dark:bg-card-dark"
+        style={animatedStyle}
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
         <ImageBackground
           source={getEventImage(event.image)}
-          style={styles.compactImage}
-          imageStyle={styles.compactImageStyle}
+          className="h-[110px] w-full"
+          imageStyle={{
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+          }}
         />
-        <View style={styles.compactContent}>
-          <Text style={[styles.compactCategory, { color: colors.primary }]}>
+        <View className="gap-0.5 p-2.5">
+          <Text className="font-semibold text-[11px] text-primary">
             {event.category}
           </Text>
           <Text
-            style={[styles.compactTitle, { color: colors.foreground }]}
+            className="font-semibold text-[13px] leading-[18px] text-foreground dark:text-foreground-dark"
             numberOfLines={2}
           >
             {event.title}
           </Text>
-          <Text style={[styles.compactDate, { color: colors.mutedForeground }]}>
+          <Text className="mt-0.5 font-sans text-[11px] text-muted-foreground dark:text-muted-foreground-dark">
             {formatDate(event.date)}
           </Text>
           <Text
-            style={[
-              styles.compactPrice,
-              { color: event.price === 0 ? colors.success : colors.accent },
-            ]}
+            className={`mt-0.5 font-bold text-xs ${
+              event.price === 0 ? "text-success" : "text-accent"
+            }`}
           >
             {priceLabel}
           </Text>
@@ -200,19 +195,23 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
 
   return (
     <AnimatedPressable
-      style={[styles.standard, animatedStyle, { backgroundColor: colors.card, borderColor: colors.border }]}
+      className="mb-3.5 overflow-hidden rounded-xl border border-border bg-card dark:border-border-dark dark:bg-card-dark"
+      style={animatedStyle}
       onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >
       <ImageBackground
         source={getEventImage(event.image)}
-        style={styles.standardImage}
-        imageStyle={styles.standardImageStyle}
+        className="h-[150px] justify-end"
+        imageStyle={{
+          borderTopLeftRadius: 16,
+          borderTopRightRadius: 16,
+        }}
       >
-        <View style={[styles.overlay2, { backgroundColor: colors.overlay }]} />
+        <View className="absolute inset-0 bg-overlay opacity-25 dark:bg-overlay-dark" />
         <Pressable
-          style={[styles.saveBtn2, { backgroundColor: colors.surface }]}
+          className="absolute right-2 top-2 h-7 w-7 items-center justify-center rounded-full bg-surface dark:bg-surface-dark"
           onPress={handleSave}
         >
           <Ionicons
@@ -222,43 +221,43 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
           />
         </Pressable>
         <View
-          style={[
-            styles.pricePill2,
-            { backgroundColor: event.price === 0 ? colors.success : colors.primary },
-          ]}
+          className={`absolute bottom-2.5 left-2.5 rounded-[20px] px-2.5 py-1 ${
+            event.price === 0 ? "bg-success" : "bg-primary"
+          }`}
         >
-          <Text style={styles.priceText}>{priceLabel}</Text>
+          <Text className="font-bold text-xs text-white">{priceLabel}</Text>
         </View>
       </ImageBackground>
-      <View style={styles.standardContent}>
-        <View style={styles.standardHeader}>
-          <Text
-            style={[styles.standardCategory, { color: colors.primary }]}
-          >
+      <View className="gap-1 p-3.5">
+        <View className="flex-row items-center justify-between">
+          <Text className="font-semibold text-xs text-primary">
             {event.category}
           </Text>
-          <View style={styles.ratingRow}>
+          <View className="flex-row items-center gap-[3px]">
             <Ionicons name="star" size={12} color={colors.accent} />
-            <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
+            <Text className="font-medium text-xs text-muted-foreground dark:text-muted-foreground-dark">
               {event.rating}
             </Text>
           </View>
         </View>
         <Text
-          style={[styles.standardTitle, { color: colors.foreground }]}
+          className="font-semibold text-base leading-[22px] text-foreground dark:text-foreground-dark"
           numberOfLines={2}
         >
           {event.title}
         </Text>
-        <View style={styles.metaRow2}>
+        <View className="flex-row items-center gap-[5px]">
           <Ionicons name="calendar-outline" size={13} color={colors.mutedForeground} />
-          <Text style={[styles.standardMeta, { color: colors.mutedForeground }]}>
+          <Text className="font-sans text-[13px] text-muted-foreground dark:text-muted-foreground-dark">
             {formatDate(event.date)} · {event.time}
           </Text>
         </View>
-        <View style={styles.metaRow2}>
+        <View className="flex-row items-center gap-[5px]">
           <Ionicons name="location-outline" size={13} color={colors.mutedForeground} />
-          <Text style={[styles.standardMeta, { color: colors.mutedForeground }]} numberOfLines={1}>
+          <Text
+            className="font-sans text-[13px] text-muted-foreground dark:text-muted-foreground-dark"
+            numberOfLines={1}
+          >
             {event.city} · {event.distance}km
           </Text>
         </View>
@@ -275,217 +274,3 @@ function formatDate(dateStr: string): string {
     year: "numeric",
   });
 }
-
-const styles = StyleSheet.create({
-  featured: {
-    width: 300,
-    height: 200,
-    borderRadius: 20,
-    overflow: "hidden",
-    marginRight: 14,
-  },
-  featuredImage: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  featuredImageStyle: {
-    borderRadius: 20,
-  },
-  featuredOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.4,
-  },
-  sponsoredBadge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  sponsoredText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
-  saveBtn: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  saveBtn2: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  featuredContent: {
-    padding: 14,
-  },
-  categoryBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-  categoryText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
-  featuredTitle: {
-    fontSize: 17,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-    marginBottom: 8,
-    lineHeight: 22,
-  },
-  featuredMeta: {
-    gap: 4,
-    marginBottom: 10,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  metaText: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.8)",
-    fontFamily: "Inter_400Regular",
-  },
-  featuredBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  attendeeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  attendeeText: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.7)",
-    fontFamily: "Inter_400Regular",
-  },
-  pricePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  priceText: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-  },
-  compact: {
-    width: 160,
-    borderRadius: 16,
-    overflow: "hidden",
-    marginRight: 12,
-  },
-  compactImage: {
-    width: "100%",
-    height: 110,
-  },
-  compactImageStyle: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  compactContent: {
-    padding: 10,
-    gap: 2,
-  },
-  compactCategory: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
-  compactTitle: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    lineHeight: 18,
-  },
-  compactDate: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
-  compactPrice: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    marginTop: 2,
-  },
-  standard: {
-    borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 14,
-    borderWidth: 1,
-  },
-  standardImage: {
-    height: 150,
-    justifyContent: "flex-end",
-  },
-  standardImageStyle: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  overlay2: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.25,
-  },
-  pricePill2: {
-    position: "absolute",
-    bottom: 10,
-    left: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  standardContent: {
-    padding: 14,
-    gap: 4,
-  },
-  standardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  standardCategory: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  ratingText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  standardTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    lineHeight: 22,
-  },
-  metaRow2: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  standardMeta: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-});

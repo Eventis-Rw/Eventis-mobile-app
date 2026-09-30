@@ -13,7 +13,7 @@ import {
   type Event,
   type EventCategory,
 } from "@/constants/mockData";
-import { api } from "@/utils/apiClient";
+import { api } from "@/services/apiClient";
 
 interface EventsContextValue {
   events: Event[];

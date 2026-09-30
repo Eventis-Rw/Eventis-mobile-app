@@ -7,7 +7,7 @@ import React, {
   useState,
 } from "react";
 
-import { api, ApiError, clearToken, getToken, setToken } from "@/utils/apiClient";
+import { api, clearToken, getToken, setToken } from "@/services/apiClient";
 
 export interface User {
   id: string;

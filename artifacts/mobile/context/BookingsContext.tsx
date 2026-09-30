@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 
-import { api, getToken } from "@/utils/apiClient";
+import { api, getToken } from "@/services/apiClient";
 
 export interface Booking {
   id: string;

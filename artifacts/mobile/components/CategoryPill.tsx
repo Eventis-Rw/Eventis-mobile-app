@@ -1,12 +1,11 @@
 import React, { useCallback } from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, Text } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
 
-import { useColors } from "@/hooks/useColors";
 import type { EventCategory } from "@/constants/mockData";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -18,7 +17,6 @@ interface CategoryPillProps {
 }
 
 export function CategoryPill({ category, isSelected, onPress }: CategoryPillProps) {
-  const colors = useColors();
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -35,42 +33,25 @@ export function CategoryPill({ category, isSelected, onPress }: CategoryPillProp
 
   return (
     <AnimatedPressable
-      style={[
-        styles.pill,
-        animatedStyle,
-        {
-          backgroundColor: isSelected ? colors.primary : colors.card,
-          borderColor: isSelected ? colors.primary : colors.border,
-        },
-      ]}
+      className={`mr-2 rounded-[20px] border px-4 py-2 ${
+        isSelected
+          ? "border-primary bg-primary"
+          : "border-border bg-card dark:border-border-dark dark:bg-card-dark"
+      }`}
+      style={animatedStyle}
       onPress={() => onPress(category)}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >
       <Text
-        style={[
-          styles.text,
-          {
-            color: isSelected ? colors.primaryForeground : colors.mutedForeground,
-            fontFamily: isSelected ? "Inter_600SemiBold" : "Inter_500Medium",
-          },
-        ]}
+        className={`text-[13px] ${
+          isSelected
+            ? "font-semibold text-primary-foreground"
+            : "font-medium text-muted-foreground dark:text-muted-foreground-dark"
+        }`}
       >
         {category}
       </Text>
     </AnimatedPressable>
   );
 }
-
-const styles = StyleSheet.create({
-  pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginRight: 8,
-  },
-  text: {
-    fontSize: 13,
-  },
-});

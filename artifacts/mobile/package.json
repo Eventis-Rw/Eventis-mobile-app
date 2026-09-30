@@ -52,8 +52,13 @@
     "react-native-svg": "15.12.1",
     "react-native-web": "^0.21.0",
     "react-native-worklets": "0.5.1",
+    "tailwindcss": "3.4.17",
     "typescript": "~5.9.2",
     "zod": "catalog:",
     "zod-validation-error": "^3.4.0"
+  },
+  "dependencies": {
+    "nativewind": "4.2.7",
+    "react-native-css-interop": "0.2.7"
   }
 }

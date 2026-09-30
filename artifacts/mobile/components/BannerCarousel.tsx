@@ -1,14 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
-import {
-  Dimensions,
-  FlatList,
-  StyleSheet,
-  View,
-  ViewToken,
-} from "react-native";
+import { Dimensions, FlatList, View, ViewToken } from "react-native";
 
 import { EventCard } from "./EventCard";
-import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/mockData";
 
 const { width } = Dimensions.get("window");
@@ -20,7 +13,6 @@ interface BannerCarouselProps {
 }
 
 export function BannerCarousel({ events }: BannerCarouselProps) {
-  const colors = useColors();
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
@@ -46,52 +38,28 @@ export function BannerCarousel({ events }: BannerCarouselProps) {
         showsHorizontalScrollIndicator={false}
         snapToInterval={ITEM_WIDTH + ITEM_MARGIN * 2}
         decelerationRate="fast"
-        contentContainerStyle={styles.container}
+        contentContainerClassName="px-6"
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig.current}
         renderItem={({ item }) => (
-          <View style={styles.slide}>
+          <View style={{ width: ITEM_WIDTH, marginHorizontal: ITEM_MARGIN }}>
             <EventCard event={item} variant="featured" />
           </View>
         )}
         scrollEnabled={!!events.length}
       />
-      <View style={styles.dots}>
+      <View className="mt-3 flex-row items-center justify-center gap-[5px]">
         {events.map((_, i) => (
           <View
             key={i}
-            style={[
-              styles.dot,
-              {
-                backgroundColor:
-                  i === activeIndex ? colors.primary : colors.border,
-                width: i === activeIndex ? 20 : 6,
-              },
-            ]}
+            className={`h-1.5 rounded-sm ${
+              i === activeIndex
+                ? "w-5 bg-primary"
+                : "w-1.5 bg-border dark:bg-border-dark"
+            }`}
           />
         ))}
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 24,
-  },
-  slide: {
-    width: ITEM_WIDTH,
-    marginHorizontal: ITEM_MARGIN,
-  },
-  dots: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 12,
-    gap: 5,
-  },
-  dot: {
-    height: 6,
-    borderRadius: 3,
-  },
-});
