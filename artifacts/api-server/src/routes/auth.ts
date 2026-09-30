@@ -1,6 +1,6 @@
 import { db, savedEventsTable, usersTable } from "@workspace/db";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { signToken } from "../lib/jwt";
@@ -34,8 +34,8 @@ function toClientUser(user: UserRow, savedEvents: string[]) {
 router.post("/auth/register", async (req: Request, res: Response) => {
   const schema = z.object({
     username: z.string().min(2).max(50),
-    email: z.string().email(),
-    phone: z.string().optional(),
+    email: z.string().email().optional().or(z.literal("")),
+    phone: z.string().min(8).optional(),
     password: z.string().min(6),
   });
   const parsed = schema.safeParse(req.body);
@@ -44,21 +44,28 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     return;
   }
   const { username, email, phone, password } = parsed.data;
+  const cleanPhone = phone?.trim();
 
+  if (!cleanPhone) {
+    res.status(400).json({ message: "Phone number is required" });
+    return;
+  }
+
+  const normalizedEmail = email?.trim() || `${username.trim().toLowerCase()}-${cleanPhone.replace(/\D/g, "").slice(-6)}@eventis.local`;
   const existing = await db
     .select({ id: usersTable.id })
     .from(usersTable)
-    .where(eq(usersTable.email, email))
+    .where(or(eq(usersTable.email, normalizedEmail), eq(usersTable.phone, cleanPhone)))
     .limit(1);
   if (existing.length > 0) {
-    res.status(409).json({ message: "Email already registered" });
+    res.status(409).json({ message: "Phone number or email already registered" });
     return;
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
   const [user] = await db
     .insert(usersTable)
-    .values({ username, email, phone: phone ?? null, passwordHash })
+    .values({ username, email: normalizedEmail, phone: cleanPhone, passwordHash })
     .returning();
 
   const token = signToken({ userId: user.id });
@@ -73,12 +80,20 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     return;
   }
   const { identifier, password } = parsed.data;
+  const cleanIdentifier = identifier.trim();
+  const normalizedPhone = cleanIdentifier.replace(/\D/g, "");
 
-  const isEmail = identifier.includes("@");
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(isEmail ? eq(usersTable.email, identifier) : eq(usersTable.username, identifier))
+    .where(
+      or(
+        eq(usersTable.username, cleanIdentifier),
+        eq(usersTable.email, cleanIdentifier),
+        eq(usersTable.phone, cleanIdentifier),
+        eq(usersTable.phone, normalizedPhone)
+      )
+    )
     .limit(1);
 
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {

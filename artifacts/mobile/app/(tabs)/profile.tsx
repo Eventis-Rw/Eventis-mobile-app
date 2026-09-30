@@ -69,7 +69,7 @@ export default function ProfileScreen() {
           <Text style={[styles.guestSubtitle, { color: colors.mutedForeground }]}>Sign in to save events, book tickets and more</Text>
           <Pressable
             style={[styles.signInBtn, { backgroundColor: colors.primary }]}
-            onPress={() => router.push("/auth/register" as any)}
+            onPress={() => router.push("/auth/login" as any)}
           >
             <Text style={styles.signInBtnText}>Sign In / Register</Text>
           </Pressable>

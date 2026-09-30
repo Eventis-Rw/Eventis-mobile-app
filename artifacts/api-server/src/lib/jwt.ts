@@ -1,7 +1,11 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.SESSION_SECRET ?? "eventis-dev-secret-change-in-prod";
+const JWT_SECRET = process.env.SESSION_SECRET;
 const JWT_EXPIRY = "7d";
+
+if (!JWT_SECRET) {
+  throw new Error("SESSION_SECRET is required. Set it in your .env file before starting the API server.");
+}
 
 export interface JwtPayload {
   userId: number;

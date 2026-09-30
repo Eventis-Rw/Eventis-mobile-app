@@ -23,7 +23,7 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, hasCompletedOnboarding } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -31,13 +31,13 @@ function RootLayoutNav() {
     if (isLoading) return;
     const inAuthGroup = segments[0] === "auth";
     const inTabsGroup = segments[0] === "(tabs)";
-    // Only redirect to welcome if user lands on root with no segment
+
     if (!isAuthenticated && !inAuthGroup && !inTabsGroup && segments[0] === undefined) {
-      router.replace("/auth/welcome" as any);
+      router.replace(hasCompletedOnboarding ? "/auth/login" : "/auth/welcome" as any);
     } else if (isAuthenticated && inAuthGroup) {
       router.replace("/(tabs)" as any);
     }
-  }, [isAuthenticated, isLoading, segments, router]);
+  }, [isAuthenticated, isLoading, hasCompletedOnboarding, segments, router]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
