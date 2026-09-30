@@ -75,6 +75,12 @@ export default function ProfileScreen() {
             <Text style={styles.signInBtnText}>Sign In / Register</Text>
           </Pressable>
           <ColorModeSwitcher colors={colors} />
+          <SettingRow
+            icon="play-circle-outline"
+            label="Preview Onboarding"
+            onPress={() => router.push("/presentation-splash" as any)}
+            colors={colors}
+          />
         </View>
       </View>
     );
@@ -244,6 +250,12 @@ export default function ProfileScreen() {
         ) : (
           <View style={styles.settingsList}>
             <ColorModeSwitcher colors={colors} />
+            <SettingRow
+              icon="play-circle-outline"
+              label="Preview Onboarding"
+              onPress={() => router.push("/presentation-splash" as any)}
+              colors={colors}
+            />
             <SettingRow
               icon="person-outline"
               label="Edit Profile"

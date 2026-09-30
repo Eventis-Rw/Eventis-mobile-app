@@ -40,6 +40,7 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
+      <Stack.Screen name="presentation-splash" options={{ gestureEnabled: false, animation: "fade" }} />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="auth" />
       <Stack.Screen

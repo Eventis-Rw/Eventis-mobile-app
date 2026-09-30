@@ -1,20 +1,26 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  FadeInDown,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
+const SPLASH_DURATION_MS = 1250;
 
-const SPLASH_DURATION_MS = 1100;
-
-export default function AppEntryScreen() {
+export default function PresentationSplashScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const logoScale = useSharedValue(0.82);
 
-  React.useEffect(() => {
+  useEffect(() => {
     logoScale.value = withRepeat(
       withSequence(
         withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }),
@@ -23,29 +29,12 @@ export default function AppEntryScreen() {
       ),
       -1,
     );
-  }, [logoScale]);
+
+    const timeout = setTimeout(() => router.replace("/onboarding" as any), SPLASH_DURATION_MS);
+    return () => clearTimeout(timeout);
+  }, [logoScale, router]);
 
   const logoAnimation = useAnimatedStyle(() => ({ transform: [{ scale: logoScale.value }] }));
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function openApp() {
-      const [completed] = await Promise.all([
-        AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY).catch(() => null),
-        new Promise((resolve) => setTimeout(resolve, SPLASH_DURATION_MS)),
-      ]);
-
-      if (mounted) {
-        router.replace((completed === "true" ? "/(tabs)" : "/onboarding") as any);
-      }
-    }
-
-    void openApp();
-    return () => {
-      mounted = false;
-    };
-  }, [router]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -66,25 +55,9 @@ export default function AppEntryScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  root: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF" },
   center: { alignItems: "center" },
   logo: { width: 132, height: 132 },
-  name: {
-    marginTop: 12,
-    fontSize: 38,
-    letterSpacing: -1.5,
-    color: "#1932A6",
-    fontFamily: "Inter_700Bold",
-  },
-  tagline: {
-    marginTop: 5,
-    color: "#4F4F63",
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-  },
+  name: { marginTop: 12, fontSize: 38, letterSpacing: -1.5, color: "#1932A6", fontFamily: "Inter_700Bold" },
+  tagline: { marginTop: 5, color: "#4F4F63", fontSize: 14, fontFamily: "Inter_400Regular" },
 });

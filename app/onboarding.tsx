@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeInLeft, FadeInRight, FadeOutLeft, FadeOutRight, LinearTransition } from "react-native-reanimated";
 
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 
@@ -48,6 +49,7 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const [pageIndex, setPageIndex] = useState(0);
+  const [direction, setDirection] = useState<"forward" | "backward">("forward");
   const [error, setError] = useState(false);
   const finishing = useRef(false);
   const page = PAGES[pageIndex];
@@ -73,6 +75,7 @@ export default function OnboardingScreen() {
     if (isLast) {
       void finish();
     } else {
+      setDirection("forward");
       setPageIndex((current) => current + 1);
       setError(false);
     }
@@ -97,11 +100,15 @@ export default function OnboardingScreen() {
       </View>
 
       <ScrollView
-        key={pageIndex}
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}
       >
+        <Animated.View
+          key={pageIndex}
+          entering={direction === "forward" ? FadeInRight.duration(320) : FadeInLeft.duration(320)}
+          exiting={direction === "forward" ? FadeOutLeft.duration(220) : FadeOutRight.duration(220)}
+        >
         <View style={[styles.hero, { height: imageHeight }]}>
           <Image
             source={page.image}
@@ -124,13 +131,15 @@ export default function OnboardingScreen() {
           <Text style={[styles.title, width < 360 && styles.titleSmall, compact && styles.titleCompact]}>{page.title}</Text>
           <Text style={[styles.description, compact && styles.descriptionCompact]}>{page.description}</Text>
         </View>
+        </Animated.View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingHorizontal: horizontalPadding, paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
         <View style={styles.indicators} accessibilityLabel={"Onboarding page " + (pageIndex + 1) + " of " + PAGES.length}>
           {PAGES.map((item, index) => (
-            <View
+            <Animated.View
               key={item.eyebrow}
+              layout={LinearTransition.duration(220)}
               style={[styles.dot, index === pageIndex && styles.activeDot]}
             />
           ))}
@@ -143,7 +152,10 @@ export default function OnboardingScreen() {
         <View style={styles.actions}>
           {pageIndex > 0 ? (
             <Pressable
-              onPress={() => setPageIndex((current) => current - 1)}
+              onPress={() => {
+                setDirection("backward");
+                setPageIndex((current) => current - 1);
+              }}
               style={styles.backButton}
               accessibilityRole="button"
               accessibilityLabel="Previous onboarding page"
