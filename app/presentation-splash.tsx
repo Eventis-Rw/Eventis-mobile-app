@@ -1,62 +1,136 @@
 import { useRouter } from "expo-router";
-import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import React, { useCallback, useEffect, useRef } from "react";
+import { Image, StyleSheet, Text } from "react-native";
 import Animated, {
   Easing,
-  FadeInDown,
-  FadeInUp,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
+  withDelay,
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Logo } from "@/components/Logo";
-import { useColors } from "@/hooks/useColors";
-
-const SPLASH_DURATION_MS = 1250;
+import { useTheme } from "@/context/ThemeContext";
 
 export default function PresentationSplashScreen() {
   const router = useRouter();
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const logoScale = useSharedValue(0.82);
+  const { scheme } = useTheme();
+  const isDark = scheme === "dark";
+  const hasNavigated = useRef(false);
+
+  const logoScale = useSharedValue(1);
+  const logoOpacity = useSharedValue(1);
+  const containerOpacity = useSharedValue(1);
+
+  const navigateNext = useCallback(() => {
+    if (hasNavigated.current) return;
+    hasNavigated.current = true;
+    router.replace("/onboarding" as any);
+  }, [router]);
 
   useEffect(() => {
-    logoScale.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }),
-        withTiming(1.06, { duration: 850, easing: Easing.inOut(Easing.quad) }),
-        withTiming(1, { duration: 850, easing: Easing.inOut(Easing.quad) }),
-      ),
-      -1,
+    let mounted = true;
+
+    const onComplete = () => {
+      if (mounted) {
+        navigateNext();
+      }
+    };
+
+    // 1. Prominent living resting phase (~900ms) so user can see it clearly
+    // 2. Anticipation shrink (the iconic X "inhale")
+    // 3. Punch-through explosive zoom (scale 36x)
+    logoScale.value = withSequence(
+      withTiming(1.05, { duration: 450, easing: Easing.inOut(Easing.quad) }),
+      withTiming(1.0, { duration: 450, easing: Easing.inOut(Easing.quad) }),
+      withTiming(0.88, { duration: 180, easing: Easing.bezier(0.25, 0.1, 0.25, 1) }),
+      withTiming(36, { duration: 420, easing: Easing.bezier(0.65, 0, 0.35, 1) })
     );
 
-    const timeout = setTimeout(() => router.replace("/onboarding" as any), SPLASH_DURATION_MS);
-    return () => clearTimeout(timeout);
-  }, [logoScale, router]);
+    // Fade logo out as it punches through the screen
+    logoOpacity.value = withSequence(
+      withDelay(
+        1100,
+        withTiming(0, { duration: 250, easing: Easing.out(Easing.ease) })
+      )
+    );
 
-  const logoAnimation = useAnimatedStyle(() => ({ transform: [{ scale: logoScale.value }] }));
+    // Fade container to reveal next screen smoothly
+    containerOpacity.value = withSequence(
+      withDelay(
+        1220,
+        withTiming(0, { duration: 200, easing: Easing.linear }, (finished) => {
+          if (finished) {
+            runOnJS(onComplete)();
+          }
+        })
+      )
+    );
+
+    // Fallback timer
+    const fallbackTimer = setTimeout(() => {
+      if (mounted) {
+        navigateNext();
+      }
+    }, 1750);
+
+    return () => {
+      mounted = false;
+      clearTimeout(fallbackTimer);
+    };
+  }, [containerOpacity, logoOpacity, logoScale, navigateNext]);
+
+  const animatedLogoStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: logoScale.value }],
+    opacity: logoOpacity.value,
+  }));
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    opacity: containerOpacity.value,
+  }));
+
+  const bgColor = isDark ? "#000000" : "#FFFFFF";
+  const textColor = isDark ? "#FFFFFF" : "#0C0C1A";
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: colors.background }]}>
-      <View style={styles.center}>
-        <Animated.View entering={FadeInUp.duration(450)} style={logoAnimation}>
-          <Logo style={styles.logo} />
-        </Animated.View>
-        <Animated.Text entering={FadeInDown.delay(140).duration(420)} style={[styles.name, { color: colors.primary }]}>eventis</Animated.Text>
-        <Animated.Text entering={FadeInDown.delay(260).duration(420)} style={[styles.tagline, { color: colors.mutedForeground }]}>Where moments happen</Animated.Text>
-      </View>
-    </View>
+    <Animated.View style={[styles.root, { backgroundColor: bgColor }, animatedContainerStyle]}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <Animated.View style={[styles.center, animatedLogoStyle]}>
+        <Image
+          source={require("../assets/images/logo-primary.png")}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="Eventis"
+        />
+        <Text style={[styles.brandText, { color: textColor }]}>
+          eventis
+        </Text>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF" },
-  center: { alignItems: "center" },
-  logo: { width: 132, height: 132 },
-  name: { marginTop: 12, fontSize: 38, letterSpacing: -1.5, color: "#1932A6", fontFamily: "Inter_700Bold" },
-  tagline: { marginTop: 5, color: "#4F4F63", fontSize: 14, fontFamily: "Inter_400Regular" },
+  root: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  center: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logo: {
+    width: 108,
+    height: 108,
+  },
+  brandText: {
+    fontSize: 34,
+    lineHeight: 38,
+    fontFamily: "Inter_900Black",
+    letterSpacing: -1.2,
+    marginTop: 14,
+  },
 });

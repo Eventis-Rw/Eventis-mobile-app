@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
+  Image,
   Platform,
   Pressable,
   RefreshControl,
@@ -73,9 +74,28 @@ export default function HomeScreen() {
       >
         <View style={styles.headerRow}>
           <View style={styles.brandRow}>
-            <View style={[styles.logoPlate, { backgroundColor: colors.background }]}>
-              <Logo style={styles.logo} />
-            </View>
+<Pressable
+  onPress={() => router.push("/(tabs)/profile" as any)}
+  style={[
+    styles.avatarBtn,
+    {
+      backgroundColor: user?.avatarUrl ? colors.card : colors.primary,
+      borderColor: colors.border,
+    },
+  ]}
+  accessibilityRole="button"
+  accessibilityLabel="View profile"
+>
+  {user?.avatarUrl ? (
+    <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />
+  ) : user?.username ? (
+    <Text style={styles.avatarText}>
+      {user.username.charAt(0).toUpperCase()}
+    </Text>
+  ) : (
+    <Ionicons name="person" size={20} color="#FFFFFF" />
+  )}
+</Pressable>
             <View>
               <Text style={[styles.greeting, { color: colors.mutedForeground }]}>
                 Good{getTimeGreeting()},
@@ -243,18 +263,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  logoPlate: {
+  avatarBtn: {
     width: 44,
     height: 44,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    borderWidth: 1.5,
   },
-  logo: {
-    width: 40,
-    height: 40,
+  avatarImg: {
+    width: "100%",
+    height: "100%",
+  },
+  avatarText: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: "#FFFFFF",
   },
   greeting: {
     fontSize: 13,

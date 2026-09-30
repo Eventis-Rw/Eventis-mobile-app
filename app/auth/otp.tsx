@@ -12,6 +12,7 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Logo } from "@/components/Logo";
 import { OTPInput } from "@/components/OTPInput";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
@@ -20,8 +21,13 @@ export default function OTPScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { purpose, eventId } = useLocalSearchParams<{ purpose?: string; eventId?: string }>();
-  const { verifyOTP, user } = useAuth();
+  const { purpose, eventId, phone, fullName } = useLocalSearchParams<{
+    purpose?: string;
+    eventId?: string;
+    phone?: string;
+    fullName?: string;
+  }>();
+  const { verifyOTP, completeOnboarding, signInWithPhoneSession, user } = useAuth();
   const [error, setError] = useState(false);
   const [verified, setVerified] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -45,8 +51,14 @@ export default function OTPScreen() {
 
   const handleComplete = useCallback(
     async (code: string) => {
-      const success = await verifyOTP(code);
+      let success = await verifyOTP(code, phone, fullName);
+      if (!success && code.length === 4) {
+        // Frontend demo mode: accept 4 digits and establish session
+        await signInWithPhoneSession(phone || "+250 7XX XXX XXX", fullName);
+        success = true;
+      }
       if (success) {
+        await completeOnboarding();
         setVerified(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setTimeout(() => {
@@ -57,20 +69,24 @@ export default function OTPScreen() {
           } else {
             router.replace("/(tabs)" as any);
           }
-        }, 1200);
+        }, 1000);
       } else {
         setError(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setTimeout(() => setError(false), 1000);
       }
     },
-    [verifyOTP, purpose, eventId, router]
+    [verifyOTP, completeOnboarding, purpose, eventId, router, phone, fullName, signInWithPhoneSession]
   );
 
   const purposeLabels: Record<string, { title: string; subtitle: string }> = {
+    login: {
+      title: "Enter verification code",
+      subtitle: "We sent a 4 digit code via SMS to your phone to sign in.",
+    },
     register: {
-      title: "Verify your number",
-      subtitle: "We sent a 6-digit code to your phone to complete verification.",
+      title: "Enter verification code",
+      subtitle: "We sent a 4 digit code via SMS to verify your new account.",
     },
     payment: {
       title: "Confirm your identity",
@@ -83,7 +99,7 @@ export default function OTPScreen() {
   };
 
   const label = purposeLabels[purpose ?? "register"] ?? purposeLabels.register;
-  const contact = user?.phone ?? user?.email ?? "your device";
+  const contact = phone ?? user?.phone ?? user?.email ?? "your phone number";
 
   return (
     <View
@@ -97,8 +113,13 @@ export default function OTPScreen() {
       ]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Ionicons name="chevron-down" size={24} color={colors.foreground} />
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="chevron-back" size={24} color={colors.foreground} />
         </Pressable>
       </View>
 
@@ -106,13 +127,13 @@ export default function OTPScreen() {
         entering={Platform.OS !== "web" ? FadeInDown.delay(80).springify() : undefined}
         style={styles.content}
       >
-        <View style={[styles.iconCircle, { backgroundColor: verified ? colors.success : colors.primary }]}>
-          <Ionicons
-            name={verified ? "checkmark-circle-outline" : "phone-portrait-outline"}
-            size={32}
-            color="#fff"
-          />
-        </View>
+        {verified ? (
+          <View style={[styles.verifiedCircle, { backgroundColor: colors.success }]}>
+            <Ionicons name="checkmark-circle-outline" size={38} color="#fff" />
+          </View>
+        ) : (
+          <Logo style={styles.brandLogo} variant="primary" />
+        )}
 
         <Text style={[styles.title, { color: colors.foreground }]}>
           {verified ? "Verified!" : label.title}
@@ -138,7 +159,7 @@ export default function OTPScreen() {
           <OTPInput onComplete={handleComplete} error={error} />
 
           <Text style={[styles.hintText, { color: colors.mutedForeground }]}>
-            For demo purposes, any 6-digit code works
+            For demo purposes, any 4 digit code works
           </Text>
 
           <View style={styles.resendRow}>
@@ -156,18 +177,6 @@ export default function OTPScreen() {
                 </Text>
               </Text>
             )}
-          </View>
-
-          <View
-            style={[
-              styles.secureNote,
-              { backgroundColor: colors.secondary, borderColor: colors.border },
-            ]}
-          >
-            <Ionicons name="shield-checkmark-outline" size={16} color={colors.success} />
-            <Text style={[styles.secureText, { color: colors.mutedForeground }]}>
-              Your number is secure and never shared with third parties
-            </Text>
           </View>
         </Animated.View>
       )}
@@ -190,13 +199,18 @@ const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: 24 },
   header: { marginBottom: 32 },
   content: { alignItems: "center", gap: 14, marginBottom: 40 },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  brandLogo: {
+    width: 68,
+    height: 68,
+    marginBottom: 6,
+  },
+  verifiedCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: 6,
   },
   title: { fontSize: 26, fontFamily: "Inter_700Bold", textAlign: "center" },
   subtitle: {
@@ -216,21 +230,6 @@ const styles = StyleSheet.create({
   resendRow: { alignItems: "center" },
   resendLink: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   resendTimer: { fontSize: 14, fontFamily: "Inter_400Regular" },
-  secureNote: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 10,
-    marginTop: 8,
-  },
-  secureText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 20,
-  },
   successNote: { alignItems: "center", marginTop: 32 },
   successText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
 });
