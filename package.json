@@ -1,24 +1,56 @@
 {
-  "name": "workspace",
-  "version": "0.0.0",
-  "license": "MIT",
-  "scripts": {
-    "preinstall": "node -e \"const fs=require('fs'); ['package-lock.json','yarn.lock'].forEach(f=>fs.existsSync(f)&&fs.rmSync(f,{force:true})); const ua=(process.env.npm_config_user_agent||''); if(!ua.startsWith('pnpm/')) { console.error('Use pnpm instead'); process.exit(1); }\"",
-    "start": "concurrently --kill-others --names API,MOBILE --prefix-colors cyan,magenta \"cd artifacts/api-server && pnpm run dev\" \"cd artifacts/mobile && EXPO_PUBLIC_API_URL=http://localhost:3000 pnpm run dev:local\"",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "typecheck:ci": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/mobile\" --filter \"./artifacts/api-server\" --filter \"./scripts\" --if-present run typecheck"
-  },
+  "name": "eventis-mobile-app",
+  "version": "1.0.0",
   "private": true,
-  "devDependencies": {
-    "@types/react": "~19.2.4",
-    "concurrently": "^9.2.1",
-    "lightningcss-win32-x64-msvc": "^1.33.0",
-    "prettier": "^3.8.3",
-    "typescript": "~5.9.3"
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "dev": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "export": "expo export"
   },
   "dependencies": {
-    "expo": "^57.0.24"
+    "@expo-google-fonts/inter": "^0.4.0",
+    "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@tanstack/react-query": "^5.90.21",
+    "expo": "57.0.25",
+    "expo-blur": "~57.0.3",
+    "expo-constants": "57.0.19",
+    "expo-font": "~57.0.4",
+    "expo-glass-effect": "~57.0.4",
+    "expo-haptics": "~57.0.3",
+    "expo-image": "~57.0.5",
+    "expo-image-picker": "~57.0.20",
+    "expo-linear-gradient": "~57.0.2",
+    "expo-linking": "~57.0.11",
+    "expo-location": "~57.0.20",
+    "expo-router": "57.0.23",
+    "expo-splash-screen": "~57.0.9",
+    "expo-status-bar": "~57.0.1",
+    "expo-symbols": "~57.0.3",
+    "expo-system-ui": "~57.0.4",
+    "expo-web-browser": "~57.0.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-keyboard-controller": "1.21.9",
+    "react-native-reanimated": "~4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.2",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "^0.21.0",
+    "react-native-worklets": "0.10.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/react": "~19.2.18",
+    "@types/react-dom": "~19.2.7",
+    "babel-plugin-react-compiler": "^19.0.0-beta-e993439-20250117",
+    "typescript": "~6.0.3"
   }
 }
