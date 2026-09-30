@@ -9,6 +9,7 @@ export function Logo({ style }: { style?: StyleProp<ImageStyle> }) {
   const { scheme } = useTheme();
   return (
     <Image
+      key={scheme}
       source={scheme === "dark" ? darkLogo : lightLogo}
       style={style}
       resizeMode="contain"
