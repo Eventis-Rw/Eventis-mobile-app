@@ -16,42 +16,33 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
-export default function RegisterScreen() {
+export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { register, completeOnboarding } = useAuth();
-  const [username, setUsername] = useState("");
-  const [phone, setPhone] = useState("");
+  const { login } = useAuth();
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
   const validate = () => {
-    const e: Record<string, string> = {};
-    if (!username.trim()) e.username = "Username required";
-    if (!phone.trim()) e.phone = "Phone number required";
-    if (!password || password.length < 6) e.password = "Min 6 characters";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    const nextErrors: Record<string, string> = {};
+    if (!identifier.trim()) nextErrors.identifier = "Username or email required";
+    if (!password) nextErrors.password = "Password required";
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
   const handleSubmit = async () => {
     if (!validate()) return;
     setLoading(true);
     try {
-      const normalizedPhone = phone.trim();
-      await register({
-        username,
-        email: `${username.trim().toLowerCase()}-${normalizedPhone.replace(/\D/g, "").slice(-6)}@eventis.local`,
-        phone: normalizedPhone,
-        password,
-      });
-      await completeOnboarding();
+      await login(identifier.trim(), password);
       router.replace("/(tabs)" as any);
     } catch (err) {
-      setErrors({ general: "Something went wrong. Please try again." });
+      setErrors({ general: "Invalid login details. Please try again." });
     }
     setLoading(false);
   };
@@ -90,7 +81,12 @@ export default function RegisterScreen() {
         </Animated.View>
 
         {errors.general && (
-          <View style={[styles.errorBanner, { backgroundColor: `${colors.destructive}18`, borderColor: colors.destructive }]}>
+          <View
+            style={[
+              styles.errorBanner,
+              { backgroundColor: `${colors.destructive}18`, borderColor: colors.destructive },
+            ]}
+          >
             <Ionicons name="alert-circle-outline" size={16} color={colors.destructive} />
             <Text style={[styles.errorBannerText, { color: colors.destructive }]}>
               {errors.general}
@@ -99,37 +95,25 @@ export default function RegisterScreen() {
         )}
 
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(160).springify() : undefined}>
-          <FieldLabel label="Username" colors={colors} />
+          <FieldLabel label="Username or email" colors={colors} />
           <InputField
-            value={username}
-            onChange={setUsername}
-            placeholder="Choose a username"
+            value={identifier}
+            onChange={setIdentifier}
+            placeholder="Enter your username or email"
             icon="person-outline"
-            error={errors.username}
+            error={errors.identifier}
             colors={colors}
+            autoCapitalize="none"
           />
         </Animated.View>
 
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(200).springify() : undefined}>
-          <FieldLabel label="Phone number" colors={colors} />
-          <InputField
-            value={phone}
-            onChange={setPhone}
-            placeholder="+44 7xxx xxxxxx"
-            icon="phone-portrait-outline"
-            keyboardType="phone-pad"
-            error={errors.phone}
-            colors={colors}
-          />
-        </Animated.View>
-
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(280).springify() : undefined}>
+        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(220).springify() : undefined}>
           <FieldLabel label="Password" colors={colors} />
           <View style={styles.passwordWrap}>
             <InputField
               value={password}
               onChange={setPassword}
-              placeholder="At least 6 characters"
+              placeholder="Your password"
               icon="lock-closed-outline"
               secureTextEntry={!showPassword}
               error={errors.password}
@@ -137,7 +121,7 @@ export default function RegisterScreen() {
             />
             <Pressable
               style={styles.eyeBtn}
-              onPress={() => setShowPassword((p) => !p)}
+              onPress={() => setShowPassword((value) => !value)}
             >
               <Ionicons
                 name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -148,7 +132,7 @@ export default function RegisterScreen() {
           </View>
         </Animated.View>
 
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(320).springify() : undefined}>
+        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(300).springify() : undefined}>
           <Pressable
             style={[
               styles.submitBtn,
@@ -158,16 +142,16 @@ export default function RegisterScreen() {
             disabled={loading}
           >
             <Text style={styles.submitBtnText}>
-              {loading ? "Please wait..." : "Create Account"}
+              {loading ? "Signing in..." : "Sign In"}
             </Text>
           </Pressable>
         </Animated.View>
 
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(360).springify() : undefined}>
           <View style={styles.footerRow}>
-            <Text style={[styles.footerText, { color: colors.mutedForeground }]}>Already have an account?</Text>
-            <Pressable onPress={() => router.push("/auth/login" as any)}>
-              <Text style={[styles.footerLink, { color: colors.primary }]}>Sign in</Text>
+            <Text style={[styles.footerText, { color: colors.mutedForeground }]}>New here?</Text>
+            <Pressable onPress={() => router.push("/auth/register" as any)}>
+              <Text style={[styles.footerLink, { color: colors.primary }]}>Create account</Text>
             </Pressable>
           </View>
         </Animated.View>
@@ -177,9 +161,7 @@ export default function RegisterScreen() {
 }
 
 function FieldLabel({ label, colors }: { label: string; colors: ReturnType<typeof useColors> }) {
-  return (
-    <Text style={[fieldStyles.label, { color: colors.foreground }]}>{label}</Text>
-  );
+  return <Text style={[fieldStyles.label, { color: colors.foreground }]}>{label}</Text>;
 }
 
 function InputField({
@@ -226,9 +208,7 @@ function InputField({
           autoCapitalize={autoCapitalize ?? "sentences"}
         />
       </View>
-      {error && (
-        <Text style={[fieldStyles.error, { color: colors.destructive }]}>{error}</Text>
-      )}
+      {error && <Text style={[fieldStyles.error, { color: colors.destructive }]}>{error}</Text>}
     </>
   );
 }
@@ -259,43 +239,14 @@ const styles = StyleSheet.create({
     gap: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  footerRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 6,
-    paddingTop: 8,
-  },
-  footerText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-  },
-  footerLink: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  modeSwitcher: {
+  scroll: {
     flex: 1,
-    flexDirection: "row",
-    borderRadius: 12,
-    padding: 4,
   },
-  modeOption: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 8,
-    borderRadius: 10,
+  form: {
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    gap: 18,
   },
-  modeActive: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  modeText: { fontSize: 14 },
-  scroll: { flex: 1 },
-  form: { paddingHorizontal: 24, paddingTop: 24, gap: 16 },
   brandWrap: {
     alignItems: "center",
     justifyContent: "center",
@@ -314,53 +265,50 @@ const styles = StyleSheet.create({
   errorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
     gap: 8,
-  },
-  errorBannerText: { fontSize: 14, fontFamily: "Inter_400Regular", flex: 1 },
-  passwordWrap: { position: "relative" },
-  eyeBtn: { position: "absolute", right: 14, top: 15 },
-  methodToggleWrap: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
-  },
-  methodToggle: {
-    flex: 1,
-    borderRadius: 12,
     borderWidth: 1,
-    paddingVertical: 12,
-    alignItems: "center",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  methodToggleText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+  errorBannerText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    flexShrink: 1,
   },
-  inlineActionRow: {
-    marginTop: 8,
-    alignItems: "flex-start",
+  passwordWrap: {
+    position: "relative",
   },
-  inlineLink: {
-    paddingVertical: 6,
+  eyeBtn: {
+    position: "absolute",
+    right: 14,
+    top: 14,
+    padding: 6,
   },
-  inlineLinkText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  fieldError: { fontSize: 12, fontFamily: "Inter_400Regular" },
   submitBtn: {
-    paddingVertical: 18,
     borderRadius: 16,
+    paddingVertical: 18,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
   },
   submitBtnText: {
+    color: "#fff",
     fontSize: 17,
     fontFamily: "Inter_700Bold",
-    color: "#fff",
   },
-  switchText: { textAlign: "center", fontSize: 14, fontFamily: "Inter_400Regular" },
-  switchLink: { fontFamily: "Inter_600SemiBold" },
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 8,
+  },
+  footerText: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+  },
+  footerLink: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
 });

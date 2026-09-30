@@ -39,14 +39,16 @@ export default function WelcomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, hasCompletedOnboarding } = useAuth();
   const pulse = useSharedValue(1);
 
   useEffect(() => {
     if (isAuthenticated) {
       router.replace("/(tabs)" as any);
+    } else if (hasCompletedOnboarding) {
+      router.replace("/auth/login" as any);
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, hasCompletedOnboarding, router]);
 
   useEffect(() => {
     pulse.value = withRepeat(
@@ -112,16 +114,16 @@ export default function WelcomeScreen() {
         >
           <Pressable
             style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-            onPress={() => router.replace("/(tabs)" as any)}
+            onPress={() => router.push("/auth/terms" as any)}
           >
-            <Text style={styles.primaryBtnText}>Explore Events</Text>
+            <Text style={styles.primaryBtnText}>Get Started</Text>
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </Pressable>
           <Pressable
             style={[styles.secondaryBtn, { borderColor: "rgba(255,255,255,0.3)" }]}
-            onPress={() => router.push("/auth/register" as any)}
+            onPress={() => router.push("/auth/login" as any)}
           >
-            <Text style={styles.secondaryBtnText}>Sign In / Register</Text>
+            <Text style={styles.secondaryBtnText}>I already have an account</Text>
           </Pressable>
         </Animated.View>
 
