@@ -1,6 +1,6 @@
 # Eventis mobile app
 
-The Eventis app for Android and iOS, built with Expo SDK 54, React Native, and Expo Router. The app now lives at the repository root.
+The Eventis app for Android and iOS, built with Expo SDK 57, React Native, and Expo Router. The app now lives at the repository root.
 
 ## Get started
 
@@ -20,6 +20,11 @@ pnpm web
 ```
 
 Check TypeScript with `pnpm typecheck`.
+
+The project currently pins Expo 57.0.25 and matching package patches that pass pnpm's
+minimum release age policy. `pnpm-workspace.yaml` contains only two dependency
+overrides for that reason; this is still a single-package app. Expo Doctor may report
+three newer SDK 57 patch versions until those releases pass the policy window.
 
 ## API configuration
 

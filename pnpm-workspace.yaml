@@ -1,0 +1,6 @@
+# Single-package project: keep older SDK 57 patches while they satisfy pnpm's release-age policy.
+packages:
+  - .
+overrides:
+  expo-modules-core: 57.0.19
+  '@expo/ui': 57.0.20

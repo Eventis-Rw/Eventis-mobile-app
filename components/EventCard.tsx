@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   featuredOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.4,
   },
   sponsoredBadge: {
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
   },
   overlay2: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.25,
   },
   pricePill2: {

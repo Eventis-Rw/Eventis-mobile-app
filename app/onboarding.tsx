@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   scrollContentCompact: { paddingTop: 8, paddingBottom: 4 },
   hero: { overflow: "hidden", borderRadius: 28, backgroundColor: "#E0E6F7" },
   heroImage: { width: "100%", height: "100%" },
-  heroGradient: { ...StyleSheet.absoluteFillObject },
+  heroGradient: { ...StyleSheet.absoluteFill },
   heroBadge: {
     position: "absolute",
     bottom: 0,

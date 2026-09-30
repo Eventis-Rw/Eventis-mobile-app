@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { flex: 1 },
   hero: { height: 320, justifyContent: "space-between" },
-  heroOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.35 },
+  heroOverlay: { ...StyleSheet.absoluteFill, opacity: 0.35 },
   heroTop: {
     flexDirection: "row",
     justifyContent: "space-between",
