@@ -19,6 +19,8 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 import { BookingsProvider } from "@/context/BookingsContext";
 import { EventsProvider } from "@/context/EventsContext";
+import { FindLoveDemoProvider } from "@/context/FindLoveDemoContext";
+import { LoveProfilesProvider } from "@/context/LoveProfilesContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -53,6 +55,10 @@ function RootLayoutNav() {
         name="event/[id]"
         options={{ animation: "slide_from_right" }}
       />
+      <Stack.Screen name="love/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="love/connections" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="love/wallet" options={{ animation: "slide_from_bottom" }} />
+      <Stack.Screen name="love/chat/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen
         name="booking/[id]"
         options={{ presentation: "modal", animation: "slide_from_bottom" }}
@@ -88,9 +94,13 @@ export default function RootLayout() {
               <KeyboardProvider>
                 <AuthProvider>
                   <EventsProvider>
-                    <BookingsProvider>
-                      <RootLayoutNav />
-                    </BookingsProvider>
+                    <LoveProfilesProvider>
+                      <FindLoveDemoProvider>
+                        <BookingsProvider>
+                          <RootLayoutNav />
+                        </BookingsProvider>
+                      </FindLoveDemoProvider>
+                    </LoveProfilesProvider>
                   </EventsProvider>
                 </AuthProvider>
               </KeyboardProvider>
