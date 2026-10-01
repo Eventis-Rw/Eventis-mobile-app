@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -12,8 +13,8 @@ import {
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
-import { MOCK_EVENTS } from "@/constants/mockData";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -23,8 +24,9 @@ type PriceFilter = "all" | "free" | "paid";
 export default function SearchScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [query, setQuery] = useState("");
-  const { categories } = useEvents();
+  const { events, categories } = useEvents();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [sort, setSort] = useState<SortOption>("relevance");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
@@ -34,14 +36,15 @@ export default function SearchScreen() {
   const headerTop = Platform.OS === "web" ? 67 : insets.top;
 
   const results = useMemo(() => {
-    let evts = [...MOCK_EVENTS];
+    let evts = [...events];
     if (query.trim()) {
-      const q = query.toLowerCase();
+      const q = query.trim().toLowerCase();
       evts = evts.filter(
         (e) =>
           e.title.toLowerCase().includes(q) ||
           e.category.toLowerCase().includes(q) ||
           e.city.toLowerCase().includes(q) ||
+          e.location.toLowerCase().includes(q) ||
           e.organizer.toLowerCase().includes(q) ||
           e.tags.some((t) => t.toLowerCase().includes(q))
       );
@@ -55,7 +58,7 @@ export default function SearchScreen() {
     if (sort === "distance") evts.sort((a, b) => a.distance - b.distance);
     if (sort === "price") evts.sort((a, b) => a.price - b.price);
     return evts;
-  }, [query, selectedCategory, priceFilter, sort]);
+  }, [events, query, selectedCategory, priceFilter, sort]);
 
   const SORT_OPTIONS: { label: string; value: SortOption }[] = [
     { label: "Relevance", value: "relevance" },
@@ -83,7 +86,18 @@ export default function SearchScreen() {
           },
         ]}
       >
-        <Text style={[styles.title, { color: colors.foreground }]}>Explore</Text>
+        <View style={styles.titleRow}>
+          {/* Search is no longer a tab; it opens from the Events page. */}
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
+            style={[styles.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            accessibilityRole="button"
+            accessibilityLabel="Back to events"
+          >
+            <Ionicons name="chevron-back" size={20} color={colors.foreground} />
+          </Pressable>
+          <Text style={[styles.title, { color: colors.foreground }]}>Explore</Text>
+        </View>
         <View
           style={[
             styles.searchRow,
@@ -127,38 +141,14 @@ export default function SearchScreen() {
           keyExtractor={(item) => item}
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.categoryScroll}
           contentContainerStyle={styles.categoryRow}
           renderItem={({ item }) => (
-            <Pressable
-              style={[
-                styles.catPill,
-                {
-                  backgroundColor:
-                    selectedCategory === item ? colors.primary : colors.card,
-                  borderColor:
-                    selectedCategory === item ? colors.primary : colors.border,
-                },
-              ]}
-              onPress={() => setSelectedCategory(item)}
-            >
-              <Text
-                style={[
-                  styles.catText,
-                  {
-                    color:
-                      selectedCategory === item
-                        ? "#fff"
-                        : colors.mutedForeground,
-                    fontFamily:
-                      selectedCategory === item
-                        ? "Inter_600SemiBold"
-                        : "Inter_400Regular",
-                  },
-                ]}
-              >
-                {item}
-              </Text>
-            </Pressable>
+            <CategoryPill
+              category={item}
+              isSelected={selectedCategory === item}
+              onPress={setSelectedCategory}
+            />
           )}
         />
 
@@ -257,7 +247,7 @@ export default function SearchScreen() {
           <Animated.View
             entering={Platform.OS !== "web" ? FadeInDown.delay(index * 60).springify() : undefined}
           >
-            <EventCard event={item} variant="standard" />
+            <EventCard event={item} variant="feed" inset={20} />
           </Animated.View>
         )}
         scrollEnabled={!!results.length}
@@ -273,10 +263,23 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 14,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
   title: {
     fontSize: 28,
     fontFamily: "Inter_700Bold",
-    marginBottom: 14,
   },
   searchRow: {
     flexDirection: "row",
@@ -284,7 +287,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     gap: 10,
     marginBottom: 12,
   },
@@ -300,17 +303,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  categoryRow: {
-    gap: 8,
-    paddingRight: 20,
-  },
-  catPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  catText: { fontSize: 13 },
+  // Scrolls edge to edge while the first pill lines up with the header padding.
+  categoryScroll: { marginHorizontal: -20 },
+  categoryRow: { paddingHorizontal: 20 },
   filtersPanel: {
     marginTop: 12,
     gap: 10,
@@ -333,11 +328,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
-  list: { paddingHorizontal: 20, paddingTop: 16 },
+  // Feed cards run edge to edge, so only the header text gets side padding.
+  list: { paddingTop: 16 },
   resultsCount: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     marginBottom: 12,
+    paddingHorizontal: 20,
   },
   empty: {
     alignItems: "center",

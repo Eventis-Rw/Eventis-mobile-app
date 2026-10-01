@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   ImageBackground,
   Linking,
   Platform,
@@ -34,32 +35,15 @@ export default function EventDetailScreen() {
   const router = useRouter();
   const { user, toggleSaveEvent, requestOTP } = useAuth();
   const { hasBookedEvent, addBooking } = useBookings();
-  const { getEventById } = useEvents();
+  const { getEventById, isLoading } = useEvents();
   const [bookingLoading, setBookingLoading] = useState(false);
 
   const event = getEventById(id ?? "");
   const isBooked = hasBookedEvent(id ?? "");
   const isSaved = user?.savedEvents.includes(id ?? "") ?? false;
 
-  if (!event) {
-    return (
-      <View style={[styles.notFound, { backgroundColor: colors.background }]}>
-        <Text style={[styles.notFoundText, { color: colors.foreground }]}>
-          Event not found
-        </Text>
-        <Pressable onPress={() => router.back()}>
-          <Text style={[styles.backLink, { color: colors.primary }]}>Go back</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  const priceLabel =
-    event.price === 0
-      ? "Free"
-      : `${event.currency === "GBP" ? "£" : "$"}${event.price}`;
-
   const handleBook = useCallback(async () => {
+    if (!event) return;
     if (!user) {
       router.push("/auth/register" as any);
       return;
@@ -93,11 +77,13 @@ export default function EventDetailScreen() {
   }, [user, event, router, requestOTP, addBooking]);
 
   const handleSave = useCallback(() => {
+    if (!event) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     toggleSaveEvent(event.id);
-  }, [toggleSaveEvent, event.id]);
+  }, [toggleSaveEvent, event]);
 
   const handleShare = useCallback(async () => {
+    if (!event) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await Share.share({
@@ -106,6 +92,31 @@ export default function EventDetailScreen() {
       });
     } catch {}
   }, [event]);
+
+  // Hooks above must run on every render, so the early returns come after them.
+  if (!event) {
+    return (
+      <View style={[styles.notFound, { backgroundColor: colors.background }]}>
+        {isLoading ? (
+          <ActivityIndicator color={colors.primary} />
+        ) : (
+          <>
+            <Text style={[styles.notFoundText, { color: colors.foreground }]}>
+              Event not found
+            </Text>
+            <Pressable onPress={() => router.back()}>
+              <Text style={[styles.backLink, { color: colors.primary }]}>Go back</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
+    );
+  }
+
+  const priceLabel =
+    event.price === 0
+      ? "Free"
+      : `${event.currency === "GBP" ? "£" : "$"}${event.price}`;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>

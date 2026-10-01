@@ -1,49 +1,4 @@
-export type EventCategory =
-  | "All"
-  | "Music"
-  | "Sports"
-  | "Business"
-  | "Food"
-  | "Tech"
-  | "Art"
-  | "Nightlife"
-  | "Community";
-
-export interface Event {
-  id: string;
-  title: string;
-  category: EventCategory;
-  description: string;
-  location: string;
-  city: string;
-  date: string;
-  time: string;
-  endTime: string;
-  price: number;
-  currency: string;
-  organizer: string;
-  organizerWebsite?: string;
-  attendees: number;
-  capacity: number;
-  image: string;
-  tags: string[];
-  isFeatured: boolean;
-  isSponsored: boolean;
-  isPaid: boolean;
-  distance: number;
-  rating: number;
-  reviewCount: number;
-}
-
-export interface Organizer {
-  id: string;
-  name: string;
-  type: "business" | "individual";
-  avatar: string;
-  eventsCount: number;
-  followersCount: number;
-  verified: boolean;
-}
+import type { Event } from "@/constants/events";
 
 export interface ChatMessage {
   id: string;
@@ -63,18 +18,6 @@ export interface ChatConversation {
   unreadCount: number;
   participants: number;
 }
-
-export const CATEGORIES: EventCategory[] = [
-  "All",
-  "Music",
-  "Sports",
-  "Business",
-  "Food",
-  "Tech",
-  "Art",
-  "Nightlife",
-  "Community",
-];
 
 export const MOCK_EVENTS: Event[] = [
   {
@@ -102,6 +45,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 2.3,
     rating: 4.8,
     reviewCount: 312,
+    viewCount: 18420,
   },
   {
     id: "2",
@@ -128,6 +72,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 5.1,
     rating: 4.9,
     reviewCount: 89,
+    viewCount: 9650,
   },
   {
     id: "3",
@@ -153,6 +98,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 0.8,
     rating: 4.6,
     reviewCount: 1054,
+    viewCount: 24310,
   },
   {
     id: "4",
@@ -179,6 +125,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 3.7,
     rating: 4.7,
     reviewCount: 428,
+    viewCount: 7980,
   },
   {
     id: "5",
@@ -204,6 +151,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 4.2,
     rating: 4.5,
     reviewCount: 67,
+    viewCount: 3120,
   },
   {
     id: "6",
@@ -230,6 +178,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 1.5,
     rating: 4.9,
     reviewCount: 203,
+    viewCount: 4570,
   },
   {
     id: "7",
@@ -255,6 +204,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 2.9,
     rating: 4.7,
     reviewCount: 89,
+    viewCount: 2860,
   },
   {
     id: "8",
@@ -281,6 +231,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 3.4,
     rating: 4.8,
     reviewCount: 156,
+    viewCount: 5230,
   },
   {
     id: "9",
@@ -306,6 +257,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 1.1,
     rating: 4.6,
     reviewCount: 312,
+    viewCount: 1940,
   },
   {
     id: "10",
@@ -332,6 +284,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 4.8,
     rating: 4.9,
     reviewCount: 567,
+    viewCount: 8710,
   },
   {
     id: "11",
@@ -358,6 +311,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 2.1,
     rating: 5.0,
     reviewCount: 44,
+    viewCount: 2310,
   },
   {
     id: "12",
@@ -383,6 +337,7 @@ export const MOCK_EVENTS: Event[] = [
     distance: 3.3,
     rating: 4.7,
     reviewCount: 88,
+    viewCount: 1480,
   },
 ];
 
