@@ -152,14 +152,16 @@ export default function HomeScreen() {
           </ScrollView>
 
           {showSkeletons ? (
-            <>
-              <EventCardSkeleton />
-              <EventCardSkeleton />
-            </>
+            <View style={styles.bleed}>
+              <EventCardSkeleton inset={PAGE_PADDING} />
+              <EventCardSkeleton inset={PAGE_PADDING} />
+            </View>
           ) : filtered.length ? (
-            filtered.map((event) => (
-              <EventCard key={event.id} event={event} variant="standard" />
-            ))
+            <View style={styles.bleed}>
+              {filtered.map((event) => (
+                <EventCard key={event.id} event={event} variant="feed" inset={PAGE_PADDING} />
+              ))}
+            </View>
           ) : (
             <StateMessage
               icon="search-outline"

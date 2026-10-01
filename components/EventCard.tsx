@@ -35,10 +35,12 @@ function getEventImage(image: string) {
 
 interface EventCardProps {
   event: Event;
-  variant?: "featured" | "standard" | "compact";
+  variant?: "featured" | "standard" | "compact" | "feed";
+  // Feed posts span the screen; the details line up with the page padding.
+  inset?: number;
 }
 
-export function EventCard({ event, variant = "standard" }: EventCardProps) {
+export function EventCard({ event, variant = "standard", inset = 20 }: EventCardProps) {
   const colors = useColors();
   const router = useRouter();
   const { user, toggleSaveEvent } = useAuth();
@@ -227,21 +229,33 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
     );
   }
 
+  // "feed" shares the standard content but drops the card chrome.
+  const isFeed = variant === "feed";
+
   return (
     <AnimatedPressable
-      style={[styles.standard, animatedStyle, { backgroundColor: colors.card, borderColor: colors.border }]}
+      style={[
+        isFeed
+          ? styles.feed
+          : [styles.standard, { backgroundColor: colors.card, borderColor: colors.border }],
+        animatedStyle,
+      ]}
       onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >
       <ImageBackground
         source={getEventImage(event.image)}
-        style={styles.standardImage}
-        imageStyle={styles.standardImageStyle}
+        style={isFeed ? styles.feedImage : styles.standardImage}
+        imageStyle={isFeed ? undefined : styles.standardImageStyle}
       >
         <View style={[styles.overlay2, { backgroundColor: colors.overlay }]} />
         <Pressable
-          style={[styles.saveBtn2, { backgroundColor: colors.surface }]}
+          style={[
+            styles.saveBtn2,
+            isFeed && { top: 12, right: inset },
+            { backgroundColor: colors.surface },
+          ]}
           onPress={handleSave}
         >
           <Ionicons
@@ -253,13 +267,19 @@ export function EventCard({ event, variant = "standard" }: EventCardProps) {
         <View
           style={[
             styles.pricePill2,
+            isFeed && { bottom: 12, left: inset },
             { backgroundColor: event.price === 0 ? colors.success : colors.primary },
           ]}
         >
           <Text style={styles.priceText}>{priceLabel}</Text>
         </View>
       </ImageBackground>
-      <View style={styles.standardContent}>
+      <View
+        style={[
+          styles.standardContent,
+          isFeed && { paddingHorizontal: inset, paddingBottom: 0 },
+        ]}
+      >
         <View style={styles.standardHeader}>
           <Text
             style={[styles.standardCategory, { color: colors.primary }]}
@@ -499,6 +519,16 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 14,
     borderWidth: 1,
+  },
+  feed: {
+    marginBottom: 28,
+  },
+  // Height follows the screen width so the banner never distorts or crops oddly.
+  feedImage: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    justifyContent: "flex-end",
+    overflow: "hidden",
   },
   standardImage: {
     height: 150,

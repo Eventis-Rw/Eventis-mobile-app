@@ -12,7 +12,7 @@ import { useColors } from "@/hooks/useColors";
 
 interface SkeletonProps {
   width?: number | string;
-  height?: number;
+  height?: number | string;
   borderRadius?: number;
   style?: object;
 }
@@ -41,7 +41,7 @@ export function Skeleton({ width = "100%", height = 16, borderRadius = 8, style 
       style={[
         {
           width: width as number,
-          height,
+          height: height as number,
           borderRadius,
           backgroundColor: colors.border,
         },
@@ -52,14 +52,14 @@ export function Skeleton({ width = "100%", height = 16, borderRadius = 8, style 
   );
 }
 
-export function EventCardSkeleton() {
-  const colors = useColors();
+// Matches the full-width "feed" EventCard on the home screen.
+export function EventCardSkeleton({ inset = 20 }: { inset?: number }) {
   return (
-    <View
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-    >
-      <Skeleton height={150} borderRadius={0} style={styles.imageSkeleton} />
-      <View style={styles.content}>
+    <View style={styles.post}>
+      <View style={styles.imageSkeleton}>
+        <Skeleton height="100%" borderRadius={0} />
+      </View>
+      <View style={[styles.content, { paddingHorizontal: inset }]}>
         <Skeleton width={80} height={14} />
         <Skeleton height={20} style={styles.gap} />
         <Skeleton width="60%" height={14} style={styles.gap} />
@@ -74,18 +74,15 @@ export function FeaturedCardSkeleton({ width = 300 }: { width?: number }) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 14,
-    borderWidth: 1,
+  post: {
+    marginBottom: 28,
   },
   imageSkeleton: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    aspectRatio: 16 / 9,
+    overflow: "hidden",
   },
   content: {
-    padding: 14,
+    paddingTop: 14,
   },
   gap: {
     marginTop: 8,
