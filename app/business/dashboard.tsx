@@ -12,7 +12,7 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { MOCK_EVENTS } from "@/constants/mockData";
+import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 
 type DashTab = "overview" | "events";
@@ -35,9 +35,11 @@ export default function BusinessDashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<DashTab>("overview");
+  const { events } = useEvents();
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const myEvents = MOCK_EVENTS.slice(0, 4);
+  // No organizer filter yet: the events API doesn't say which events belong to this business.
+  const myEvents = events.slice(0, 4);
 
   const colorFor = (key: typeof STATS[0]["colorKey"]) => colors[key];
 

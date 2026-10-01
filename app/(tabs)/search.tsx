@@ -247,7 +247,7 @@ export default function SearchScreen() {
           <Animated.View
             entering={Platform.OS !== "web" ? FadeInDown.delay(index * 60).springify() : undefined}
           >
-            <EventCard event={item} variant="standard" />
+            <EventCard event={item} variant="feed" inset={20} />
           </Animated.View>
         )}
         scrollEnabled={!!results.length}
@@ -328,11 +328,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
-  list: { paddingHorizontal: 20, paddingTop: 16 },
+  // Feed cards run edge to edge, so only the header text gets side padding.
+  list: { paddingTop: 16 },
   resultsCount: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     marginBottom: 12,
+    paddingHorizontal: 20,
   },
   empty: {
     alignItems: "center",

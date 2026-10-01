@@ -11,7 +11,7 @@ import {
 import { EventCard } from "./EventCard";
 import { FeaturedCardSkeleton } from "./SkeletonLoader";
 import { useColors } from "@/hooks/useColors";
-import type { Event } from "@/constants/mockData";
+import type { Event } from "@/constants/events";
 
 const ITEM_GAP = 12;
 // How much of the next slide stays visible, hinting that the row scrolls.

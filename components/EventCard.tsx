@@ -17,7 +17,7 @@ import Animated, {
 
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import type { Event } from "@/constants/mockData";
+import type { Event } from "@/constants/events";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 

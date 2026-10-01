@@ -16,7 +16,7 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { CATEGORIES, type EventCategory } from "@/constants/mockData";
+import { CATEGORIES, type EventCategory } from "@/constants/events";
 import { useColors } from "@/hooks/useColors";
 
 const NON_ALL_CATEGORIES = CATEGORIES.filter((c) => c !== "All") as Exclude<EventCategory, "All">[];

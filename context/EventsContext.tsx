@@ -11,7 +11,7 @@ import {
   CATEGORIES,
   type Event,
   type EventCategory,
-} from "@/constants/mockData";
+} from "@/constants/events";
 import { api } from "@/utils/apiClient";
 import { fetchEvents } from "@/utils/eventsService";
 
