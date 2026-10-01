@@ -1,28 +1,41 @@
 import React, { useCallback, useRef, useState } from "react";
 import {
-  Dimensions,
   FlatList,
+  ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
   ViewToken,
 } from "react-native";
 
 import { EventCard } from "./EventCard";
+import { FeaturedCardSkeleton } from "./SkeletonLoader";
 import { useColors } from "@/hooks/useColors";
-import type { Event } from "@/constants/mockData";
+import type { Event } from "@/constants/events";
 
-const { width } = Dimensions.get("window");
-const ITEM_WIDTH = width - 48;
-const ITEM_MARGIN = 8;
+const ITEM_GAP = 12;
+// How much of the next slide stays visible, hinting that the row scrolls.
+const PEEK = 28;
+const MAX_ITEM_WIDTH = 420;
 
 interface BannerCarouselProps {
   events: Event[];
+  loading?: boolean;
+  /** Horizontal padding of the parent screen; the carousel bleeds through it. */
+  inset?: number;
 }
 
-export function BannerCarousel({ events }: BannerCarouselProps) {
+export function BannerCarousel({ events, loading = false, inset = 20 }: BannerCarouselProps) {
   const colors = useColors();
+  const { width } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+
+  const available = width - inset * 2;
+  const itemWidth = Math.min(
+    events.length > 1 || loading ? available - PEEK : available,
+    MAX_ITEM_WIDTH
+  );
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -35,6 +48,24 @@ export function BannerCarousel({ events }: BannerCarouselProps) {
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 });
 
+  const bleed = { marginHorizontal: -inset };
+  const contentInset = { paddingHorizontal: inset, gap: ITEM_GAP };
+
+  if (loading) {
+    return (
+      <ScrollView
+        horizontal
+        scrollEnabled={false}
+        showsHorizontalScrollIndicator={false}
+        style={bleed}
+        contentContainerStyle={contentInset}
+      >
+        <FeaturedCardSkeleton width={itemWidth} />
+        <FeaturedCardSkeleton width={itemWidth} />
+      </ScrollView>
+    );
+  }
+
   return (
     <View>
       <FlatList
@@ -42,47 +73,43 @@ export function BannerCarousel({ events }: BannerCarouselProps) {
         data={events}
         keyExtractor={(item) => item.id}
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
-        snapToInterval={ITEM_WIDTH + ITEM_MARGIN * 2}
+        snapToInterval={itemWidth + ITEM_GAP}
+        snapToAlignment="start"
         decelerationRate="fast"
-        contentContainerStyle={styles.container}
+        style={bleed}
+        contentContainerStyle={contentInset}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig.current}
         renderItem={({ item }) => (
-          <View style={styles.slide}>
+          <View style={{ width: itemWidth }}>
             <EventCard event={item} variant="featured" />
           </View>
         )}
-        scrollEnabled={!!events.length}
+        scrollEnabled={events.length > 1}
       />
-      <View style={styles.dots}>
-        {events.map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              {
-                backgroundColor:
-                  i === activeIndex ? colors.primary : colors.border,
-                width: i === activeIndex ? 20 : 6,
-              },
-            ]}
-          />
-        ))}
-      </View>
+      {events.length > 1 && (
+        <View style={styles.dots}>
+          {events.map((event, i) => (
+            <View
+              key={event.id}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor:
+                    i === activeIndex ? colors.primary : colors.border,
+                  width: i === activeIndex ? 20 : 6,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 24,
-  },
-  slide: {
-    width: ITEM_WIDTH,
-    marginHorizontal: ITEM_MARGIN,
-  },
   dots: {
     flexDirection: "row",
     alignItems: "center",

@@ -9,11 +9,11 @@ import React, {
 
 import {
   CATEGORIES,
-  MOCK_EVENTS,
   type Event,
   type EventCategory,
-} from "@/constants/mockData";
+} from "@/constants/events";
 import { api } from "@/utils/apiClient";
+import { fetchEvents } from "@/utils/eventsService";
 
 interface ApiCategory {
   id: string;
@@ -33,32 +33,44 @@ interface EventsContextValue {
   getEventById: (id: string) => Event | undefined;
   categories: string[];
   isLoading: boolean;
+  error: string | null;
   refreshEvents: () => Promise<void>;
 }
 
 const EventsContext = createContext<EventsContextValue | null>(null);
 
 export function EventsProvider({ children }: { children: React.ReactNode }) {
-  const [events, setEvents] = useState<Event[]>(MOCK_EVENTS);
+  const [events, setEvents] = useState<Event[]>([]);
   const [categories, setCategories] = useState<string[]>(CATEGORIES);
   const [activeCategory, setActiveCategory] = useState<EventCategory>("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const refreshEvents = useCallback(async () => {
-    setIsLoading(true);
+  const loadCategories = useCallback(async () => {
     try {
       const data = await api.get<ApiCategory[]>("/api/v1/categories");
       if (data.length) {
         setCategories(["All", ...data.map((category) => category.name)]);
       }
     } catch {
+      // Categories are optional; the built-in list keeps filtering usable.
       setCategories(CATEGORIES);
-    } finally {
-      setEvents(MOCK_EVENTS);
-      setIsLoading(false);
     }
   }, []);
+
+  const refreshEvents = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    loadCategories();
+    try {
+      setEvents(await fetchEvents());
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "Couldn't load events");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadCategories]);
 
   useEffect(() => {
     refreshEvents();
@@ -105,6 +117,7 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
         getEventById,
         categories,
         isLoading,
+        error,
         refreshEvents,
       }}
     >
