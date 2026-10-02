@@ -104,7 +104,7 @@ export default function EventDetailScreen() {
     if (!event) return;
     setShowShareModal(false);
     router.push({
-      pathname: "/(tabs)/chat",
+      pathname: "/chat",
       params: { eventId: event.id, eventTitle: event.title },
     } as any);
   }, [router, event]);

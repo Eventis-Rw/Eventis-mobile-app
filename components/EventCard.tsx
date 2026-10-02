@@ -95,7 +95,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
   const handleShareToChat = useCallback(() => {
     setShowShareModal(false);
     router.push({
-      pathname: "/(tabs)/chat",
+      pathname: "/chat",
       params: { eventId: event.id, eventTitle: event.title },
     } as any);
   }, [router, event]);
