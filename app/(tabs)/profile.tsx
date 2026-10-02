@@ -27,7 +27,7 @@ export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, deleteAccount, isAuthenticated } = useAuth();
   const { bookings } = useBookings();
   const { events } = useEvents();
   const [activeSection, setActiveSection] = useState<"saved" | "settings">("saved");
@@ -40,14 +40,39 @@ export default function ProfileScreen() {
   );
 
   const handleLogout = () => {
+    const doLogout = async () => {
+      await logout();
+      router.replace("/onboarding" as any);
+    };
+
     if (Platform.OS === "web") {
-      logout();
+      void doLogout();
       return;
     }
     Alert.alert("Sign out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Sign out", style: "destructive", onPress: logout },
+      { text: "Sign out", style: "destructive", onPress: () => void doLogout() },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    const doDelete = async () => {
+      await deleteAccount();
+      router.replace("/onboarding" as any);
+    };
+
+    if (Platform.OS === "web") {
+      void doDelete();
+      return;
+    }
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to delete your account permanently? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete Permanently", style: "destructive", onPress: () => void doDelete() },
+      ]
+    );
   };
 
   const stats = [
@@ -102,12 +127,16 @@ export default function ProfileScreen() {
         <View style={styles.headerRow}>
           <Text style={[styles.title, { color: colors.foreground }]}>Profile</Text>
           <Pressable
-            onPress={() => router.push("/business/register" as any)}
-            style={[styles.businessBtn, { backgroundColor: colors.glass, borderColor: colors.primary }]}
+            onPress={() =>
+              user?.isBusinessAccount
+                ? router.push("/business/register" as any)
+                : setShowOrganizerModal(true)
+            }
+            style={[styles.organizerHeaderBtn, { backgroundColor: colors.primary }]}
           >
-            <Ionicons name="business-outline" size={14} color={colors.primary} />
-            <Text style={[styles.businessBtnText, { color: colors.primary }]}>
-              {user?.isBusinessAccount ? "Dashboard" : "List Event"}
+            <Ionicons name="sparkles" size={13} color="#FFFFFF" />
+            <Text style={styles.organizerHeaderBtnText}>
+              {user?.isBusinessAccount ? "Dashboard" : "Become an organizer"}
             </Text>
           </Pressable>
         </View>
@@ -137,10 +166,12 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.profileInfo}>
             <Text style={[styles.profileName, { color: colors.foreground }]}>
-              {user?.username ?? "Guest"}
+              {user?.username && !user.username.startsWith("Member") && !user.username.startsWith("User ")
+                ? user.username
+                : "Eventis Explorer"}
             </Text>
             <Text style={[styles.profileEmail, { color: colors.mutedForeground }]}>
-              {user?.email ?? ""}
+              {user?.email || user?.phone || "Signed in"}
             </Text>
             <View style={styles.badgeRow}>
               {user?.isPhoneVerified && (
@@ -149,11 +180,19 @@ export default function ProfileScreen() {
                   <Text style={[styles.verifiedText, { color: colors.success }]}>Verified</Text>
                 </View>
               )}
-              {user?.isBusinessAccount && (
+              {user?.isBusinessAccount ? (
                 <View style={[styles.verifiedBadge, { backgroundColor: `${colors.primary}22` }]}>
                   <Ionicons name="business" size={12} color={colors.primary} />
-                  <Text style={[styles.verifiedText, { color: colors.primary }]}>Business</Text>
+                  <Text style={[styles.verifiedText, { color: colors.primary }]}>Organizer</Text>
                 </View>
+              ) : (
+                <Pressable
+                  style={[styles.becomeOrganizerBadgeBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => setShowOrganizerModal(true)}
+                >
+                  <Ionicons name="sparkles" size={11} color="#FFFFFF" />
+                  <Text style={styles.becomeOrganizerBadgeText}>Become an organizer</Text>
+                </Pressable>
               )}
             </View>
           </View>
@@ -197,11 +236,13 @@ export default function ProfileScreen() {
               <View style={styles.organiserBannerLeft}>
                 <Ionicons name="megaphone-outline" size={22} color="#fff" />
                 <View>
-                  <Text style={styles.organiserBannerTitle}>Become an Organiser</Text>
+                  <Text style={styles.organiserBannerTitle}>Become an organizer</Text>
                   <Text style={styles.organiserBannerSub}>Host your own events on Eventis</Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+              <View style={styles.bannerCtaPill}>
+                <Text style={styles.bannerCtaPillText}>Get Started</Text>
+              </View>
             </Pressable>
           </Animated.View>
         )}
@@ -325,6 +366,16 @@ export default function ProfileScreen() {
                 Sign Out
               </Text>
             </Pressable>
+
+            <Pressable
+              style={[styles.deleteAccountBtn, { borderColor: colors.destructive, backgroundColor: `${colors.destructive}12` }]}
+              onPress={handleDeleteAccount}
+            >
+              <Ionicons name="trash-outline" size={18} color={colors.destructive} />
+              <Text style={[styles.deleteAccountText, { color: colors.destructive }]}>
+                Delete Account
+              </Text>
+            </Pressable>
           </View>
         )}
       </ScrollView>
@@ -337,12 +388,12 @@ export default function ProfileScreen() {
             <View style={[styles.modalIconWrap, { backgroundColor: colors.primary }]}>
               <Ionicons name="megaphone" size={32} color="#fff" />
             </View>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Become an Organiser</Text>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Become an organizer</Text>
             <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>
-              List your events, manage bookings, and reach thousands of people near you. It's free to get started.
+              List your events, manage bookings, and reach thousands of people near you. It is free to get started.
             </Text>
             <View style={styles.modalFeatures}>
-              {["Create & manage events", "Sell tickets or list free events", "View attendee analytics"].map((f) => (
+              {["Create and manage events", "Publish free or paid tickets", "View attendee analytics"].map((f) => (
                 <View key={f} style={styles.modalFeatureRow}>
                   <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
                   <Text style={[styles.modalFeatureText, { color: colors.foreground }]}>{f}</Text>
@@ -356,7 +407,7 @@ export default function ProfileScreen() {
                 router.push("/business/register" as any);
               }}
             >
-              <Text style={styles.modalCtaText}>Get Started as Organiser</Text>
+              <Text style={styles.modalCtaText}>Get Started as Organizer</Text>
             </Pressable>
             <Pressable onPress={() => setShowOrganizerModal(false)}>
               <Text style={[styles.modalDismiss, { color: colors.mutedForeground }]}>Maybe later</Text>
@@ -464,16 +515,31 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   title: { fontSize: 28, fontFamily: "Inter_700Bold" },
-  businessBtn: {
+  organizerHeaderBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 999,
   },
-  businessBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  organizerHeaderBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" },
+  becomeOrganizerBadgeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  becomeOrganizerBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" },
+  bannerCtaPill: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  bannerCtaPillText: { color: "#007AFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, gap: 16 },
   profileCard: {
@@ -597,6 +663,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   logoutText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  deleteAccountBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  deleteAccountText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   // Guest
   guestContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, gap: 16 },
   guestAvatar: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center" },
@@ -629,7 +706,7 @@ const styles = StyleSheet.create({
   modalFeatures: { alignSelf: "stretch", gap: 10, marginVertical: 4 },
   modalFeatureRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   modalFeatureText: { fontSize: 14, fontFamily: "Inter_400Regular" },
-  modalCta: { alignSelf: "stretch", alignItems: "center", paddingVertical: 16, borderRadius: 16 },
+  modalCta: { alignSelf: "stretch", alignItems: "center", paddingVertical: 16, borderRadius: 999 },
   modalCtaText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
   modalDismiss: { fontSize: 14, fontFamily: "Inter_400Regular", paddingVertical: 8 },
 });

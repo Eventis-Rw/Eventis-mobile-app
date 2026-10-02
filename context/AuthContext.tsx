@@ -72,7 +72,7 @@ const DEFAULT_USER: User = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(DEFAULT_USER);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [pendingOTPContext, setPendingOTPContext] = useState<{
@@ -85,17 +85,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const onboardingState = await AsyncStorage.getItem(ONBOARDING_KEY);
         setHasCompletedOnboarding(onboardingState === 'true');
-        const hasLoggedOut = await AsyncStorage.getItem("@eventis_logged_out");
-        if (hasLoggedOut === "true") {
-          setUser(null);
+        const cached = await AsyncStorage.getItem(USER_CACHE_KEY);
+        if (cached) {
+          setUser(JSON.parse(cached));
         } else {
-          const cached = await AsyncStorage.getItem(USER_CACHE_KEY);
-          if (cached) {
-            setUser(JSON.parse(cached));
-          } else {
-            setUser(DEFAULT_USER);
-            await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(DEFAULT_USER));
-          }
+          setUser(null);
         }
       } catch {}
       setIsLoading(false);
@@ -105,6 +99,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const persistUser = useCallback(async (u: User) => {
     await AsyncStorage.removeItem("@eventis_logged_out");
     await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(u));
+    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+    await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+    setHasCompletedOnboarding(true);
     setUser(u);
   }, []);
 
@@ -130,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
   const completeOnboarding = useCallback(async () => {
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+    await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setHasCompletedOnboarding(true);
   }, []);
   const logout = useCallback(async () => {
@@ -138,7 +136,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
     await clearToken();
     await AsyncStorage.removeItem(USER_CACHE_KEY);
-    await AsyncStorage.setItem("@eventis_logged_out", "true");
+    await AsyncStorage.removeItem(ONBOARDING_KEY);
+    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
+    await AsyncStorage.removeItem("@eventis_logged_out");
+    setHasCompletedOnboarding(false);
     setUser(null);
   }, []);
 
@@ -148,7 +149,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
     await clearToken();
     await AsyncStorage.removeItem(USER_CACHE_KEY);
-    await AsyncStorage.setItem("@eventis_logged_out", "true");
+    await AsyncStorage.removeItem(ONBOARDING_KEY);
+    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
+    await AsyncStorage.removeItem("@eventis_logged_out");
+    setHasCompletedOnboarding(false);
     setUser(null);
   }, []);
 
@@ -158,8 +162,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const displayName =
         fullName && fullName.trim()
           ? fullName.trim()
-          : cleanPhone
-          ? `Member ${cleanPhone.slice(-4)}`
           : "Eventis Explorer";
 
       const newUser: User = {

@@ -221,7 +221,9 @@ export default function HomeScreen() {
                 style={[styles.userName, { color: colors.foreground }]}
                 numberOfLines={1}
               >
-                {user?.username ?? "Explorer"}
+                {user?.username && !user.username.startsWith("Member") && !user.username.startsWith("User ")
+                  ? user.username
+                  : "Explorer"}
               </Text>
             </View>
           </View>

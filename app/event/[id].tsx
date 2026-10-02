@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   ImageBackground,
   Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -37,6 +38,7 @@ export default function EventDetailScreen() {
   const { hasBookedEvent, addBooking } = useBookings();
   const { getEventById, isLoading } = useEvents();
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const event = getEventById(id ?? "");
   const isBooked = hasBookedEvent(id ?? "");
@@ -82,16 +84,30 @@ export default function EventDetailScreen() {
     toggleSaveEvent(event.id);
   }, [toggleSaveEvent, event]);
 
-  const handleShare = useCallback(async () => {
-    if (!event) return;
+  const handleShare = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowShareModal(true);
+  }, []);
+
+  const handleNativeShare = useCallback(async () => {
+    if (!event) return;
+    setShowShareModal(false);
     try {
       await Share.share({
         title: event.title,
-        message: `Check out "${event.title}" on ${event.date} at ${event.location}${event.organizerWebsite ? " — " + event.organizerWebsite : ""}`,
+        message: `Check out ${event.title} in ${event.city} on Eventis! https://eventis.app/events/${event.id}`,
       });
     } catch {}
   }, [event]);
+
+  const handleShareToChat = useCallback(() => {
+    if (!event) return;
+    setShowShareModal(false);
+    router.push({
+      pathname: "/(tabs)/chat",
+      params: { eventId: event.id, eventTitle: event.title },
+    } as any);
+  }, [router, event]);
 
   // Hooks above must run on every render, so the early returns come after them.
   if (!event) {
@@ -113,10 +129,7 @@ export default function EventDetailScreen() {
     );
   }
 
-  const priceLabel =
-    event.price === 0
-      ? "Free"
-      : `${event.currency === "GBP" ? "£" : "$"}${event.price}`;
+  const viewsCount = event.viewCount ?? (event.attendees * 4 + 180);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -343,12 +356,18 @@ export default function EventDetailScreen() {
           },
         ]}
       >
-        <View style={styles.priceSection}>
-          <Text style={[styles.priceLabel, { color: colors.mutedForeground }]}>
-            {event.isPaid ? "Per ticket" : "Admission"}
-          </Text>
-          <Text style={[styles.priceLarge, { color: event.isPaid ? colors.foreground : colors.success }]}>
-            {priceLabel}
+        <View style={styles.insightSection}>
+          <View style={styles.insightRow}>
+            <Ionicons name="eye-outline" size={16} color={colors.primary} />
+            <Text style={[styles.insightCount, { color: colors.foreground }]}>
+              {formatCount(viewsCount)}
+            </Text>
+            <Text style={[styles.insightLabel, { color: colors.mutedForeground }]}>
+              views
+            </Text>
+          </View>
+          <Text style={[styles.insightSub, { color: colors.mutedForeground }]}>
+            {event.attendees} attending
           </Text>
         </View>
         <Pressable
@@ -388,6 +407,75 @@ export default function EventDetailScreen() {
           </Text>
         </Pressable>
       </Animated.View>
+
+      {/* Share Modal */}
+      <Modal
+        visible={showShareModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareModal(false)}
+      >
+        <Pressable
+          style={styles.shareOverlay}
+          onPress={() => setShowShareModal(false)}
+        >
+          <Pressable
+            style={[styles.shareCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.shareHandle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.shareTitle, { color: colors.foreground }]}>Share Event</Text>
+            <Text style={[styles.shareSub, { color: colors.mutedForeground }]} numberOfLines={1}>
+              {event.title}
+            </Text>
+
+            <View style={styles.shareOptions}>
+              <Pressable
+                style={[styles.shareOption, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+                onPress={handleShareToChat}
+              >
+                <View style={[styles.shareIconWrap, { backgroundColor: colors.primary }]}>
+                  <Ionicons name="chatbubbles" size={20} color="#FFFFFF" />
+                </View>
+                <View style={styles.shareOptionInfo}>
+                  <Text style={[styles.shareOptionTitle, { color: colors.foreground }]}>
+                    Share in Eventis Chat
+                  </Text>
+                  <Text style={[styles.shareOptionDesc, { color: colors.mutedForeground }]}>
+                    Send to attendees and event organizers
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              </Pressable>
+
+              <Pressable
+                style={[styles.shareOption, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+                onPress={handleNativeShare}
+              >
+                <View style={[styles.shareIconWrap, { backgroundColor: colors.accent }]}>
+                  <Ionicons name="share-outline" size={20} color="#FFFFFF" />
+                </View>
+                <View style={styles.shareOptionInfo}>
+                  <Text style={[styles.shareOptionTitle, { color: colors.foreground }]}>
+                    Share via Other Apps
+                  </Text>
+                  <Text style={[styles.shareOptionDesc, { color: colors.mutedForeground }]}>
+                    Copy link or send via WhatsApp, Messages
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={[styles.shareCancelBtn, { backgroundColor: colors.input }]}
+              onPress={() => setShowShareModal(false)}
+            >
+              <Text style={[styles.shareCancelText, { color: colors.foreground }]}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -399,6 +487,12 @@ function formatDate(dateStr: string): string {
     day: "numeric",
     month: "short",
   });
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(n);
 }
 
 const styles = StyleSheet.create({
@@ -541,9 +635,11 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  priceSection: { flex: 1 },
-  priceLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  priceLarge: { fontSize: 26, fontFamily: "Inter_700Bold", marginTop: 2 },
+  insightSection: { flex: 1, gap: 2 },
+  insightRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  insightCount: { fontSize: 20, fontFamily: "Inter_700Bold" },
+  insightLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  insightSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
   ctaBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -553,6 +649,77 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   ctaBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
+  shareOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    justifyContent: "flex-end",
+  },
+  shareCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 34,
+    gap: 12,
+  },
+  shareHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 4,
+  },
+  shareTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+  },
+  shareSub: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+  },
+  shareOptions: {
+    gap: 10,
+    marginTop: 6,
+  },
+  shareOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  shareIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shareOptionInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  shareOptionTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  shareOptionDesc: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  shareCancelBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  shareCancelText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
   notFound: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   notFoundText: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
   backLink: { fontSize: 16, fontFamily: "Inter_400Regular" },
