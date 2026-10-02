@@ -15,6 +15,7 @@ import {
   FlatList,
   Image,
   Modal,
+  Platform,
   Pressable,
   Share,
   StyleSheet,
@@ -22,12 +23,21 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import {
+  KeyboardAvoidingView,
+  useKeyboardState,
+} from "react-native-keyboard-controller";
+import ReanimatedSwipeable, {
+  type SwipeableMethods,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ChatActionSheet, type ChatAction } from "@/components/ChatActionSheet";
+import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
+import { ChatPopupMenu } from "@/components/ChatPopupMenu";
 import { useChat } from "@/context/ChatContext";
-import { useColors } from "@/hooks/useColors";
+import { useChatColors } from "@/hooks/useChatColors";
+import { useChatBottomInset } from "@/hooks/useChatBottomInset";
 import type { ChatMessage } from "@/services/chatService";
 
 function dayLabel(value: string) {
@@ -45,13 +55,22 @@ function MessageBubble({
   previous,
   onActions,
   onImage,
+  highlighted,
+  onReply,
+  replyEnabled,
+  contactName,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
   onActions: () => void;
   onImage: (uri: string) => void;
+  highlighted: boolean;
+  onReply: () => void;
+  replyEnabled: boolean;
+  contactName: string;
 }) {
-  const colors = useColors();
+  const colors = useChatColors();
+  const swipe = useRef<SwipeableMethods>(null);
   const own = message.direction === "outgoing";
   const sameDay =
     previous && dayLabel(previous.sentAt) === dayLabel(message.sentAt);
@@ -76,149 +95,180 @@ function MessageBubble({
           </Text>
         </View>
       ) : null}
-      <View
-        style={[
-          styles.messageRow,
-          {
-            justifyContent: own ? "flex-end" : "flex-start",
-            marginTop: grouped ? 3 : 12,
-          },
-        ]}
+      <ReanimatedSwipeable
+        ref={swipe}
+        enabled={replyEnabled}
+        friction={2}
+        leftThreshold={32}
+        overshootLeft={false}
+        overshootRight={false}
+        renderLeftActions={() => (
+          <View style={styles.swipeReply}>
+            <Ionicons
+              name="arrow-undo"
+              size={23}
+              color={colors.mutedForeground}
+            />
+          </View>
+        )}
+        onSwipeableOpen={() => {
+          swipe.current?.close();
+          onReply();
+        }}
       >
-        <Pressable
-          onLongPress={onActions}
-          onPress={
-            message.imageUri ? () => onImage(message.imageUri!) : onActions
-          }
-          delayLongPress={300}
-          accessibilityRole="button"
-          accessibilityLabel={`${own ? "You" : "Contact"}: ${message.text || "Photo"}. Open message actions`}
+        <View
           style={[
-            styles.bubble,
+            styles.messageRow,
             {
-              backgroundColor: own ? colors.primary : colors.card,
-              borderColor: own ? colors.primary : colors.border,
-              borderBottomRightRadius: own ? 5 : 18,
-              borderBottomLeftRadius: own ? 18 : 5,
+              justifyContent: own ? "flex-end" : "flex-start",
+              marginTop: grouped ? 3 : 8,
             },
           ]}
         >
-          {message.forwarded ? (
-            <Text
-              style={[
-                styles.smallText,
-                { color: own ? "#FFFFFF" : colors.mutedForeground },
-              ]}
-            >
-              ↪ Forwarded
-            </Text>
-          ) : null}
-          {message.replyTo ? (
-            <View
-              style={[
-                styles.quote,
-                {
-                  backgroundColor: own
-                    ? "rgba(255,255,255,0.15)"
-                    : colors.secondary,
-                  borderLeftColor: own ? "#FFFFFF" : colors.primary,
-                },
-              ]}
-            >
+          <Pressable
+            onLongPress={onActions}
+            onPress={
+              message.imageUri
+                ? () => onImage(message.imageUri!)
+                : Platform.OS === "web"
+                  ? onActions
+                  : undefined
+            }
+            delayLongPress={300}
+            accessibilityRole="button"
+            accessibilityLabel={`${own ? "You" : contactName}: ${message.text || "Photo"}`}
+            accessibilityHint="Long press for message actions"
+            onAccessibilityTap={onActions}
+            accessibilityActions={[
+              { name: "activate", label: "Message actions" },
+            ]}
+            onAccessibilityAction={onActions}
+            style={[
+              styles.bubble,
+              {
+                backgroundColor: highlighted
+                  ? colors.highlight
+                  : own
+                    ? colors.outgoing
+                    : colors.incoming,
+                borderTopRightRadius: own && !grouped ? 2 : 9,
+                borderTopLeftRadius: !own && !grouped ? 2 : 9,
+              },
+            ]}
+          >
+            {message.forwarded ? (
               <Text
+                style={[styles.smallText, { color: colors.mutedForeground }]}
+              >
+                ↪ Forwarded
+              </Text>
+            ) : null}
+            {message.replyTo ? (
+              <View
                 style={[
-                  styles.quoteAuthor,
-                  { color: own ? "#FFFFFF" : colors.primary },
+                  styles.quote,
+                  {
+                    backgroundColor: colors.glass,
+                    borderLeftColor: colors.primary,
+                  },
                 ]}
               >
-                {message.replyTo.direction === "outgoing" ? "You" : "Contact"}
+                <Text style={[styles.quoteAuthor, { color: colors.primary }]}>
+                  {message.replyTo.direction === "outgoing"
+                    ? "You"
+                    : contactName}
+                </Text>
+                <Text
+                  numberOfLines={2}
+                  style={[styles.smallText, { color: colors.foreground }]}
+                >
+                  {message.replyTo.text || "Photo"}
+                </Text>
+              </View>
+            ) : null}
+            {message.imageUri ? (
+              <Image
+                source={{ uri: message.imageUri }}
+                style={styles.messageImage}
+                resizeMode="cover"
+              />
+            ) : null}
+            {message.text ? (
+              <Text style={[styles.messageText, { color: colors.foreground }]}>
+                {message.text}
               </Text>
-              <Text
-                numberOfLines={2}
-                style={[
-                  styles.smallText,
-                  { color: own ? "#FFFFFF" : colors.foreground },
-                ]}
-              >
-                {message.replyTo.text || "Photo"}
-              </Text>
-            </View>
-          ) : null}
-          {message.imageUri ? (
-            <Image
-              source={{ uri: message.imageUri }}
-              style={styles.messageImage}
-              resizeMode="cover"
-            />
-          ) : null}
-          {message.text ? (
-            <Text
-              style={[
-                styles.messageText,
-                { color: own ? colors.primaryForeground : colors.foreground },
-              ]}
-            >
-              {message.text}
-            </Text>
-          ) : null}
-          <View style={styles.meta}>
-            {message.editedAt ? (
+            ) : null}
+            <View style={styles.meta}>
+              {message.editedAt ? (
+                <Text
+                  style={[styles.timestamp, { color: colors.mutedForeground }]}
+                >
+                  edited
+                </Text>
+              ) : null}
               <Text
                 style={[
                   styles.timestamp,
-                  { color: own ? "#FFFFFF" : colors.mutedForeground },
+                  {
+                    color: colors.mutedForeground,
+                  },
                 ]}
               >
-                edited
+                {new Date(message.sentAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </Text>
-            ) : null}
-            <Text
-              style={[
-                styles.timestamp,
-                {
-                  color: own ? "rgba(255,255,255,0.8)" : colors.mutedForeground,
-                },
-              ]}
-            >
-              {new Date(message.sentAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-            {own ? (
-              <Ionicons
-                accessibilityLabel={`Demo status: ${message.status}`}
-                name={
-                  message.status === "pending"
-                    ? "time-outline"
-                    : ["delivered", "read"].includes(message.status)
-                      ? "checkmark-done"
-                      : "checkmark"
-                }
-                size={14}
-                color={message.status === "read" ? "#B9E4FF" : "#FFFFFF"}
-              />
-            ) : null}
-          </View>
-        </Pressable>
-      </View>
+              {own ? (
+                <Ionicons
+                  accessibilityLabel={`Demo status: ${message.status}`}
+                  name={
+                    message.status === "pending"
+                      ? "time-outline"
+                      : ["delivered", "read"].includes(message.status)
+                        ? "checkmark-done"
+                        : "checkmark"
+                  }
+                  size={14}
+                  color={
+                    message.status === "read"
+                      ? colors.receipt
+                      : colors.mutedForeground
+                  }
+                />
+              ) : null}
+            </View>
+          </Pressable>
+        </View>
+      </ReanimatedSwipeable>
     </View>
   );
 }
 
 export default function ConversationScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, messageId } = useLocalSearchParams<{
+    id: string;
+    messageId?: string;
+  }>();
   const router = useRouter();
-  const colors = useColors();
+  const colors = useChatColors();
   const insets = useSafeAreaInsets();
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
+  const { viewport, measureViewport, bottomInset } =
+    useChatBottomInset(keyboardVisible);
   const chat = useChat();
   const conversation = chat.getConversation(id ?? "");
   const contact = conversation
     ? chat.getContact(conversation.contactId)
     : undefined;
+  const contactDisplayName =
+    contact?.isInAddressBook === false ? contact.phone : contact?.name;
   const allMessages = chat.messagesByConversation[id] ?? [];
   const list = useRef<FlatList<ChatMessage>>(null);
+  const jumpRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const jumpAttempts = useRef(0);
   const nearBottom = useRef(true);
+  const [showLatest, setShowLatest] = useState(false);
   const input = useRef<TextInput>(null);
   const [composer, setComposer] = useState("");
   const [draftReady, setDraftReady] = useState(false);
@@ -228,7 +278,6 @@ export default function ConversationScreen() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [menu, setMenu] = useState(false);
-  const [forward, setForward] = useState<ChatMessage | null>(null);
   const [confirm, setConfirm] = useState<{
     title: string;
     description: string;
@@ -239,15 +288,49 @@ export default function ConversationScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const messages = useMemo(
+  const [matchIndex, setMatchIndex] = useState(0);
+  const [focusedMessageId, setFocusedMessageId] = useState(messageId);
+  const messages = useMemo(() => [...allMessages].reverse(), [allMessages]);
+  const matches = useMemo(
     () =>
-      allMessages.filter(
-        (message) =>
-          !query.trim() ||
-          message.text.toLowerCase().includes(query.trim().toLowerCase()),
-      ),
-    [allMessages, query],
+      query.trim()
+        ? messages.filter((message) =>
+            message.text.toLowerCase().includes(query.trim().toLowerCase()),
+          )
+        : [],
+    [messages, query],
   );
+  const highlightedId = query.trim()
+    ? matches[Math.min(matchIndex, Math.max(0, matches.length - 1))]?.id
+    : focusedMessageId;
+  const targetIndex = messages.findIndex(
+    (message) => message.id === highlightedId,
+  );
+  const jumpToTarget = useCallback(() => {
+    if (targetIndex >= 0) {
+      nearBottom.current = false;
+      list.current?.scrollToIndex({
+        index: targetIndex,
+        viewPosition: 0.5,
+        animated: false,
+      });
+    }
+  }, [targetIndex]);
+  useEffect(() => setFocusedMessageId(messageId), [id, messageId]);
+  useEffect(() => {
+    jumpAttempts.current = 0;
+    const timer = setTimeout(jumpToTarget, 100);
+    return () => {
+      clearTimeout(timer);
+      if (jumpRetry.current) clearTimeout(jumpRetry.current);
+    };
+  }, [jumpToTarget, highlightedId]);
+  const showNewest = () => {
+    setFocusedMessageId(undefined);
+    nearBottom.current = true;
+    setShowLatest(false);
+    list.current?.scrollToOffset({ offset: 0, animated: true });
+  };
   const { loadMessages, markConversationRead, setActiveConversation } = chat;
   const back = () =>
     router.canGoBack() ? router.back() : router.replace("/chat");
@@ -339,7 +422,7 @@ export default function ConversationScreen() {
       setPhoto(null);
       await AsyncStorage.removeItem(`@eventis_chat_draft_${id}`);
       nearBottom.current = true;
-      list.current?.scrollToEnd({ animated: true });
+      showNewest();
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -398,7 +481,11 @@ export default function ConversationScreen() {
         {
           label: "Forward",
           icon: "arrow-redo-outline",
-          onPress: () => setForward(selected),
+          onPress: () =>
+            router.push({
+              pathname: "/chat/forward",
+              params: { conversationId: id, messageId: selected.id },
+            } as never),
         },
         ...(selected.text
           ? [
@@ -485,12 +572,20 @@ export default function ConversationScreen() {
     );
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={[styles.workspace, { backgroundColor: colors.background }]}>
+    <View
+      ref={viewport}
+      onLayout={measureViewport}
+      style={[styles.root, { backgroundColor: colors.background }]}
+    >
+      <View style={[styles.workspace, { backgroundColor: colors.wallpaper }]}>
         <View
           style={[
             styles.header,
-            { paddingTop: insets.top + 8, borderBottomColor: colors.border },
+            {
+              paddingTop: insets.top + 4,
+              borderBottomColor: colors.border,
+              backgroundColor: colors.background,
+            },
           ]}
         >
           <Pressable
@@ -518,7 +613,7 @@ export default function ConversationScreen() {
                 style={[styles.title, { color: colors.foreground }]}
                 numberOfLines={1}
               >
-                {contact.name}
+                {contactDisplayName}
               </Text>
               <Text
                 style={[styles.smallText, { color: colors.mutedForeground }]}
@@ -534,7 +629,11 @@ export default function ConversationScreen() {
             </View>
           </Pressable>
           <Pressable
-            onPress={() => setSearchOpen(!searchOpen)}
+            onPress={() => {
+              setSearchOpen(!searchOpen);
+              setQuery("");
+              setFocusedMessageId(undefined);
+            }}
             accessibilityRole="button"
             accessibilityLabel="Search messages"
             style={styles.iconButton}
@@ -558,25 +657,60 @@ export default function ConversationScreen() {
             />
           </Pressable>
         </View>
-        <Text
-          style={[
-            styles.demoNote,
-            { backgroundColor: colors.glass, color: colors.primary },
-          ]}
-        >
-          Local demo · messages, status and reports stay on this device
-        </Text>
         {searchOpen ? (
           <View style={[styles.searchRow, { backgroundColor: colors.input }]}>
             <TextInput
               autoFocus
               value={query}
-              onChangeText={setQuery}
+              onChangeText={(value) => {
+                setQuery(value);
+                setMatchIndex(0);
+              }}
               placeholder="Search this conversation"
               placeholderTextColor={colors.mutedForeground}
               style={[styles.searchInput, { color: colors.foreground }]}
               accessibilityLabel="Search messages"
             />
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{ color: colors.mutedForeground, fontSize: 11 }}
+            >
+              {query.trim()
+                ? matches.length
+                  ? `${Math.min(matchIndex + 1, matches.length)}/${matches.length}`
+                  : "No results"
+                : ""}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Older match"
+              disabled={!matches.length || matchIndex >= matches.length - 1}
+              onPress={() => setMatchIndex((index) => index + 1)}
+              style={styles.searchArrow}
+            >
+              <Ionicons
+                name="chevron-up"
+                size={21}
+                color={
+                  matchIndex >= matches.length - 1
+                    ? colors.disabled
+                    : colors.foreground
+                }
+              />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Newer match"
+              disabled={!matches.length || matchIndex === 0}
+              onPress={() => setMatchIndex((index) => index - 1)}
+              style={styles.searchArrow}
+            >
+              <Ionicons
+                name="chevron-down"
+                size={21}
+                color={matchIndex === 0 ? colors.disabled : colors.foreground}
+              />
+            </Pressable>
             <Pressable
               onPress={() => {
                 setQuery("");
@@ -614,60 +748,108 @@ export default function ConversationScreen() {
             {notice}
           </Text>
         ) : null}
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-          <FlatList
-            ref={list}
-            data={messages}
-            keyExtractor={(message) => message.id}
-            renderItem={({ item, index }) => (
-              <MessageBubble
-                message={item}
-                previous={messages[index - 1]}
-                onActions={() => {
-                  if (item.status !== "pending") setSelected(item);
-                }}
-                onImage={setImagePreview}
-              />
-            )}
-            contentContainerStyle={styles.messages}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            onScroll={(event) => {
-              const { contentOffset, contentSize, layoutMeasurement } =
-                event.nativeEvent;
-              nearBottom.current =
-                contentSize.height -
-                  contentOffset.y -
-                  layoutMeasurement.height <
-                120;
-            }}
-            scrollEventThrottle={100}
-            onContentSizeChange={() => {
-              if (nearBottom.current && !query)
-                list.current?.scrollToEnd({ animated: false });
-            }}
-            ListEmptyComponent={
-              <View style={styles.center}>
-                <Ionicons
-                  name="chatbubbles-outline"
-                  size={36}
-                  color={colors.primary}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior="padding"
+          automaticOffset
+        >
+          <View style={{ flex: 1 }}>
+            <FlatList
+              ref={list}
+              style={{ flex: 1 }}
+              inverted
+              data={messages}
+              keyExtractor={(message) => message.id}
+              renderItem={({ item, index }) => (
+                <MessageBubble
+                  message={item}
+                  contactName={contact.name}
+                  previous={messages[index + 1]}
+                  highlighted={item.id === highlightedId}
+                  replyEnabled={!contact.blocked && item.status !== "pending"}
+                  onReply={() => {
+                    setReply(item);
+                    setEditing(null);
+                    input.current?.focus();
+                  }}
+                  onActions={() => {
+                    if (item.status !== "pending") setSelected(item);
+                  }}
+                  onImage={setImagePreview}
                 />
-                <Text style={[styles.title, { color: colors.foreground }]}>
-                  {query
-                    ? "No matching messages"
-                    : `Say hello to ${contact.name.split(" ")[0]}`}
-                </Text>
-                <Text
-                  style={[styles.smallText, { color: colors.mutedForeground }]}
-                >
-                  {query
-                    ? "Try a different word or phrase."
-                    : "Start a conversation about your next shared experience."}
-                </Text>
-              </View>
-            }
-          />
+              )}
+              contentContainerStyle={[
+                styles.messages,
+                !messages.length ? { justifyContent: "center" } : null,
+              ]}
+              automaticallyAdjustContentInsets={false}
+              contentInsetAdjustmentBehavior="never"
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              onScroll={(event) => {
+                nearBottom.current = event.nativeEvent.contentOffset.y < 120;
+                setShowLatest(!nearBottom.current);
+              }}
+              scrollEventThrottle={100}
+              onContentSizeChange={() => {
+                if (nearBottom.current && !highlightedId)
+                  list.current?.scrollToOffset({ offset: 0, animated: false });
+              }}
+              onLayout={() => {
+                if (nearBottom.current && !highlightedId)
+                  list.current?.scrollToOffset({ offset: 0, animated: false });
+              }}
+              onScrollToIndexFailed={({ index, averageItemLength }) => {
+                list.current?.scrollToOffset({
+                  offset: averageItemLength * index,
+                  animated: false,
+                });
+                // Variable-height rows are measured in batches. Give the list
+                // time to mount earlier history before requesting an exact jump.
+                if (jumpAttempts.current++ < 20) {
+                  jumpRetry.current = setTimeout(jumpToTarget, 250);
+                }
+              }}
+              ListEmptyComponent={
+                <View style={styles.center}>
+                  <Ionicons
+                    name="chatbubbles-outline"
+                    size={36}
+                    color={colors.primary}
+                  />
+                  <Text style={[styles.title, { color: colors.foreground }]}>
+                    {query
+                      ? "No matching messages"
+                      : `Say hello to ${contact.name.split(" ")[0]}`}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.smallText,
+                      { color: colors.mutedForeground },
+                    ]}
+                  >
+                    {query
+                      ? "Try a different word or phrase."
+                      : "Start a conversation about your next shared experience."}
+                  </Text>
+                </View>
+              }
+            />
+            {showLatest && !searchOpen ? (
+              <Pressable
+                onPress={showNewest}
+                accessibilityRole="button"
+                accessibilityLabel="Jump to latest message"
+                style={[styles.latest, { backgroundColor: colors.card }]}
+              >
+                <Ionicons
+                  name="chevron-down"
+                  size={24}
+                  color={colors.mutedForeground}
+                />
+              </Pressable>
+            ) : null}
+          </View>
           {chat.typingConversationId === id ? (
             <Text
               accessibilityLiveRegion="polite"
@@ -732,7 +914,13 @@ export default function ConversationScreen() {
             <Pressable
               onPress={() => void run(() => chat.setBlocked(contact.id, false))}
               accessibilityRole="button"
-              style={[styles.blocked, { backgroundColor: colors.secondary }]}
+              style={[
+                styles.blocked,
+                {
+                  backgroundColor: colors.secondary,
+                  paddingBottom: bottomInset + 12,
+                },
+              ]}
             >
               <Text style={{ color: colors.primary }}>
                 This contact is blocked. Tap to unblock.
@@ -743,38 +931,41 @@ export default function ConversationScreen() {
               style={[
                 styles.composer,
                 {
-                  borderTopColor: colors.border,
-                  paddingBottom: Math.max(insets.bottom, 10),
+                  paddingBottom: bottomInset + 6,
                 },
               ]}
             >
-              <Pressable
-                onPress={() => void pickPhoto()}
-                disabled={busy || Boolean(editing)}
-                accessibilityRole="button"
-                accessibilityLabel="Attach photo"
-                style={styles.iconButton}
+              <View
+                style={[styles.inputPill, { backgroundColor: colors.card }]}
               >
-                <Ionicons
-                  name="image-outline"
-                  size={25}
-                  color={colors.primary}
+                <TextInput
+                  ref={input}
+                  value={composer}
+                  onChangeText={setComposer}
+                  placeholder={editing ? "Edit message" : "Message"}
+                  placeholderTextColor={colors.mutedForeground}
+                  style={[styles.input, { color: colors.foreground }]}
+                  multiline
+                  numberOfLines={1}
+                  maxLength={4000}
+                  accessibilityLabel="Message composer"
                 />
-              </Pressable>
-              <TextInput
-                ref={input}
-                value={composer}
-                onChangeText={setComposer}
-                placeholder={editing ? "Edit message" : "Message"}
-                placeholderTextColor={colors.mutedForeground}
-                style={[
-                  styles.input,
-                  { color: colors.foreground, backgroundColor: colors.input },
-                ]}
-                multiline
-                maxLength={4000}
-                accessibilityLabel="Message composer"
-              />
+                <Pressable
+                  onPress={() => void pickPhoto()}
+                  disabled={busy || Boolean(editing)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Attach photo"
+                  style={styles.iconButton}
+                >
+                  <Ionicons
+                    name="attach-outline"
+                    size={26}
+                    color={
+                      busy || editing ? colors.disabled : colors.mutedForeground
+                    }
+                  />
+                </Pressable>
+              </View>
               <Pressable
                 onPress={() => void send()}
                 disabled={busy || (!composer.trim() && !photo)}
@@ -796,7 +987,7 @@ export default function ConversationScreen() {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Ionicons
-                    name={editing ? "checkmark" : "arrow-up"}
+                    name={editing ? "checkmark" : "send"}
                     size={23}
                     color="#FFFFFF"
                   />
@@ -812,9 +1003,8 @@ export default function ConversationScreen() {
         actions={messageActions}
         onClose={() => setSelected(null)}
       />
-      <ChatActionSheet
+      <ChatPopupMenu
         visible={menu}
-        title={contact.name}
         actions={[
           {
             label: "Contact details",
@@ -824,6 +1014,15 @@ export default function ConversationScreen() {
                 pathname: "/chat/contact/[id]",
                 params: { id: contact.id },
               }),
+          },
+          {
+            label: "Search",
+            icon: "search-outline",
+            onPress: () => {
+              setSearchOpen(true);
+              setQuery("");
+              setMatchIndex(0);
+            },
           },
           {
             label: conversation.muted
@@ -841,7 +1040,7 @@ export default function ConversationScreen() {
             onPress: () => void run(() => chat.simulateIncoming(id)),
           },
           {
-            label: "Clear conversation",
+            label: "Clear chat",
             icon: "trash-outline",
             destructive: true,
             onPress: () =>
@@ -853,7 +1052,7 @@ export default function ConversationScreen() {
               }),
           },
           {
-            label: "Delete conversation",
+            label: "Delete chat",
             icon: "close-circle-outline",
             destructive: true,
             onPress: () =>
@@ -870,42 +1069,23 @@ export default function ConversationScreen() {
         ]}
         onClose={() => setMenu(false)}
       />
-      <ChatActionSheet
-        visible={Boolean(forward)}
-        title="Forward to"
-        subtitle="Choose an Eventis contact"
-        actions={chat.contacts
-          .filter((item) => item.isEventisUser && !item.blocked)
-          .map((item) => ({
-            label: item.name,
-            icon: "person-outline",
-            onPress: () =>
-              void run(async () => {
-                const target = await chat.startConversation(item.id);
-                await chat.sendMessage(target.id, forward!.text, {
-                  forwarded: true,
-                  imageUri: forward!.imageUri,
-                });
-                setNotice(`Forwarded to ${item.name}`);
-              }),
-          }))}
-        onClose={() => setForward(null)}
-      />
-      <ChatActionSheet
+      <ChatConfirmDialog
         visible={Boolean(confirm)}
         title={confirm?.title ?? "Confirm"}
-        subtitle={confirm?.description}
-        actions={[
-          {
-            label: "Confirm",
-            icon: "checkmark",
-            destructive: true,
-            onPress: () => {
-              const action = confirm?.action;
-              if (action) void run(action);
-            },
-          },
-        ]}
+        description={confirm?.description}
+        confirmLabel={
+          confirm?.title.startsWith("Save")
+            ? "Save"
+            : confirm?.title.startsWith("Clear")
+              ? "Clear"
+              : "Delete"
+        }
+        destructive={!confirm?.title.startsWith("Save")}
+        onConfirm={() => {
+          const action = confirm?.action;
+          setConfirm(null);
+          if (action) void run(action);
+        }}
         onClose={() => setConfirm(null)}
       />
       <Modal
@@ -941,7 +1121,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 8,
-    paddingBottom: 10,
+    paddingBottom: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconButton: {
@@ -952,14 +1132,8 @@ const styles = StyleSheet.create({
   },
   profile: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
   avatar: { width: 42, height: 42, borderRadius: 21 },
-  title: { fontFamily: "Inter_700Bold", fontSize: 15 },
+  title: { fontFamily: "Inter_600SemiBold", fontSize: 16 },
   smallText: { fontFamily: "Inter_400Regular", fontSize: 11, lineHeight: 17 },
-  demoNote: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 10,
-    textAlign: "center",
-    padding: 7,
-  },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -967,23 +1141,42 @@ const styles = StyleSheet.create({
     margin: 10,
     borderRadius: 13,
   },
-  searchInput: { flex: 1, minHeight: 44, fontSize: 14 },
+  searchInput: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 14 },
+  searchArrow: {
+    width: 36,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   notice: { fontSize: 12, padding: 12 },
-  messages: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 18 },
+  messages: { flexGrow: 1, paddingHorizontal: 10, paddingVertical: 6 },
+  latest: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 3,
+    boxShadow: "0 1px 6px rgba(0,0,0,0.15)",
+  },
   messageRow: { flexDirection: "row", width: "100%" },
+  swipeReply: { width: 48, alignItems: "center", justifyContent: "center" },
   bubble: {
     maxWidth: "84%",
-    minWidth: 85,
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingTop: 9,
-    paddingBottom: 6,
-    borderWidth: 1,
+    minWidth: 75,
+    borderRadius: 9,
+    paddingHorizontal: 9,
+    paddingTop: 7,
+    paddingBottom: 4,
+    boxShadow: "0 1px 1px rgba(0,0,0,0.10)",
   },
   messageText: {
     fontFamily: "Inter_400Regular",
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 15,
+    lineHeight: 22,
     flexShrink: 1,
   },
   meta: {
@@ -991,16 +1184,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 5,
-    marginTop: 5,
+    marginTop: 2,
   },
-  timestamp: { fontSize: 9 },
-  day: { alignItems: "center", marginTop: 16, marginBottom: 2 },
+  timestamp: { fontSize: 10 },
+  day: { alignItems: "center", marginTop: 12, marginBottom: 5 },
   dayText: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 10,
+    fontSize: 11,
     paddingHorizontal: 12,
     paddingVertical: 5,
-    borderRadius: 12,
+    borderRadius: 7,
     overflow: "hidden",
   },
   quote: { borderLeftWidth: 3, padding: 8, borderRadius: 7, marginBottom: 7 },
@@ -1032,25 +1225,33 @@ const styles = StyleSheet.create({
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",
-    paddingTop: 9,
-    paddingHorizontal: 8,
-    gap: 5,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 4,
+    paddingHorizontal: 6,
+    gap: 6,
+  },
+  inputPill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    borderRadius: 25,
+    paddingRight: 2,
   },
   input: {
     flex: 1,
-    minHeight: 44,
+    minWidth: 0,
+    minHeight: 46,
     maxHeight: 140,
     borderRadius: 22,
     paddingHorizontal: 15,
     paddingTop: 12,
     paddingBottom: 12,
-    fontSize: 14,
+    fontSize: 16,
+    lineHeight: 22,
   },
   send: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
   },

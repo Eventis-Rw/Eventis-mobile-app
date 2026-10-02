@@ -17,6 +17,12 @@
     "plugins": [
       "expo-router",
       "expo-font",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Eventis to save and update people in your phone contacts."
+        }
+      ],
       "expo-web-browser",
       [
         "expo-splash-screen",
@@ -37,5 +43,4 @@
       "reactCompiler": true
     }
   }
-
 }
