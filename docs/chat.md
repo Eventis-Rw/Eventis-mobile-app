@@ -6,7 +6,11 @@ Chat opens at `/chat` in the root stack, outside `(tabs)`. The tab only pushes t
 
 The existing `ChatService` interface is the data boundary. `ChatContext` manages UI state; `MockChatService` persists demo contacts, conversations, messages, mute/block settings and reports to AsyncStorage. Operations run serially to prevent lost updates. Failed writes propagate to the UI. Small photo data URIs are supported with storage limits; real media needs an upload service. Drafts are device settings and are saved separately.
 
-Long press or tap a message for reply, copy, share, forward, edit (outgoing text only), delete for me and report. Conversation options support mute, clear, delete, and an explicit **Receive a demo reply** control. Inbox options can receive a demo message to exercise unread counts and the notification banner. Muting suppresses this banner. Blocking prevents local sending/receiving. Reports say **saved locally**, never submitted. Presence and message receipts are explicitly demo state; nothing is sent over a network. There are no OS push notifications or voice/video calls.
+The inbox shows a single conversation list with All/Unread filters. Search and the new-chat button open `/chat/search`, which searches saved contacts, normalized phone numbers and message history together. Tap a contact to start/resume a chat; tap a message result to jump to its context. Contact names can be edited from contact details.
+
+Long press a message for reply, copy, share, forward, edit (outgoing text only), delete for me and report. Swipe right to reply; tap a photo to preview it. Conversations use an inverted message list to anchor short histories and new messages next to the composer. A jump-to-latest button appears while reading older messages. In-chat search highlights matches in their history with older/newer navigation. Bottom padding reserves only the system safe area overlapping the actual viewport and is removed while the keyboard is visible.
+
+Conversation options support mute, clear, delete, and an explicit **Receive a demo reply** control. Long press an inbox row for options, including receiving a demo message to exercise unread counts and the notification banner. Muting suppresses this banner. Blocking prevents local sending/receiving. Reports say **saved locally**, never submitted. Presence and message receipts are explicitly demo state; nothing is sent over a network. There are no OS push notifications or voice/video calls.
 
 ## Backend integration
 

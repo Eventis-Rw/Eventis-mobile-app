@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useColors } from "@/hooks/useColors";
+import { useChatColors } from "@/hooks/useChatColors";
 
 export interface ChatAction {
   label: string;
@@ -30,7 +30,7 @@ export function ChatActionSheet({
   actions: ChatAction[];
   onClose: () => void;
 }) {
-  const colors = useColors();
+  const colors = useChatColors();
   const insets = useSafeAreaInsets();
   return (
     <Modal

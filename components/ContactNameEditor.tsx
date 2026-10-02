@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useColors } from "@/hooks/useColors";
+import { useChatColors } from "@/hooks/useChatColors";
 import type { ChatContact } from "@/services/chatService";
 
 interface ContactNameEditorProps {
@@ -26,7 +26,7 @@ export function ContactNameEditor({
   onClose,
   onSave,
 }: ContactNameEditorProps) {
-  const colors = useColors();
+  const colors = useChatColors();
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);

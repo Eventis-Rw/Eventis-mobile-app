@@ -4,12 +4,12 @@ import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useChat } from "@/context/ChatContext";
-import { useColors } from "@/hooks/useColors";
+import { useChatColors } from "@/hooks/useChatColors";
 
 export default function ChatLayout() {
   const { notification, dismissNotification, getContact, getConversation } =
     useChat();
-  const colors = useColors();
+  const colors = useChatColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   useEffect(() => {

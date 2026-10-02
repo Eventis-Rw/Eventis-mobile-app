@@ -13,13 +13,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChatActionSheet } from "@/components/ChatActionSheet";
 import { ContactNameEditor } from "@/components/ContactNameEditor";
 import { useChat } from "@/context/ChatContext";
-import { useColors } from "@/hooks/useColors";
+import { useChatColors } from "@/hooks/useChatColors";
 
 export default function ContactDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const colors = useColors();
+  const colors = useChatColors();
   const chat = useChat();
   const contact = chat.getContact(id);
   const [editing, setEditing] = useState(false);
@@ -117,7 +117,7 @@ export default function ContactDetails() {
             onPress={() =>
               void run(async () => {
                 const conversation = await chat.startConversation(id);
-                router.push({
+                router.dismissTo({
                   pathname: "/chat/[id]",
                   params: { id: conversation.id },
                 });
