@@ -1,12 +1,20 @@
 import { BlurView } from "expo-blur";
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
-import { Animated, ColorValue, Easing, Platform, StyleSheet, View } from "react-native";
+import {
+  Animated,
+  ColorValue,
+  Easing,
+  Platform,
+  StyleSheet,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { useChat } from "@/context/ChatContext";
 
 type TabIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -45,10 +53,16 @@ function TabIcon({
             opacity: progress,
             transform: [
               {
-                scaleX: progress.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }),
+                scaleX: progress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.45, 1],
+                }),
               },
               {
-                scaleY: progress.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }),
+                scaleY: progress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.72, 1],
+                }),
               },
             ],
           },
@@ -64,6 +78,12 @@ function TabIcon({
 }
 
 function TabLayout() {
+  const router = useRouter();
+  const { conversations } = useChat();
+  const unread = conversations.reduce(
+    (count, item) => count + item.unreadCount,
+    0,
+  );
   const colors = useColors();
   const { scheme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -97,7 +117,10 @@ function TabLayout() {
             />
           ) : isWeb ? (
             <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: colors.background },
+              ]}
             />
           ) : null,
       }}
@@ -106,13 +129,22 @@ function TabLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="home" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="chat"
+        name="chat-entry"
+        listeners={{
+          tabPress: (event) => {
+            event.preventDefault();
+            router.push("/chat");
+          },
+        }}
         options={{
           title: "Chat",
+          tabBarBadge: unread || undefined,
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name="message-circle" color={color} focused={focused} />
           ),
@@ -127,8 +159,13 @@ function TabLayout() {
         }}
         options={{
           title: FIND_LOVE_ENABLED ? "FindLove" : "Love · Soon",
-          tabBarAccessibilityLabel: FIND_LOVE_ENABLED ? "FindLove" : "FindLove, temporarily unavailable",
-          tabBarItemStyle: [styles.item, !FIND_LOVE_ENABLED && styles.disabledItem],
+          tabBarAccessibilityLabel: FIND_LOVE_ENABLED
+            ? "FindLove"
+            : "FindLove, temporarily unavailable",
+          tabBarItemStyle: [
+            styles.item,
+            !FIND_LOVE_ENABLED && styles.disabledItem,
+          ],
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               name="heart"
@@ -145,7 +182,9 @@ function TabLayout() {
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, focused }) => <TabIcon name="user" color={color} focused={focused} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="user" color={color} focused={focused} />
+          ),
         }}
       />
     </Tabs>
