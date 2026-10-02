@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Keyboard,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -31,7 +32,10 @@ export default function ChatSearchScreen() {
   const colors = useChatColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const callMode = mode === "call";
   const [query, setQuery] = useState("");
+  const [focused, setFocused] = useState(false);
   const normalized = useDeferredValue(query.trim().toLowerCase());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,7 +91,7 @@ export default function ChatSearchScreen() {
         })),
       );
     }
-    if (normalized) {
+    if (normalized && !callMode) {
       const byConversation = new Map(
         chat.conversations.map((conversation) => [
           conversation.id,
@@ -112,9 +116,14 @@ export default function ChatSearchScreen() {
         );
     }
     return result;
-  }, [chat.contacts, chat.conversations, chat.allMessages, normalized]);
+  }, [chat.contacts, chat.conversations, chat.allMessages, normalized, callMode]);
 
   function openContact(contact: ChatContact) {
+    if (callMode) {
+      Keyboard.dismiss();
+      void run(() => Linking.openURL(`tel:${contact.phone.replace(/\s/g, "")}`));
+      return;
+    }
     if (!contact.isEventisUser) {
       Keyboard.dismiss();
       router.push({
@@ -150,40 +159,72 @@ export default function ChatSearchScreen() {
             { paddingTop: insets.top + 4, borderBottomColor: colors.border },
           ]}
         >
-          <Pressable
-            style={styles.icon}
-            accessibilityRole="button"
-            accessibilityLabel="Back to chats"
-            onPress={() =>
-              router.canGoBack() ? router.back() : router.replace("/chat")
-            }
-          >
-            <Ionicons name="chevron-back" size={27} color={colors.foreground} />
-          </Pressable>
-          <TextInput
-            autoFocus
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search name, number or message"
-            accessibilityLabel="Search name, number or message"
-            returnKeyType="search"
-            autoCorrect={false}
-            placeholderTextColor={colors.mutedForeground}
+          <View
             style={[
-              styles.input,
-              { color: colors.foreground, outlineColor: colors.primary },
+              styles.search,
+              {
+                backgroundColor: colors.secondary,
+                borderColor: focused ? colors.primary : colors.border,
+                borderWidth: focused ? 1 : StyleSheet.hairlineWidth,
+              },
             ]}
-          />
-          {query ? (
+          >
             <Pressable
+              style={styles.searchBack}
               accessibilityRole="button"
-              accessibilityLabel="Clear search"
-              style={styles.icon}
-              onPress={() => setQuery("")}
+              accessibilityLabel="Back to chats"
+              onPress={() =>
+                router.canGoBack() ? router.back() : router.replace("/chat")
+              }
             >
-              <Ionicons name="close" size={23} color={colors.foreground} />
+              <Ionicons
+                name="arrow-back"
+                size={25}
+                color={colors.foreground}
+              />
             </Pressable>
-          ) : null}
+            <Ionicons
+              name={callMode ? "call-outline" : "search-outline"}
+              size={20}
+              color={colors.mutedForeground}
+            />
+            <TextInput
+              autoFocus
+              value={query}
+              onChangeText={setQuery}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              placeholder={
+                callMode ? "Search a contact to call" : "Search chats"
+              }
+              accessibilityLabel={
+                callMode
+                  ? "Search a contact to call"
+                  : "Search contacts and messages"
+              }
+              returnKeyType="search"
+              autoCorrect={false}
+              placeholderTextColor={colors.mutedForeground}
+              style={[
+                styles.input,
+                {
+                  color: colors.foreground,
+                  outlineColor: "transparent",
+                  outlineWidth: 0,
+                },
+              ]}
+            />
+            {query ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                style={styles.clear}
+                onPress={() => setQuery("")}
+              >
+                <Ionicons name="close" size={21} color={colors.foreground} />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         {busy || chat.isLoading ? (
           <ActivityIndicator color={colors.primary} style={styles.notice} />
@@ -277,7 +318,9 @@ export default function ChatSearchScreen() {
                   {query ? "No results found" : "No contacts yet"}
                 </Text>
                 <Text style={[styles.hint, { color: colors.mutedForeground }]}>
-                  Search by a saved name, phone number or words in a message.
+                  {callMode
+                    ? "Search for a saved contact, then tap their name to call."
+                    : "Search by a saved name, phone number or words in a message."}
                 </Text>
               </View>
             ) : null
@@ -370,24 +413,36 @@ const styles = StyleSheet.create({
   root: { flex: 1, alignItems: "center" },
   workspace: { flex: 1, width: "100%", maxWidth: 820 },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 6,
-    paddingBottom: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: 8,
   },
-  icon: {
-    width: 44,
-    height: 48,
+  searchBack: {
+    width: 34,
+    height: 46,
     alignItems: "center",
     justifyContent: "center",
+  },
+  search: {
+    height: 50,
+    marginHorizontal: 18,
+    paddingLeft: 5,
+    paddingRight: 5,
+    borderRadius: 25,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   input: {
     flex: 1,
     minWidth: 0,
     height: 48,
     fontSize: 15,
-    paddingHorizontal: 6,
+    paddingHorizontal: 0,
+  },
+  clear: {
+    width: 38,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
   },
   section: {
     paddingHorizontal: 20,

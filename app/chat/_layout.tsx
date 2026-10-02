@@ -24,7 +24,10 @@ export default function ChatLayout() {
     <View style={{ flex: 1 }}>
       <Stack
         screenOptions={{ headerShown: false, animation: "slide_from_right" }}
-      />
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="search" options={{ animation: "none" }} />
+      </Stack>
       {notification ? (
         <View
           style={[

@@ -43,47 +43,77 @@ export default function ChatScreen() {
     (item) => !unreadOnly || item.unreadCount > 0,
   );
   const search = () => router.push("/chat/search");
+  const startCall = () =>
+    router.push({ pathname: "/chat/search", params: { mode: "call" } });
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={styles.workspace}>
         <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Return to Eventis"
-            style={styles.icon}
-            onPress={() =>
-              router.canGoBack() ? router.back() : router.replace("/(tabs)")
-            }
-          >
-            <Ionicons name="chevron-back" size={27} color={colors.foreground} />
-          </Pressable>
-          <Text style={[styles.title, { color: colors.foreground }]}>
-            Chats
-          </Text>
+          <View style={styles.topBar}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Return to Eventis"
+              style={styles.icon}
+              onPress={() =>
+                router.canGoBack() ? router.back() : router.replace("/(tabs)")
+              }
+            >
+              <Ionicons
+                name="chevron-back"
+                size={27}
+                color={colors.foreground}
+              />
+            </Pressable>
+            <Text style={[styles.title, { color: colors.foreground }]}>Chats</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Start a call"
+              onPress={startCall}
+              style={styles.icon}
+            >
+              <Ionicons
+                name="call-outline"
+                size={23}
+                color={colors.foreground}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="About demo chat"
+              onPress={() => setAbout(true)}
+              style={styles.icon}
+            >
+              <Ionicons
+                name="ellipsis-vertical"
+                size={23}
+                color={colors.foreground}
+              />
+            </Pressable>
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Search contacts and messages"
             onPress={search}
-            style={styles.icon}
+            style={[
+              styles.search,
+              {
+                backgroundColor: colors.secondary,
+                borderColor: colors.border,
+              },
+            ]}
           >
             <Ionicons
               name="search-outline"
-              size={25}
-              color={colors.foreground}
+              size={20}
+              color={colors.mutedForeground}
             />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="About demo chat"
-            onPress={() => setAbout(true)}
-            style={styles.icon}
-          >
-            <Ionicons
-              name="ellipsis-vertical"
-              size={23}
-              color={colors.foreground}
-            />
+            <Text
+              numberOfLines={1}
+              style={[styles.searchText, { color: colors.mutedForeground }]}
+            >
+              Search chats
+            </Text>
           </Pressable>
         </View>
         <View style={styles.filters}>
@@ -267,10 +297,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, alignItems: "center" },
   workspace: { flex: 1, width: "100%", maxWidth: 820 },
   header: {
+    paddingBottom: 6,
+  },
+  topBar: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 6,
-    paddingBottom: 6,
   },
   icon: {
     width: 46,
@@ -278,7 +310,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { flex: 1, fontFamily: "Inter_700Bold", fontSize: 24, marginLeft: 4 },
+  title: {
+    flex: 1,
+    fontFamily: "Inter_700Bold",
+    fontSize: 24,
+    marginLeft: 4,
+  },
+  search: {
+    height: 48,
+    marginHorizontal: 18,
+    marginTop: 2,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  searchText: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 15 },
   filters: {
     flexDirection: "row",
     alignItems: "center",
