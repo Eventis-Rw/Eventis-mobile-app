@@ -18,6 +18,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { ChatProvider } from "@/context/ChatContext";
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 import { BookingsProvider } from "@/context/BookingsContext";
 import { EventsProvider } from "@/context/EventsContext";
@@ -61,6 +62,7 @@ function RootLayoutNav() {
       <Stack.Screen name="love/connections" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="love/wallet" options={{ animation: "slide_from_bottom" }} />
       <Stack.Screen name="love/chat/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="chat/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen
         name="booking/[id]"
         options={{ presentation: "modal", animation: "slide_from_bottom" }}
@@ -97,15 +99,17 @@ export default function RootLayout() {
             <GestureHandlerRootView style={{ flex: 1 }}>
               <KeyboardProvider>
                 <AuthProvider>
-                  <EventsProvider>
-                    <LoveProfilesProvider>
-                      <FindLoveDemoProvider>
-                        <BookingsProvider>
-                          <RootLayoutNav />
-                        </BookingsProvider>
-                      </FindLoveDemoProvider>
-                    </LoveProfilesProvider>
-                  </EventsProvider>
+                  <ChatProvider>
+                    <EventsProvider>
+                      <LoveProfilesProvider>
+                        <FindLoveDemoProvider>
+                          <BookingsProvider>
+                            <RootLayoutNav />
+                          </BookingsProvider>
+                        </FindLoveDemoProvider>
+                      </LoveProfilesProvider>
+                    </EventsProvider>
+                  </ChatProvider>
                 </AuthProvider>
               </KeyboardProvider>
             </GestureHandlerRootView>

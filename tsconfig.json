@@ -19,6 +19,8 @@
     "context/**/*.tsx",
     "hooks/**/*.ts",
     "hooks/**/*.tsx",
+    "services/**/*.ts",
+    "services/**/*.tsx",
     "utils/**/*.ts",
     "utils/**/*.tsx",
     ".expo/types/**/*.ts",

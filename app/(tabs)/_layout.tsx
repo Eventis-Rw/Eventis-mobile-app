@@ -10,6 +10,9 @@ import { useColors } from "@/hooks/useColors";
 
 type TabIconName = React.ComponentProps<typeof Feather>["name"];
 
+// Change this single flag to true when FindLove is ready to return to navigation.
+const FIND_LOVE_ENABLED = false;
+
 function TabIcon({
   color,
   focused,
@@ -117,9 +120,22 @@ function TabLayout() {
       />
       <Tabs.Screen
         name="findlove"
+        listeners={{
+          tabPress: (event) => {
+            if (!FIND_LOVE_ENABLED) event.preventDefault();
+          },
+        }}
         options={{
-          title: "FindLove",
-          tabBarIcon: ({ color, focused }) => <TabIcon name="heart" color={color} focused={focused} />,
+          title: FIND_LOVE_ENABLED ? "FindLove" : "Love · Soon",
+          tabBarAccessibilityLabel: FIND_LOVE_ENABLED ? "FindLove" : "FindLove, temporarily unavailable",
+          tabBarItemStyle: [styles.item, !FIND_LOVE_ENABLED && styles.disabledItem],
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name="heart"
+              color={FIND_LOVE_ENABLED ? color : colors.disabled}
+              focused={FIND_LOVE_ENABLED && focused}
+            />
+          ),
         }}
       />
       <Tabs.Screen name="tickets" options={{ href: null }} />
@@ -151,6 +167,9 @@ const styles = StyleSheet.create({
   },
   item: {
     paddingTop: 6,
+  },
+  disabledItem: {
+    opacity: 0.5,
   },
   label: {
     fontSize: 11,
