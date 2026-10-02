@@ -9,7 +9,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -21,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
+import { shareEvent } from "@/utils/shareEvent";
 
 const EVENT_IMAGES: Record<string, number> = {
   concert: require("../../assets/images/banner-concert.png"),
@@ -82,15 +82,8 @@ export default function EventDetailScreen() {
     toggleSaveEvent(event.id);
   }, [toggleSaveEvent, event]);
 
-  const handleShare = useCallback(async () => {
-    if (!event) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      await Share.share({
-        title: event.title,
-        message: `Check out "${event.title}" on ${event.date} at ${event.location}${event.organizerWebsite ? " — " + event.organizerWebsite : ""}`,
-      });
-    } catch {}
+  const handleShare = useCallback(() => {
+    if (event) shareEvent(event);
   }, [event]);
 
   // Hooks above must run on every render, so the early returns come after them.
@@ -112,11 +105,6 @@ export default function EventDetailScreen() {
       </View>
     );
   }
-
-  const priceLabel =
-    event.price === 0
-      ? "Free"
-      : `${event.currency === "GBP" ? "£" : "$"}${event.price}`;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -148,6 +136,8 @@ export default function EventDetailScreen() {
               <Pressable
                 style={[styles.navBtn, { backgroundColor: colors.surface }]}
                 onPress={handleShare}
+                accessibilityRole="button"
+                accessibilityLabel="Share event"
               >
                 <Ionicons name="share-outline" size={20} color={colors.foreground} />
               </Pressable>
@@ -159,12 +149,6 @@ export default function EventDetailScreen() {
               <Text style={styles.catBadgeText}>{event.category}</Text>
             </View>
             <Text style={styles.heroTitle}>{event.title}</Text>
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color={colors.accent} />
-              <Text style={styles.ratingText}>
-                {event.rating} ({event.reviewCount} reviews)
-              </Text>
-            </View>
           </View>
         </ImageBackground>
 
@@ -299,6 +283,23 @@ export default function EventDetailScreen() {
             {event.description}
           </Text>
 
+          {/* Organizer instructions, only when the organizer provided some */}
+          {event.instructions?.trim() ? (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Instructions
+              </Text>
+              <View
+                style={[styles.instructionsCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              >
+                <Ionicons name="clipboard-outline" size={18} color={colors.primary} />
+                <Text style={[styles.instructionsText, { color: colors.mutedForeground }]}>
+                  {event.instructions.trim()}
+                </Text>
+              </View>
+            </>
+          ) : null}
+
           {/* Tags */}
           <View style={styles.tagRow}>
             {event.tags.map((tag) => (
@@ -312,20 +313,6 @@ export default function EventDetailScreen() {
               </View>
             ))}
           </View>
-
-          {/* Paid event note */}
-          {event.isPaid && (
-            <View
-              style={[styles.paymentNote, { backgroundColor: colors.glass, borderColor: colors.primary }]}
-            >
-              <Ionicons name="information-circle-outline" size={16} color={colors.primary} />
-              <Text style={[styles.paymentNoteText, { color: colors.mutedForeground }]}>
-                {event.organizerWebsite
-                  ? "Payment is processed securely on the organizer's website."
-                  : "You will be directed to the organizer for payment."}
-              </Text>
-            </View>
-          )}
 
           <View style={{ height: 110 }} />
         </Animated.View>
@@ -343,14 +330,6 @@ export default function EventDetailScreen() {
           },
         ]}
       >
-        <View style={styles.priceSection}>
-          <Text style={[styles.priceLabel, { color: colors.mutedForeground }]}>
-            {event.isPaid ? "Per ticket" : "Admission"}
-          </Text>
-          <Text style={[styles.priceLarge, { color: event.isPaid ? colors.foreground : colors.success }]}>
-            {priceLabel}
-          </Text>
-        </View>
         <Pressable
           style={[
             styles.ctaBtn,
@@ -433,8 +412,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     lineHeight: 34,
   },
-  ratingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  ratingText: { color: "rgba(255,255,255,0.85)", fontSize: 13, fontFamily: "Inter_500Medium" },
   content: { padding: 20, gap: 14 },
   infoRow: { flexDirection: "row", gap: 10 },
   infoCard: {
@@ -513,6 +490,15 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 24,
   },
+  instructionsCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+  },
+  instructionsText: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 22 },
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tag: {
     paddingHorizontal: 12,
@@ -521,15 +507,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   tagText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  paymentNote: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
-  },
-  paymentNoteText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 20 },
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -541,12 +518,11 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  priceSection: { flex: 1 },
-  priceLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  priceLarge: { fontSize: 26, fontFamily: "Inter_700Bold", marginTop: 2 },
   ctaBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     paddingHorizontal: 28,
     paddingVertical: 16,
