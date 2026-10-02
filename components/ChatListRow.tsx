@@ -11,6 +11,9 @@ export function ChatListRow({
   muted,
   onPress,
   onLongPress,
+  actionLabel,
+  actionDisabled = false,
+  onAction,
 }: {
   contact: ChatContact;
   subtitle: string;
@@ -19,77 +22,112 @@ export function ChatListRow({
   muted?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
+  actionLabel?: string;
+  actionDisabled?: boolean;
+  onAction?: () => void;
 }) {
   const colors = useChatColors();
+  const displayName =
+    contact.isInAddressBook === false ? contact.phone : contact.name;
   const date = time ? new Date(time) : null;
   const label =
     date?.toDateString() === new Date().toDateString()
       ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : date?.toLocaleDateString([], { month: "short", day: "numeric" });
   return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={350}
-      accessibilityRole="button"
-      accessibilityLabel={`${contact.name}, ${subtitle}${unreadCount ? `, ${unreadCount} unread` : ""}`}
-      accessibilityHint={
-        onLongPress ? "Hold to open conversation options" : undefined
-      }
-      style={({ pressed }) => [
-        styles.row,
-        { backgroundColor: pressed ? colors.secondary : colors.background },
-      ]}
-    >
-      <Image
-        source={{ uri: contact.avatarUrl }}
-        style={[styles.avatar, { backgroundColor: colors.secondary }]}
-      />
-      <View style={[styles.copy, { borderBottomColor: colors.border }]}>
-        <View style={styles.line}>
-          <Text
-            numberOfLines={1}
-            style={[styles.name, { color: colors.foreground }]}
-          >
-            {contact.name}
-          </Text>
-          {label ? (
+    <View style={[styles.row, { backgroundColor: colors.background }]}>
+      <Pressable
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        accessibilityRole="button"
+        accessibilityLabel={`${displayName}, ${subtitle}${unreadCount ? `, ${unreadCount} unread` : ""}`}
+        accessibilityHint={
+          onLongPress ? "Hold to open conversation options" : undefined
+        }
+        style={({ pressed }) => [
+          styles.main,
+          pressed && { backgroundColor: colors.secondary },
+        ]}
+      >
+        <Image
+          source={{ uri: contact.avatarUrl }}
+          style={[styles.avatar, { backgroundColor: colors.secondary }]}
+        />
+        <View style={[styles.copy, { borderBottomColor: colors.border }]}>
+          <View style={styles.line}>
             <Text
-              style={[
-                styles.time,
-                {
-                  color: unreadCount ? colors.primary : colors.mutedForeground,
-                },
-              ]}
+              numberOfLines={1}
+              style={[styles.name, { color: colors.foreground }]}
             >
-              {label}
+              {displayName}
             </Text>
-          ) : null}
-        </View>
-        <View style={styles.line}>
-          <Text
-            numberOfLines={1}
-            style={[styles.subtitle, { color: colors.mutedForeground }]}
-          >
-            {contact.blocked ? "Blocked contact" : subtitle}
-          </Text>
-          {muted ? (
-            <Ionicons
-              name="notifications-off"
-              size={15}
-              color={colors.mutedForeground}
-            />
-          ) : null}
-          {unreadCount > 0 ? (
-            <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-              <Text style={styles.count}>
-                {unreadCount > 99 ? "99+" : unreadCount}
+            {label ? (
+              <Text
+                style={[
+                  styles.time,
+                  {
+                    color: unreadCount
+                      ? colors.primary
+                      : colors.mutedForeground,
+                  },
+                ]}
+              >
+                {label}
               </Text>
-            </View>
-          ) : null}
+            ) : null}
+          </View>
+          <View style={styles.line}>
+            <Text
+              numberOfLines={1}
+              style={[styles.subtitle, { color: colors.mutedForeground }]}
+            >
+              {contact.blocked ? "Blocked contact" : subtitle}
+            </Text>
+            {muted ? (
+              <Ionicons
+                name="notifications-off"
+                size={15}
+                color={colors.mutedForeground}
+              />
+            ) : null}
+            {unreadCount > 0 ? (
+              <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+                <Text style={styles.count}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+      {actionLabel && onAction ? (
+        <Pressable
+          onPress={onAction}
+          disabled={actionDisabled}
+          accessibilityRole="button"
+          accessibilityLabel={`${actionLabel} ${displayName}`}
+          accessibilityState={{ disabled: actionDisabled }}
+          style={[
+            styles.action,
+            {
+              backgroundColor: actionDisabled ? colors.secondary : colors.glass,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.actionText,
+              {
+                color: actionDisabled ? colors.mutedForeground : colors.primary,
+              },
+            ]}
+          >
+            {actionLabel}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -97,9 +135,16 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
+    minHeight: 82,
+  },
+  main: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 82,
+    flexDirection: "row",
+    alignItems: "center",
     paddingLeft: 16,
     gap: 14,
-    minHeight: 82,
   },
   avatar: { width: 53, height: 53, borderRadius: 27 },
   copy: {
@@ -108,7 +153,7 @@ const styles = StyleSheet.create({
     minHeight: 82,
     justifyContent: "center",
     gap: 7,
-    paddingRight: 18,
+    paddingRight: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   line: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -124,4 +169,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   count: { color: "#FFFFFF", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  action: {
+    minWidth: 68,
+    minHeight: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+    paddingHorizontal: 12,
+  },
+  actionText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
 });

@@ -10,6 +10,18 @@ export interface ChatContact {
   isOnline?: boolean;
   invited?: boolean;
   blocked?: boolean;
+  firstName?: string;
+  lastName?: string;
+  isInAddressBook?: boolean;
+  deviceContactId?: string;
+}
+
+export interface ChatContactUpdate {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  isInAddressBook?: boolean;
+  deviceContactId?: string;
 }
 
 export interface ChatConversation {
@@ -86,6 +98,10 @@ export interface ChatService {
   simulateIncoming(conversationId: string): Promise<ChatMessage>;
   inviteContact(contactId: string): Promise<ChatContact>;
   updateContactName(contactId: string, name: string): Promise<ChatContact>;
+  updateContact(
+    contactId: string,
+    update: ChatContactUpdate,
+  ): Promise<ChatContact>;
   lookupPhone(phone: string): Promise<PhoneLookupResult>;
   markConversationRead(conversationId: string): Promise<void>;
 }
@@ -111,6 +127,7 @@ const DEMO_CONTACTS: ChatContact[] = [
     headline: "Creative director · Kigali",
     isEventisUser: true,
     isOnline: true,
+    isInAddressBook: true,
   },
   {
     id: "contact-kevin",
@@ -120,6 +137,7 @@ const DEMO_CONTACTS: ChatContact[] = [
       "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=240&auto=format&fit=crop&q=80",
     headline: "Product designer · Kigali",
     isEventisUser: true,
+    isInAddressBook: true,
   },
   {
     id: "contact-diane",
@@ -130,6 +148,7 @@ const DEMO_CONTACTS: ChatContact[] = [
     headline: "Event host · Musanze",
     isEventisUser: true,
     isOnline: true,
+    isInAddressBook: false,
   },
   {
     id: "contact-patrick",
@@ -139,6 +158,7 @@ const DEMO_CONTACTS: ChatContact[] = [
       "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=240&auto=format&fit=crop&q=80",
     headline: "Photographer · Rubavu",
     isEventisUser: true,
+    isInAddressBook: false,
   },
   {
     id: "contact-claudine",
@@ -148,6 +168,7 @@ const DEMO_CONTACTS: ChatContact[] = [
       "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=240&auto=format&fit=crop&q=80",
     headline: "Saved in your contacts",
     isEventisUser: false,
+    isInAddressBook: true,
   },
   {
     id: "contact-eric",
@@ -157,6 +178,7 @@ const DEMO_CONTACTS: ChatContact[] = [
       "https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=240&auto=format&fit=crop&q=80",
     headline: "Saved in your contacts",
     isEventisUser: false,
+    isInAddressBook: true,
   },
 ];
 
@@ -265,6 +287,18 @@ function normalizePhone(phone: string) {
   return phone.replace(/\D/g, "");
 }
 
+function hydrateContact(contact: ChatContact): ChatContact {
+  const parts = contact.name.trim().split(/\s+/);
+  return {
+    ...contact,
+    firstName: contact.firstName ?? parts[0] ?? "",
+    lastName: contact.lastName ?? parts.slice(1).join(" "),
+    isInAddressBook:
+      contact.isInAddressBook ??
+      !["contact-diane", "contact-patrick"].includes(contact.id),
+  };
+}
+
 function sortConversations(conversations: ChatConversation[]) {
   return [...conversations].sort(
     (first, second) =>
@@ -287,7 +321,7 @@ export class MockChatService implements ChatService {
           Array.isArray(parsed.contacts) &&
           Array.isArray(parsed.conversations) &&
           Array.isArray(parsed.messages)
-            ? parsed
+            ? { ...parsed, contacts: parsed.contacts.map(hydrateContact) }
             : createInitialState();
       } catch {
         this.state = createInitialState();
@@ -315,7 +349,7 @@ export class MockChatService implements ChatService {
   async load(): Promise<ChatSnapshot> {
     const state = await this.getState();
     return {
-      contacts: state.contacts.map((contact) => ({ ...contact })),
+      contacts: state.contacts.map(hydrateContact),
       conversations: sortConversations(state.conversations).map(
         (conversation) => ({ ...conversation }),
       ),
@@ -564,11 +598,43 @@ export class MockChatService implements ChatService {
     const state = await this.getState();
     const contact = state.contacts.find((item) => item.id === contactId);
     if (!contact) throw new Error("Contact not found.");
-    const updated = { ...contact, name: name.trim() };
+    const [firstName = "", ...rest] = name.trim().split(/\s+/);
+    const updated = {
+      ...contact,
+      name: name.trim(),
+      firstName,
+      lastName: rest.join(" "),
+    };
     const contacts = state.contacts.map((item) =>
       item.id === contactId ? updated : item,
     );
     await this.persist({ ...state, contacts });
+    return { ...updated };
+  }
+
+  async updateContact(contactId: string, update: ChatContactUpdate) {
+    const state = await this.getState();
+    const contact = state.contacts.find((item) => item.id === contactId);
+    if (!contact) throw new Error("Contact not found.");
+    const firstName = update.firstName.trim();
+    const lastName = update.lastName.trim();
+    const phone = update.phone.trim();
+    if (!firstName) throw new Error("Enter a first name.");
+    if (!phone) throw new Error("Enter a phone number.");
+    const updated: ChatContact = {
+      ...contact,
+      ...update,
+      firstName,
+      lastName,
+      phone,
+      name: [firstName, lastName].filter(Boolean).join(" "),
+    };
+    await this.persist({
+      ...state,
+      contacts: state.contacts.map((item) =>
+        item.id === contactId ? updated : item,
+      ),
+    });
     return { ...updated };
   }
 

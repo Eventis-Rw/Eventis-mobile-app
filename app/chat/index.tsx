@@ -10,8 +10,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChatActionSheet } from "@/components/ChatActionSheet";
+import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
 import { ChatListRow } from "@/components/ChatListRow";
+import { ChatPopupMenu } from "@/components/ChatPopupMenu";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
 import type { ChatConversation } from "@/services/chatService";
@@ -208,18 +209,16 @@ export default function ChatScreen() {
           <Ionicons name="chatbubble-ellipses" size={26} color="#FFFFFF" />
         </Pressable>
       </View>
-      <ChatActionSheet
+      <ChatPopupMenu
         visible={about}
-        title="Eventis chat"
-        subtitle="Local demo. Messages, contacts, reports and delivery status stay on this device."
         actions={[
           { label: "New chat", icon: "chatbubble-outline", onPress: search },
+          { label: "Search", icon: "search-outline", onPress: search },
         ]}
         onClose={() => setAbout(false)}
       />
-      <ChatActionSheet
+      <ChatPopupMenu
         visible={Boolean(options)}
-        title={chat.getContact(options?.contactId ?? "")?.name ?? "Chat"}
         actions={
           options
             ? [
@@ -246,21 +245,18 @@ export default function ChatScreen() {
         }
         onClose={() => setOptions(null)}
       />
-      <ChatActionSheet
+      <ChatConfirmDialog
         visible={Boolean(confirmDelete)}
         title="Delete conversation?"
-        subtitle="This removes the chat and messages from this device. You can still start a new conversation with this contact."
-        actions={[
-          {
-            label: "Delete",
-            icon: "trash-outline",
-            destructive: true,
-            onPress: () => {
-              if (confirmDelete)
-                void run(() => chat.clearConversation(confirmDelete.id, true));
-            },
-          },
-        ]}
+        description="This removes the chat and messages from this device. You can still start a new conversation with this contact."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          const selected = confirmDelete;
+          setConfirmDelete(null);
+          if (selected)
+            void run(() => chat.clearConversation(selected.id, true));
+        }}
         onClose={() => setConfirmDelete(null)}
       />
     </View>

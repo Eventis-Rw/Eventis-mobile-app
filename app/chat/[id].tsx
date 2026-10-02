@@ -33,6 +33,8 @@ import ReanimatedSwipeable, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ChatActionSheet, type ChatAction } from "@/components/ChatActionSheet";
+import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
+import { ChatPopupMenu } from "@/components/ChatPopupMenu";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
 import { useChatBottomInset } from "@/hooks/useChatBottomInset";
@@ -259,6 +261,8 @@ export default function ConversationScreen() {
   const contact = conversation
     ? chat.getContact(conversation.contactId)
     : undefined;
+  const contactDisplayName =
+    contact?.isInAddressBook === false ? contact.phone : contact?.name;
   const allMessages = chat.messagesByConversation[id] ?? [];
   const list = useRef<FlatList<ChatMessage>>(null);
   const jumpRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -274,7 +278,6 @@ export default function ConversationScreen() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [menu, setMenu] = useState(false);
-  const [forward, setForward] = useState<ChatMessage | null>(null);
   const [confirm, setConfirm] = useState<{
     title: string;
     description: string;
@@ -478,7 +481,11 @@ export default function ConversationScreen() {
         {
           label: "Forward",
           icon: "arrow-redo-outline",
-          onPress: () => setForward(selected),
+          onPress: () =>
+            router.push({
+              pathname: "/chat/forward",
+              params: { conversationId: id, messageId: selected.id },
+            } as never),
         },
         ...(selected.text
           ? [
@@ -606,7 +613,7 @@ export default function ConversationScreen() {
                 style={[styles.title, { color: colors.foreground }]}
                 numberOfLines={1}
               >
-                {contact.name}
+                {contactDisplayName}
               </Text>
               <Text
                 style={[styles.smallText, { color: colors.mutedForeground }]}
@@ -996,9 +1003,8 @@ export default function ConversationScreen() {
         actions={messageActions}
         onClose={() => setSelected(null)}
       />
-      <ChatActionSheet
+      <ChatPopupMenu
         visible={menu}
-        title={contact.name}
         actions={[
           {
             label: "Contact details",
@@ -1008,6 +1014,15 @@ export default function ConversationScreen() {
                 pathname: "/chat/contact/[id]",
                 params: { id: contact.id },
               }),
+          },
+          {
+            label: "Search",
+            icon: "search-outline",
+            onPress: () => {
+              setSearchOpen(true);
+              setQuery("");
+              setMatchIndex(0);
+            },
           },
           {
             label: conversation.muted
@@ -1025,7 +1040,7 @@ export default function ConversationScreen() {
             onPress: () => void run(() => chat.simulateIncoming(id)),
           },
           {
-            label: "Clear conversation",
+            label: "Clear chat",
             icon: "trash-outline",
             destructive: true,
             onPress: () =>
@@ -1037,7 +1052,7 @@ export default function ConversationScreen() {
               }),
           },
           {
-            label: "Delete conversation",
+            label: "Delete chat",
             icon: "close-circle-outline",
             destructive: true,
             onPress: () =>
@@ -1054,42 +1069,23 @@ export default function ConversationScreen() {
         ]}
         onClose={() => setMenu(false)}
       />
-      <ChatActionSheet
-        visible={Boolean(forward)}
-        title="Forward to"
-        subtitle="Choose an Eventis contact"
-        actions={chat.contacts
-          .filter((item) => item.isEventisUser && !item.blocked)
-          .map((item) => ({
-            label: item.name,
-            icon: "person-outline",
-            onPress: () =>
-              void run(async () => {
-                const target = await chat.startConversation(item.id);
-                await chat.sendMessage(target.id, forward!.text, {
-                  forwarded: true,
-                  imageUri: forward!.imageUri,
-                });
-                setNotice(`Forwarded to ${item.name}`);
-              }),
-          }))}
-        onClose={() => setForward(null)}
-      />
-      <ChatActionSheet
+      <ChatConfirmDialog
         visible={Boolean(confirm)}
         title={confirm?.title ?? "Confirm"}
-        subtitle={confirm?.description}
-        actions={[
-          {
-            label: "Confirm",
-            icon: "checkmark",
-            destructive: true,
-            onPress: () => {
-              const action = confirm?.action;
-              if (action) void run(action);
-            },
-          },
-        ]}
+        description={confirm?.description}
+        confirmLabel={
+          confirm?.title.startsWith("Save")
+            ? "Save"
+            : confirm?.title.startsWith("Clear")
+              ? "Clear"
+              : "Delete"
+        }
+        destructive={!confirm?.title.startsWith("Save")}
+        onConfirm={() => {
+          const action = confirm?.action;
+          setConfirm(null);
+          if (action) void run(action);
+        }}
         onClose={() => setConfirm(null)}
       />
       <Modal

@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChatActionSheet } from "@/components/ChatActionSheet";
-import { ContactNameEditor } from "@/components/ContactNameEditor";
+import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
 
@@ -22,7 +22,6 @@ export default function ContactDetails() {
   const colors = useChatColors();
   const chat = useChat();
   const contact = chat.getContact(id);
-  const [editing, setEditing] = useState(false);
   const [action, setAction] = useState<"block" | "report" | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -98,13 +97,18 @@ export default function ContactDetails() {
           </Text>
         </View>
         <Pressable
-          onPress={() => setEditing(true)}
+          onPress={() =>
+            router.push({
+              pathname: "/chat/edit-contact/[id]",
+              params: { id: contact.id },
+            } as never)
+          }
           accessibilityRole="button"
           style={[styles.row, { borderBottomColor: colors.border }]}
         >
           <Ionicons name="pencil-outline" size={21} color={colors.primary} />
           <Text style={[styles.rowLabel, { color: colors.foreground }]}>
-            Edit saved contact name
+            {contact.isInAddressBook ? "Edit contact" : "Add to contacts"}
           </Text>
           <Ionicons
             name="chevron-forward"
@@ -143,7 +147,36 @@ export default function ContactDetails() {
               Message
             </Text>
           </Pressable>
-        ) : null}
+        ) : (
+          <Pressable
+            onPress={() => void run(() => chat.inviteContact(contact.id))}
+            disabled={contact.invited}
+            accessibilityRole="button"
+            style={styles.row}
+          >
+            <Ionicons
+              name={
+                contact.invited
+                  ? "checkmark-circle-outline"
+                  : "person-add-outline"
+              }
+              size={21}
+              color={contact.invited ? colors.mutedForeground : colors.primary}
+            />
+            <Text
+              style={[
+                styles.rowLabel,
+                {
+                  color: contact.invited
+                    ? colors.mutedForeground
+                    : colors.foreground,
+                },
+              ]}
+            >
+              {contact.invited ? "Invitation saved" : "Invite to Eventis"}
+            </Text>
+          </Pressable>
+        )}
         <Pressable
           onPress={() => setAction("block")}
           accessibilityRole="button"
@@ -185,30 +218,22 @@ export default function ContactDetails() {
           </Text>
         ) : null}
       </ScrollView>
-      <ContactNameEditor
-        contact={editing ? contact : null}
-        onClose={() => setEditing(false)}
-        onSave={chat.updateContactName}
-      />
-      <ChatActionSheet
+      <ChatConfirmDialog
         visible={action === "block"}
         title={
           contact.blocked ? "Unblock this contact?" : "Block this contact?"
         }
-        subtitle={
+        description={
           contact.blocked
             ? "You will be able to message this contact again."
             : "You will not be able to send or simulate receiving messages from this contact on this device."
         }
-        actions={[
-          {
-            label: contact.blocked ? "Unblock" : "Block",
-            icon: "ban-outline",
-            destructive: !contact.blocked,
-            onPress: () =>
-              void run(() => chat.setBlocked(id, !contact.blocked)),
-          },
-        ]}
+        confirmLabel={contact.blocked ? "Unblock" : "Block"}
+        destructive={!contact.blocked}
+        onConfirm={() => {
+          setAction(null);
+          void run(() => chat.setBlocked(id, !contact.blocked));
+        }}
         onClose={() => setAction(null)}
       />
       <ChatActionSheet

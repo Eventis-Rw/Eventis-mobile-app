@@ -12,7 +12,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChatActionSheet } from "@/components/ChatActionSheet";
 import { ChatListRow } from "@/components/ChatListRow";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
@@ -37,7 +36,6 @@ export default function ChatSearchScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
-  const [inviting, setInviting] = useState<ChatContact | null>(null);
   const [lookup, setLookup] = useState<{
     query: string;
     result: PhoneLookupResult;
@@ -118,7 +116,11 @@ export default function ChatSearchScreen() {
 
   function openContact(contact: ChatContact) {
     if (!contact.isEventisUser) {
-      setInviting(contact);
+      Keyboard.dismiss();
+      router.push({
+        pathname: "/chat/contact/[id]",
+        params: { id: contact.id },
+      });
       return;
     }
     if (contact.blocked) {
@@ -229,6 +231,20 @@ export default function ChatSearchScreen() {
                         : "Invite to Eventis"
                   }
                   onPress={() => openContact(item.contact)}
+                  actionLabel={
+                    !item.contact.isEventisUser
+                      ? item.contact.invited
+                        ? "Invited"
+                        : "Invite"
+                      : undefined
+                  }
+                  actionDisabled={item.contact.invited}
+                  onAction={
+                    !item.contact.isEventisUser
+                      ? () =>
+                          void run(() => chat.inviteContact(item.contact.id))
+                      : undefined
+                  }
                 />
               );
             return (
@@ -315,6 +331,30 @@ export default function ChatSearchScreen() {
                           lookupResult.contact,
                       )
                     }
+                    actionLabel={
+                      lookupResult.kind === "invite"
+                        ? (
+                            chat.getContact(lookupResult.contact.id) ??
+                            lookupResult.contact
+                          ).invited
+                          ? "Invited"
+                          : "Invite"
+                        : undefined
+                    }
+                    actionDisabled={
+                      (
+                        chat.getContact(lookupResult.contact.id) ??
+                        lookupResult.contact
+                      ).invited
+                    }
+                    onAction={
+                      lookupResult.kind === "invite"
+                        ? () =>
+                            void run(() =>
+                              chat.inviteContact(lookupResult.contact.id),
+                            )
+                        : undefined
+                    }
                   />
                 ) : null}
               </View>
@@ -322,24 +362,6 @@ export default function ChatSearchScreen() {
           }
         />
       </View>
-      <ChatActionSheet
-        visible={Boolean(inviting)}
-        title={`Invite ${inviting?.name ?? "contact"}`}
-        subtitle="This demo saves the invitation on this device. It does not send an SMS."
-        actions={
-          inviting && !inviting.invited
-            ? [
-                {
-                  label: "Save demo invitation",
-                  icon: "person-add-outline",
-                  onPress: () =>
-                    void run(() => chat.inviteContact(inviting.id)),
-                },
-              ]
-            : []
-        }
-        onClose={() => setInviting(null)}
-      />
     </View>
   );
 }

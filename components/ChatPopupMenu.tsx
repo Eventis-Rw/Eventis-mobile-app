@@ -7,85 +7,74 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useChatColors } from "@/hooks/useChatColors";
 
-export interface ChatAction {
+export interface ChatMenuAction {
   label: string;
   icon: React.ComponentProps<typeof Ionicons>["name"];
   destructive?: boolean;
   onPress: () => void;
 }
 
-export function ChatActionSheet({
+export function ChatPopupMenu({
   visible,
-  title,
-  subtitle,
   actions,
   onClose,
+  top,
 }: {
   visible: boolean;
-  title: string;
-  subtitle?: string;
-  actions: ChatAction[];
+  actions: ChatMenuAction[];
   onClose: () => void;
+  top?: number;
 }) {
   const colors = useChatColors();
+  const insets = useSafeAreaInsets();
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
-      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+      <View style={StyleSheet.absoluteFill}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
-          accessibilityLabel="Dismiss actions"
+          accessibilityLabel="Close menu"
         />
         <View
           accessibilityViewIsModal
           style={[
-            styles.sheet,
+            styles.menu,
             {
+              top: top ?? insets.top + 52,
               backgroundColor: colors.card,
               borderColor: colors.border,
             },
           ]}
         >
-          <Text
-            accessibilityRole="header"
-            style={[styles.title, { color: colors.foreground }]}
-          >
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              {subtitle}
-            </Text>
-          ) : null}
-          <ScrollView>
+          <ScrollView contentContainerStyle={styles.content} bounces={false}>
             {actions.map((action, index) => (
               <Pressable
                 key={`${action.label}-${index}`}
+                accessibilityRole="menuitem"
+                accessibilityLabel={action.label}
                 onPress={() => {
                   onClose();
                   action.onPress();
                 }}
-                accessibilityRole="button"
-                accessibilityLabel={action.label}
                 style={({ pressed }) => [
                   styles.action,
-                  {
-                    backgroundColor: pressed ? colors.secondary : "transparent",
-                  },
+                  pressed && { backgroundColor: colors.secondary },
                 ]}
               >
                 <Ionicons
                   name={action.icon}
                   size={21}
                   color={
-                    action.destructive ? colors.destructive : colors.primary
+                    action.destructive ? colors.destructive : colors.foreground
                   }
                 />
                 <Text
@@ -103,15 +92,6 @@ export function ChatActionSheet({
               </Pressable>
             ))}
           </ScrollView>
-          <Pressable
-            onPress={onClose}
-            accessibilityRole="button"
-            style={styles.cancel}
-          >
-            <Text style={[styles.label, { color: colors.primary }]}>
-              Cancel
-            </Text>
-          </Pressable>
         </View>
       </View>
     </Modal>
@@ -119,43 +99,24 @@ export function ChatActionSheet({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  sheet: {
-    width: "100%",
-    maxWidth: 480,
+  menu: {
+    position: "absolute",
+    right: 10,
+    width: 280,
     maxHeight: "76%",
-    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 20,
-    elevation: 14,
-    boxShadow: "0 10px 32px rgba(0,0,0,0.26)",
-  },
-  title: { fontFamily: "Inter_700Bold", fontSize: 18, marginBottom: 8 },
-  subtitle: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  action: {
-    minHeight: 52,
     borderRadius: 12,
+    elevation: 12,
+    boxShadow: "0 8px 28px rgba(0,0,0,0.24)",
+    overflow: "hidden",
+  },
+  content: { paddingVertical: 6 },
+  action: {
+    minHeight: 50,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
   },
-  label: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  cancel: {
-    minHeight: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 12,
-  },
+  label: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 15 },
 });

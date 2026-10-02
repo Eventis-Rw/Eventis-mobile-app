@@ -12,6 +12,7 @@ import {
   chatService,
   type ChatContact,
   type ChatConversation,
+  type ChatContactUpdate,
   type ChatMessage,
   type PhoneLookupResult,
   type SendMessageOptions,
@@ -58,6 +59,10 @@ interface ChatContextValue {
   setActiveConversation: (id: string | null) => void;
   inviteContact: (contactId: string) => Promise<void>;
   updateContactName: (contactId: string, name: string) => Promise<void>;
+  updateContact: (
+    contactId: string,
+    update: ChatContactUpdate,
+  ) => Promise<ChatContact>;
   lookupPhone: (phone: string) => Promise<PhoneLookupResult>;
   markConversationRead: (conversationId: string) => Promise<void>;
 }
@@ -291,6 +296,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const updateContact = useCallback(
+    async (contactId: string, update: ChatContactUpdate) => {
+      const contact = await chatService.updateContact(contactId, update);
+      setContacts((current) =>
+        current.map((item) => (item.id === contactId ? contact : item)),
+      );
+      return contact;
+    },
+    [],
+  );
+
   const lookupPhone = useCallback(
     (phone: string) => chatService.lookupPhone(phone),
     [],
@@ -334,6 +350,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setActiveConversation,
       inviteContact,
       updateContactName,
+      updateContact,
       lookupPhone,
       markConversationRead,
     }),
@@ -363,6 +380,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setActiveConversation,
       inviteContact,
       updateContactName,
+      updateContact,
       lookupPhone,
       markConversationRead,
     ],

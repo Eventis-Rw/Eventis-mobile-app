@@ -51,6 +51,13 @@ test("phone lookup distinguishes registered, inviteable, and unknown identities"
 test("contact names and invitations persist and existing chats are reused", async () => {
   const service = freshService();
   await service.updateContactName("contact-aline", "My friend");
+  await service.updateContact("contact-diane", {
+    firstName: "Diane",
+    lastName: "Uwera",
+    phone: "+250 788 000 003",
+    isInAddressBook: true,
+    deviceContactId: "device-diane",
+  });
   await service.inviteContact("contact-claudine");
   const snapshot = await freshService().load();
   assert.equal(
@@ -61,6 +68,11 @@ test("contact names and invitations persist and existing chats are reused", asyn
     snapshot.contacts.find((item) => item.id === "contact-claudine").invited,
     true,
   );
+  const diane = snapshot.contacts.find((item) => item.id === "contact-diane");
+  assert.equal(diane.name, "Diane Uwera");
+  assert.equal(diane.phone, "+250 788 000 003");
+  assert.equal(diane.isInAddressBook, true);
+  assert.equal(diane.deviceContactId, "device-diane");
   const existing = await service.startConversation("contact-aline");
   assert.equal(existing.id, "conversation-aline");
 });
