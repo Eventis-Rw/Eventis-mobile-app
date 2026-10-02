@@ -324,112 +324,119 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
     );
   }
 
-  // "feed" shares the standard content but drops the card chrome.
-  const isFeed = variant === "feed";
-
+  // Instagram-style event post (standard and feed)
   return (
     <>
       <AnimatedPressable
         style={[
-          isFeed
-            ? styles.feed
-            : [styles.standard, { backgroundColor: colors.card, borderColor: colors.border }],
+          styles.instaCard,
+          { backgroundColor: colors.card, borderColor: colors.border },
           animatedStyle,
         ]}
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
-        <ImageBackground
-          source={getEventImage(event.image)}
-          style={isFeed ? styles.feedImage : styles.standardImage}
-          imageStyle={isFeed ? undefined : styles.standardImageStyle}
-        >
-          <View style={[styles.overlay2, { backgroundColor: colors.overlay }]} />
-          <View style={[styles.topActionsRow, isFeed && { top: 12, right: inset }]}>
+        {/* Post Header: Organizer info & Category */}
+        <View style={styles.instaHeader}>
+          <View style={styles.instaOrganizerInfo}>
+            <View style={[styles.instaOrganizerAvatar, { backgroundColor: colors.primary }]}>
+              <Text style={styles.instaOrganizerAvatarLetter}>
+                {event.organizer.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.instaOrganizerTextCol}>
+              <View style={styles.instaOrganizerNameRow}>
+                <Text style={[styles.instaOrganizerName, { color: colors.foreground }]} numberOfLines={1}>
+                  {event.organizer}
+                </Text>
+                {event.isSponsored && (
+                  <View style={[styles.instaSponsoredBadge, { backgroundColor: `${colors.primary}18` }]}>
+                    <Text style={[styles.instaSponsoredText, { color: colors.primary }]}>Sponsored</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.instaLocationText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                {event.location}, {event.city}
+              </Text>
+            </View>
+          </View>
+          <View style={[styles.instaCategoryBadge, { backgroundColor: colors.secondary }]}>
+            <Text style={[styles.instaCategoryText, { color: colors.primary }]}>
+              {event.category}
+            </Text>
+          </View>
+        </View>
+
+        {/* Post Media: Full-width event image */}
+        <View style={styles.instaMediaWrap}>
+          <ImageBackground
+            source={getEventImage(event.image)}
+            style={styles.instaMediaImage}
+            imageStyle={styles.instaMediaInnerImage}
+          />
+        </View>
+
+        {/* Action Bar: ONLY Insight numbers, Share, and Saved for Later. NO RATING */}
+        <View style={styles.instaActionBar}>
+          {/* Left: Insight numbers */}
+          <View style={styles.instaInsightsWrap}>
+            <View style={styles.instaInsightItem}>
+              <Ionicons name="eye-outline" size={17} color={colors.primary} />
+              <Text style={[styles.instaInsightCount, { color: colors.foreground }]}>
+                {formatCount(viewsCount)}
+              </Text>
+              <Text style={[styles.instaInsightLabel, { color: colors.mutedForeground }]}>
+                views
+              </Text>
+            </View>
+            <View style={styles.instaInsightItem}>
+              <Ionicons name="people-outline" size={16} color={colors.mutedForeground} />
+              <Text style={[styles.instaAttendeesCount, { color: colors.mutedForeground }]}>
+                {event.attendees} attending
+              </Text>
+            </View>
+          </View>
+
+          {/* Right: Share icon and Saved for Later icon */}
+          <View style={styles.instaRightActions}>
             <Pressable
-              style={[styles.actionBtnCircle, { backgroundColor: colors.surface }]}
+              style={styles.instaActionBtn}
               onPress={handleShare}
               accessibilityRole="button"
               accessibilityLabel="Share event"
             >
-              <Ionicons name="share-social-outline" size={15} color={colors.foreground} />
+              <Ionicons name="share-social-outline" size={21} color={colors.foreground} />
             </Pressable>
             <Pressable
-              style={[styles.actionBtnCircle, { backgroundColor: colors.surface }]}
+              style={styles.instaActionBtn}
               onPress={handleSave}
               accessibilityRole="button"
-              accessibilityLabel="Bookmark event"
+              accessibilityLabel="Save for later"
             >
               <Ionicons
                 name={isSaved ? "bookmark" : "bookmark-outline"}
-                size={16}
+                size={21}
                 color={isSaved ? colors.primary : colors.foreground}
               />
             </Pressable>
           </View>
-          <View
-            style={[
-              styles.viewsInsightBadge,
-              isFeed && { bottom: 12, left: inset },
-              { backgroundColor: "rgba(12,12,26,0.65)" },
-            ]}
-          >
-            <Ionicons name="eye-outline" size={12} color="#FFFFFF" />
-            <Text style={styles.viewsInsightBadgeText}>{formatCount(viewsCount)} views</Text>
-          </View>
-        </ImageBackground>
-        <View
-          style={[
-            styles.standardContent,
-            isFeed && { paddingHorizontal: inset, paddingBottom: 0 },
-          ]}
-        >
-          <View style={styles.standardHeader}>
-            <Text
-              style={[styles.standardCategory, { color: colors.primary }]}
-            >
-              {event.category}
-            </Text>
-            <View style={styles.statsRow}>
-              <View style={styles.ratingRow}>
-                <Ionicons name="eye-outline" size={13} color={colors.mutedForeground} />
-                <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
-                  {formatCount(viewsCount)}
-                </Text>
-              </View>
-              <View style={styles.ratingRow}>
-                <Ionicons name="star" size={12} color={colors.accent} />
-                <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
-                  {event.rating}
-                </Text>
-              </View>
-            </View>
-          </View>
-          <Text
-            style={[styles.standardTitle, { color: colors.foreground }]}
-            numberOfLines={2}
-          >
+        </View>
+
+        {/* Post Details & Caption */}
+        <View style={styles.instaDetails}>
+          <Text style={[styles.instaTitle, { color: colors.foreground }]} numberOfLines={2}>
             {event.title}
           </Text>
-          <View style={styles.metaRow2}>
-            <Ionicons name="calendar-outline" size={13} color={colors.mutedForeground} />
-            <Text style={[styles.standardMeta, { color: colors.mutedForeground }]}>
+          <View style={styles.instaMetaRow}>
+            <Ionicons name="calendar-outline" size={14} color={colors.primary} />
+            <Text style={[styles.instaMetaText, { color: colors.mutedForeground }]}>
               {formatDate(event.date)} · {event.time}
             </Text>
           </View>
-          <View style={styles.metaRow2}>
-            <Ionicons name="location-outline" size={13} color={colors.mutedForeground} />
-            <Text
-              style={[styles.standardMeta, styles.flexText, { color: colors.mutedForeground }]}
-              numberOfLines={1}
-            >
-              {event.location}, {event.city}
-            </Text>
-            <Text style={[styles.standardMeta, { color: colors.mutedForeground }]}>
-              {event.distance}km
-            </Text>
-          </View>
+          <Text style={[styles.instaCaption, { color: colors.mutedForeground }]} numberOfLines={2}>
+            {event.description}
+          </Text>
         </View>
       </AnimatedPressable>
       {shareModal}
@@ -619,6 +626,145 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_700Bold",
   },
+  instaCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: "hidden",
+    marginBottom: 20,
+  },
+  instaHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  instaOrganizerInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  instaOrganizerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  instaOrganizerAvatarLetter: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#FFFFFF",
+  },
+  instaOrganizerTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  instaOrganizerNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  instaOrganizerName: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+  },
+  instaSponsoredBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  instaSponsoredText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+  },
+  instaLocationText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  instaCategoryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  instaCategoryText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  instaMediaWrap: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    backgroundColor: "#000000",
+  },
+  instaMediaImage: {
+    width: "100%",
+    height: "100%",
+  },
+  instaMediaInnerImage: {
+    resizeMode: "cover",
+  },
+  instaActionBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  instaInsightsWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  instaInsightItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  instaInsightCount: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+  },
+  instaInsightLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  instaAttendeesCount: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  instaRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  instaActionBtn: {
+    padding: 4,
+  },
+  instaDetails: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    gap: 6,
+  },
+  instaTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    lineHeight: 20,
+  },
+  instaMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  instaMetaText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  instaCaption: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+  },
   standard: {
     borderRadius: 16,
     overflow: "hidden",
@@ -628,7 +774,6 @@ const styles = StyleSheet.create({
   feed: {
     marginBottom: 28,
   },
-  // Height follows the screen width so the banner never distorts or crops oddly.
   feedImage: {
     width: "100%",
     aspectRatio: 16 / 9,
