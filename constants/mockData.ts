@@ -46,8 +46,12 @@ export const MOCK_EVENTS: Event[] = [
     rating: 4.8,
     reviewCount: 312,
     viewCount: 18420,
-    instructions:
-      "Bring a valid photo ID; entry is 18+ only. No glass bottles or professional cameras. Gates open at 17:00 and re-entry is not permitted.",
+    instructions: [
+      "Bring a valid photo ID; entry is 18+ only.",
+      "No glass bottles or professional cameras.",
+      "Gates open at 17:00.",
+      "Re-entry is not permitted.",
+    ],
   },
   {
     id: "2",
@@ -75,8 +79,11 @@ export const MOCK_EVENTS: Event[] = [
     rating: 4.9,
     reviewCount: 89,
     viewCount: 9650,
-    instructions:
-      "Smart casual dress code. Register at the front desk with your ticket QR code to collect your badge, and bring a laptop for the afternoon workshops.",
+    instructions: [
+      "Smart casual dress code.",
+      "Register at the front desk with your ticket QR code to collect your badge.",
+      "Bring a laptop for the afternoon workshops.",
+    ],
   },
   {
     id: "3",

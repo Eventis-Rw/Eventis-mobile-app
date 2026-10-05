@@ -106,6 +106,8 @@ export default function EventDetailScreen() {
     );
   }
 
+  const instructions = (event.instructions ?? []).map((item) => item.trim()).filter(Boolean);
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -284,7 +286,7 @@ export default function EventDetailScreen() {
           </Text>
 
           {/* Organizer instructions, only when the organizer provided some */}
-          {event.instructions?.trim() ? (
+          {instructions.length > 0 ? (
             <>
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
                 Instructions
@@ -292,10 +294,14 @@ export default function EventDetailScreen() {
               <View
                 style={[styles.instructionsCard, { backgroundColor: colors.card, borderColor: colors.border }]}
               >
-                <Ionicons name="clipboard-outline" size={18} color={colors.primary} />
-                <Text style={[styles.instructionsText, { color: colors.mutedForeground }]}>
-                  {event.instructions.trim()}
-                </Text>
+                {instructions.map((item, index) => (
+                  <View key={index} style={styles.instructionRow}>
+                    <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
+                    <Text style={[styles.instructionsText, { color: colors.mutedForeground }]}>
+                      {item}
+                    </Text>
+                  </View>
+                ))}
               </View>
             </>
           ) : null}
@@ -491,13 +497,12 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   instructionsCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
     gap: 10,
   },
+  instructionRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   instructionsText: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 22 },
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tag: {
