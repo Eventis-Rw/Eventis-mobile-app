@@ -43,8 +43,6 @@ export default function ChatScreen() {
     (item) => !unreadOnly || item.unreadCount > 0,
   );
   const search = () => router.push("/chat/search");
-  const startCall = () =>
-    router.push({ pathname: "/chat/search", params: { mode: "call" } });
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -66,18 +64,6 @@ export default function ChatScreen() {
               />
             </Pressable>
             <Text style={[styles.title, { color: colors.foreground }]}>Chats</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Start a call"
-              onPress={startCall}
-              style={styles.icon}
-            >
-              <Ionicons
-                name="call-outline"
-                size={23}
-                color={colors.foreground}
-              />
-            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="About demo chat"
@@ -236,7 +222,7 @@ export default function ChatScreen() {
             { backgroundColor: colors.primary, bottom: insets.bottom + 18 },
           ]}
         >
-          <Ionicons name="chatbubble-ellipses" size={26} color="#FFFFFF" />
+          <Ionicons name="add" size={32} color="#FFFFFF" />
         </Pressable>
       </View>
       <ChatPopupMenu

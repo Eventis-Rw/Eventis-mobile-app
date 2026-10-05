@@ -23,6 +23,14 @@
           "contactsPermission": "Allow Eventis to save and update people in your phone contacts."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Eventis to attach photos to your messages.",
+          "cameraPermission": "Allow Eventis to take photos for your messages.",
+          "microphonePermission": false
+        }
+      ],
       "expo-web-browser",
       [
         "expo-location",

@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -454,6 +455,37 @@ export default function ConversationScreen() {
     });
   }
 
+  async function takePhoto() {
+    await run(async () => {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        throw new Error("Allow camera access to take a photo.");
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 0.3,
+        base64: true,
+      });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset.base64) throw new Error("This photo could not be opened.");
+      if (asset.base64.length > 700000)
+        throw new Error(
+          "Take a smaller photo (under 500 KB after compression) for this local demo.",
+        );
+      setPhoto(`data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}`);
+    });
+  }
+
+  const startCall = () => {
+    if (!contact) return;
+    void run(() => Linking.openURL(`tel:${contact.phone.replace(/\s/g, "")}`));
+  };
+
+  const showVoiceNoteNotice = () =>
+    setNotice("Voice notes will be available when media upload is connected.");
+
   const messageActions: ChatAction[] = selected
     ? [
         {
@@ -629,17 +661,13 @@ export default function ConversationScreen() {
             </View>
           </Pressable>
           <Pressable
-            onPress={() => {
-              setSearchOpen(!searchOpen);
-              setQuery("");
-              setFocusedMessageId(undefined);
-            }}
+            onPress={startCall}
             accessibilityRole="button"
-            accessibilityLabel="Search messages"
+            accessibilityLabel={`Call ${contactDisplayName}`}
             style={styles.iconButton}
           >
             <Ionicons
-              name="search-outline"
+              name="call-outline"
               size={21}
               color={colors.foreground}
             />
@@ -932,12 +960,42 @@ export default function ConversationScreen() {
                 styles.composer,
                 {
                   paddingBottom: bottomInset + 6,
+                  backgroundColor: colors.background,
                 },
               ]}
             >
+              {Platform.OS === "android" ? null : (
+                <Pressable
+                  onPress={() => void pickPhoto()}
+                  disabled={busy || Boolean(editing)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add an attachment"
+                  style={styles.composerSideButton}
+                >
+                  <Ionicons
+                    name="add"
+                    size={31}
+                    color={busy || editing ? colors.disabled : colors.primary}
+                  />
+                </Pressable>
+              )}
               <View
                 style={[styles.inputPill, { backgroundColor: colors.card }]}
               >
+                {Platform.OS === "android" ? (
+                  <Pressable
+                    onPress={() => input.current?.focus()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Focus the message field"
+                    style={styles.inputAction}
+                  >
+                    <Ionicons
+                      name="happy-outline"
+                      size={25}
+                      color={colors.mutedForeground}
+                    />
+                  </Pressable>
+                ) : null}
                 <TextInput
                   ref={input}
                   value={composer}
@@ -950,36 +1008,94 @@ export default function ConversationScreen() {
                   maxLength={4000}
                   accessibilityLabel="Message composer"
                 />
+                {Platform.OS === "android" ? (
+                  <Pressable
+                    onPress={() => void pickPhoto()}
+                    disabled={busy || Boolean(editing)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add an attachment"
+                    style={styles.inputAction}
+                  >
+                    <Ionicons
+                      name="attach-outline"
+                      size={25}
+                      color={
+                        busy || editing
+                          ? colors.disabled
+                          : colors.mutedForeground
+                      }
+                    />
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => input.current?.focus()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Focus the message field"
+                    style={styles.inputAction}
+                  >
+                    <Ionicons
+                      name="happy-outline"
+                      size={25}
+                      color={colors.mutedForeground}
+                    />
+                  </Pressable>
+                )}
+                {Platform.OS === "android" ? (
+                  <Pressable
+                    onPress={() => void takePhoto()}
+                    disabled={busy || Boolean(editing)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Take a photo"
+                    style={styles.inputAction}
+                  >
+                    <Ionicons
+                      name="camera-outline"
+                      size={25}
+                      color={
+                        busy || editing
+                          ? colors.disabled
+                          : colors.mutedForeground
+                      }
+                    />
+                  </Pressable>
+                ) : null}
+              </View>
+              {Platform.OS === "android" ? null : (
                 <Pressable
-                  onPress={() => void pickPhoto()}
+                  onPress={() => void takePhoto()}
                   disabled={busy || Boolean(editing)}
                   accessibilityRole="button"
-                  accessibilityLabel="Attach photo"
-                  style={styles.iconButton}
+                  accessibilityLabel="Take a photo"
+                  style={styles.composerSideButton}
                 >
                   <Ionicons
-                    name="attach-outline"
-                    size={26}
+                    name="camera-outline"
+                    size={28}
                     color={
                       busy || editing ? colors.disabled : colors.mutedForeground
                     }
                   />
                 </Pressable>
-              </View>
+              )}
               <Pressable
-                onPress={() => void send()}
-                disabled={busy || (!composer.trim() && !photo)}
+                onPress={
+                  composer.trim() || photo || editing
+                    ? () => void send()
+                    : showVoiceNoteNotice
+                }
+                disabled={busy}
                 accessibilityRole="button"
                 accessibilityLabel={
-                  editing ? "Save edited message" : "Send message"
+                  editing
+                    ? "Save edited message"
+                    : composer.trim() || photo
+                      ? "Send message"
+                      : "Record a voice note"
                 }
                 style={[
                   styles.send,
                   {
-                    backgroundColor:
-                      !busy && (composer.trim() || photo)
-                        ? colors.primary
-                        : colors.disabled,
+                    backgroundColor: busy ? colors.disabled : colors.primary,
                   },
                 ]}
               >
@@ -987,8 +1103,14 @@ export default function ConversationScreen() {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Ionicons
-                    name={editing ? "checkmark" : "send"}
-                    size={23}
+                    name={
+                      editing
+                        ? "checkmark"
+                        : composer.trim() || photo
+                          ? "send"
+                          : "mic"
+                    }
+                    size={24}
                     color="#FFFFFF"
                   />
                 )}
@@ -1224,34 +1346,46 @@ const styles = StyleSheet.create({
   },
   composer: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    paddingTop: 4,
-    paddingHorizontal: 6,
-    gap: 6,
+    alignItems: "center",
+    paddingTop: 7,
+    paddingHorizontal: 7,
+    gap: 4,
   },
   inputPill: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "flex-end",
-    borderRadius: 25,
-    paddingRight: 2,
+    alignItems: "center",
+    borderRadius: 27,
+    paddingHorizontal: 3,
   },
   input: {
     flex: 1,
     minWidth: 0,
-    minHeight: 46,
+    minHeight: 48,
     maxHeight: 140,
     borderRadius: 22,
-    paddingHorizontal: 15,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingHorizontal: Platform.OS === "android" ? 6 : 13,
+    paddingTop: 13,
+    paddingBottom: 11,
     fontSize: 16,
     lineHeight: 22,
   },
   send: {
-    width: 46,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  composerSideButton: {
+    width: 42,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inputAction: {
+    width: 39,
     height: 46,
-    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
   },
