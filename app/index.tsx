@@ -33,7 +33,8 @@ export default function AppEntryScreen() {
 
     try {
       const completed = await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY);
-      if (completed === "true") {
+      const userCache = await AsyncStorage.getItem("@eventis_user_cache");
+      if (completed === "true" && userCache) {
         router.replace("/(tabs)");
       } else {
         router.replace("/onboarding" as any);

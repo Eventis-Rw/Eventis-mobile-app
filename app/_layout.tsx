@@ -57,8 +57,15 @@ function RootLayoutNav() {
   useEffect(() => {
     if (isLoading) return;
     const inAuthGroup = segments[0] === "auth";
+    const inSplash =
+      !segments[0] ||
+      (segments[0] as string) === "presentation-splash" ||
+      (segments[0] as string) === "onboarding";
+
     if (isAuthenticated && inAuthGroup) {
       router.replace("/(tabs)" as any);
+    } else if (!isAuthenticated && !inAuthGroup && !inSplash) {
+      router.replace("/onboarding" as any);
     }
   }, [isAuthenticated, isLoading, segments, router]);
 

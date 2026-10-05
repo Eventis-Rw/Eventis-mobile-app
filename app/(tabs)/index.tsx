@@ -4,6 +4,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import {
   Image,
   Linking,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -15,10 +16,10 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
-import { BannerCarousel } from "@/components/BannerCarousel";
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
 import { EventCardSkeleton } from "@/components/SkeletonLoader";
+import { StoriesBar } from "@/components/StoriesBar";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
@@ -36,49 +37,21 @@ export default function HomeScreen() {
   const { events, categories, isLoading, error, refreshEvents } = useEvents();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
+  const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const location = useLocationPermission();
-  // null until the user picks a view, so the default can follow the permission.
-  const [chosenView, setChosenView] = useState<EventsView | null>(null);
-  const view: EventsView =
-    chosenView ?? (location.status === "granted" ? "nearby" : "all");
 
   // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
   const showSkeletons = isLoading && !refreshing;
-  // Hold the list until the permission is known so it doesn't jump from All to Nearby.
-  const showListSkeletons = showSkeletons || location.status === "checking";
 
-  const featured = useMemo(
-    () => events.filter((e) => e.isFeatured || e.isSponsored),
-    [events]
-  );
-
-  // "All" skips events already shown in Featured so the page doesn't repeat them.
-  // Nearby orders by the `distance` each event carries from the events data, closest first.
   const filtered = useMemo(() => {
-    const inCategory =
+    const list =
       selectedCategory === "All"
-        ? events.filter((e) => !e.isFeatured && !e.isSponsored)
+        ? events
         : events.filter((e) => e.category === selectedCategory);
-    return view === "nearby"
-      ? [...inCategory].sort((a, b) => a.distance - b.distance)
-      : inCategory;
-  }, [events, selectedCategory, view]);
-
-  const { status: locationStatus, request: requestLocation } = location;
-
-  const selectView = useCallback(
-    (next: EventsView) => {
-      setChosenView(next);
-      // Choosing Nearby is an explicit ask, so it may show the OS dialog if it hasn't been answered.
-      if (next === "nearby" && locationStatus === "undetermined") requestLocation();
-    },
-    [locationStatus, requestLocation]
-  );
-
-  const allowLocation = useCallback(async () => {
-    if (await requestLocation()) setChosenView("nearby");
-  }, [requestLocation]);
-
+    return location.status === "granted"
+      ? [...list].sort((a, b) => a.distance - b.distance)
+      : list;
+  }, [events, selectedCategory, location.status]);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refreshEvents();
@@ -116,82 +89,52 @@ export default function HomeScreen() {
 
     return (
       <>
-        {/* Featured / Sponsored */}
-        {(showSkeletons || featured.length > 0) && (
-          <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(100).springify() : undefined}>
-            <SectionHeader title="Featured" subtitle="Handpicked by Eventis" />
-            <BannerCarousel events={featured} loading={showSkeletons} inset={PAGE_PADDING} />
-          </Animated.View>
-        )}
+        {/* Instagram-style Stories Bar replacing Featured and Nearby */}
+        <StoriesBar
+          user={user}
+          onOpenBecomeOrganizer={() => setShowOrganizerModal(true)}
+        />
 
-        {/* Browse: the category filter sits with the list it filters */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(240).springify() : undefined}
-          style={styles.section}
+        {/* Category filters */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[styles.bleed, styles.categoryScroll]}
+          contentContainerStyle={styles.bleedContent}
         >
-          <View style={[styles.sectionHeader, styles.browseHeader]}>
-            <ViewToggle value={view} onChange={selectView} />
-            {showListSkeletons ? null : (
-              <Text style={[styles.countText, { color: colors.mutedForeground }]}>
-                {filtered.length} {filtered.length === 1 ? "event" : "events"}
-              </Text>
-            )}
+          {categories.map((cat) => (
+            <CategoryPill
+              key={cat}
+              category={cat}
+              isSelected={selectedCategory === cat}
+              onPress={setSelectedCategory}
+            />
+          ))}
+        </ScrollView>
+
+
+        {/* Instagram-style Posts Feed */}
+        {showSkeletons ? (
+          <View style={styles.feedContainer}>
+            <EventCardSkeleton inset={PAGE_PADDING} />
+            <EventCardSkeleton inset={PAGE_PADDING} />
           </View>
-
-          {locationStatus === "undetermined" && (
-            <LocationPrompt onAllow={allowLocation} onDismiss={location.decline} />
-          )}
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={[styles.bleed, styles.categoryScroll]}
-            contentContainerStyle={styles.bleedContent}
-          >
-            {categories.map((cat) => (
-              <CategoryPill
-                key={cat}
-                category={cat}
-                isSelected={selectedCategory === cat}
-                onPress={setSelectedCategory}
-              />
+        ) : filtered.length ? (
+          <View style={styles.feedContainer}>
+            {filtered.map((event) => (
+              <EventCard key={event.id} event={event} variant="feed" inset={PAGE_PADDING} />
             ))}
-          </ScrollView>
-
-          {showListSkeletons ? (
-            <View style={styles.bleed}>
-              <EventCardSkeleton inset={PAGE_PADDING} />
-              <EventCardSkeleton inset={PAGE_PADDING} />
-            </View>
-          ) : view === "nearby" && locationStatus === "denied" ? (
-            <StateMessage
-              icon="navigate-outline"
-              title="Location is off"
-              text="Allow location access to see events near you, or browse all events instead."
-              {...(location.canAskAgain
-                ? { actionLabel: "Allow location", onAction: allowLocation }
-                : Platform.OS !== "web"
-                ? { actionLabel: "Open settings", onAction: () => Linking.openSettings() }
-                : { actionLabel: "Show all events", onAction: () => selectView("all") })}
-              compact
-            />
-          ) : filtered.length ? (
-            <View style={styles.bleed}>
-              {filtered.map((event) => (
-                <EventCard key={event.id} event={event} variant="feed" inset={PAGE_PADDING} />
-              ))}
-            </View>
-          ) : (
-            <StateMessage
-              icon="search-outline"
-              title={`No ${selectedCategory} events`}
-              text="Try another category or browse everything."
-              actionLabel="Show all events"
-              onAction={() => setSelectedCategory("All")}
-              compact
-            />
-          )}
-        </Animated.View>
+          </View>
+        ) : (
+          <StateMessage
+            icon="search-outline"
+            title={`No ${selectedCategory} events`}
+            text="Try another category or browse everything."
+            actionLabel="Show all events"
+            onAction={() => setSelectedCategory("All")}
+            compact
+          />
+        )}
       </>
     );
   };
@@ -232,17 +175,24 @@ export default function HomeScreen() {
                 <Ionicons name="person" size={20} color="#FFFFFF" />
               )}
             </Pressable>
-            <View style={styles.greetingBlock}>
-              <Text style={[styles.greeting, { color: colors.mutedForeground }]}>
-                Good{getTimeGreeting()},
+            <Pressable
+              onPress={() =>
+                user?.isBusinessAccount
+                  ? router.push("/business/register" as any)
+                  : setShowOrganizerModal(true)
+              }
+              style={[
+                styles.becomeOrganizerHeaderBtn,
+                { backgroundColor: colors.primary, borderRadius: 999 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Become an organizer"
+            >
+              <Ionicons name="sparkles" size={13} color="#FFFFFF" />
+              <Text style={styles.becomeOrganizerHeaderBtnText}>
+                {user?.isBusinessAccount ? "Dashboard" : "Become an organizer"}
               </Text>
-              <Text
-                style={[styles.userName, { color: colors.foreground }]}
-                numberOfLines={1}
-              >
-                {user?.username ?? "Explorer"}
-              </Text>
-            </View>
+            </Pressable>
           </View>
           <View style={styles.headerActions}>
             <Pressable
@@ -290,6 +240,55 @@ export default function HomeScreen() {
       >
         {renderBody()}
       </ScrollView>
+
+      {/* Organiser Modal */}
+      <Modal
+        visible={showOrganizerModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowOrganizerModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowOrganizerModal(false)}
+        >
+          <Pressable
+            style={[styles.modalSheet, { backgroundColor: colors.card }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+            <View style={[styles.modalIconWrap, { backgroundColor: colors.primary }]}>
+              <Ionicons name="megaphone" size={32} color="#fff" />
+            </View>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+              Become an organizer
+            </Text>
+            <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>
+              List your events, post live stories, manage bookings, and reach thousands of people near you. It is free to get started.
+            </Text>
+            <View style={styles.modalFeatures}>
+              {["Create and manage events", "Post live stories for your audience", "View attendee insights"].map((f) => (
+                <View key={f} style={styles.modalFeatureRow}>
+                  <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                  <Text style={[styles.modalFeatureText, { color: colors.foreground }]}>{f}</Text>
+                </View>
+              ))}
+            </View>
+            <Pressable
+              style={[styles.modalCta, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                setShowOrganizerModal(false);
+                router.push("/business/register" as any);
+              }}
+            >
+              <Text style={styles.modalCtaText}>Get Started as Organizer</Text>
+            </Pressable>
+            <Pressable onPress={() => setShowOrganizerModal(false)}>
+              <Text style={[styles.modalDismiss, { color: colors.mutedForeground }]}>Maybe later</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -442,13 +441,6 @@ function StateMessage({
   );
 }
 
-function getTimeGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return " morning";
-  if (h < 17) return " afternoon";
-  return " evening";
-}
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -471,8 +463,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  greetingBlock: {
-    flexShrink: 1,
+  becomeOrganizerHeaderBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+  becomeOrganizerHeaderBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: "#FFFFFF",
   },
   avatarBtn: {
     width: 44,
@@ -491,15 +493,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: "Inter_700Bold",
     color: "#FFFFFF",
-  },
-  greeting: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-  userName: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    marginTop: 1,
   },
   headerActions: {
     flexDirection: "row",
@@ -666,5 +659,74 @@ const styles = StyleSheet.create({
   stateBtnText: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
+  },
+  feedContainer: {
+    marginTop: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    gap: 12,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 8,
+  },
+  modalIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  modalBody: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  modalFeatures: {
+    alignSelf: "stretch",
+    gap: 10,
+    marginVertical: 4,
+  },
+  modalFeatureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  modalFeatureText: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+  },
+  modalCta: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    paddingVertical: 16,
+    borderRadius: 999,
+  },
+  modalCtaText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+  },
+  modalDismiss: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    paddingVertical: 8,
   },
 });
