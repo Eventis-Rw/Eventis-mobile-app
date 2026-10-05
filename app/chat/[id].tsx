@@ -35,7 +35,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ChatActionSheet, type ChatAction } from "@/components/ChatActionSheet";
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
-import { ChatPopupMenu } from "@/components/ChatPopupMenu";
+import {
+  ChatPopupMenu,
+  type ChatMenuAnchor,
+} from "@/components/ChatPopupMenu";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
 import { useChatBottomInset } from "@/hooks/useChatBottomInset";
@@ -266,6 +269,7 @@ export default function ConversationScreen() {
     contact?.isInAddressBook === false ? contact.phone : contact?.name;
   const allMessages = chat.messagesByConversation[id] ?? [];
   const list = useRef<FlatList<ChatMessage>>(null);
+  const menuButton = useRef<View>(null);
   const jumpRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jumpAttempts = useRef(0);
   const nearBottom = useRef(true);
@@ -279,6 +283,7 @@ export default function ConversationScreen() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [menu, setMenu] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<ChatMenuAnchor>();
   const [confirm, setConfirm] = useState<{
     title: string;
     description: string;
@@ -335,6 +340,16 @@ export default function ConversationScreen() {
   const { loadMessages, markConversationRead, setActiveConversation } = chat;
   const back = () =>
     router.canGoBack() ? router.back() : router.replace("/chat");
+  const openMenu = () => {
+    if (!menuButton.current) {
+      setMenu(true);
+      return;
+    }
+    menuButton.current.measureInWindow((x, y, width, height) => {
+      setMenuAnchor({ x, y, width, height });
+      setMenu(true);
+    });
+  };
 
   const run = async (action: () => Promise<unknown>) => {
     setError(null);
@@ -673,7 +688,8 @@ export default function ConversationScreen() {
             />
           </Pressable>
           <Pressable
-            onPress={() => setMenu(true)}
+            ref={menuButton}
+            onPress={openMenu}
             accessibilityRole="button"
             accessibilityLabel="Conversation options"
             style={styles.iconButton}
@@ -1127,6 +1143,8 @@ export default function ConversationScreen() {
       />
       <ChatPopupMenu
         visible={menu}
+        anchor={menuAnchor}
+        align="right"
         actions={[
           {
             label: "Contact details",

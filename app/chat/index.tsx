@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -12,7 +13,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
 import { ChatListRow } from "@/components/ChatListRow";
-import { ChatPopupMenu } from "@/components/ChatPopupMenu";
+import {
+  ChatPopupMenu,
+  type ChatMenuAnchor,
+} from "@/components/ChatPopupMenu";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
 import type { ChatConversation } from "@/services/chatService";
@@ -22,12 +26,15 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const chat = useChat();
+  const menuButton = useRef<View>(null);
+  const appleHeader = Platform.OS !== "android";
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [options, setOptions] = useState<ChatConversation | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ChatConversation | null>(
     null,
   );
   const [about, setAbout] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<ChatMenuAnchor>();
   const [actionError, setActionError] = useState<string | null>(null);
   const run = async (action: () => Promise<unknown>) => {
     setActionError(null);
@@ -43,40 +50,104 @@ export default function ChatScreen() {
     (item) => !unreadOnly || item.unreadCount > 0,
   );
   const search = () => router.push("/chat/search");
+  const back = () =>
+    router.canGoBack() ? router.back() : router.replace("/(tabs)");
+  const openMenu = () => {
+    if (!menuButton.current) {
+      setAbout(true);
+      return;
+    }
+    menuButton.current.measureInWindow((x, y, width, height) => {
+      setMenuAnchor({ x, y, width, height });
+      setAbout(true);
+    });
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={styles.workspace}>
         <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
-          <View style={styles.topBar}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Return to Eventis"
-              style={styles.icon}
-              onPress={() =>
-                router.canGoBack() ? router.back() : router.replace("/(tabs)")
-              }
-            >
-              <Ionicons
-                name="chevron-back"
-                size={27}
-                color={colors.foreground}
-              />
-            </Pressable>
-            <Text style={[styles.title, { color: colors.foreground }]}>Chats</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="About demo chat"
-              onPress={() => setAbout(true)}
-              style={styles.icon}
-            >
-              <Ionicons
-                name="ellipsis-vertical"
-                size={23}
-                color={colors.foreground}
-              />
-            </Pressable>
-          </View>
+          {appleHeader ? (
+            <>
+              <View style={styles.appleActions}>
+                <Pressable
+                  ref={menuButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Chat options"
+                  onPress={openMenu}
+                  style={[
+                    styles.appleCircle,
+                    { backgroundColor: colors.secondary },
+                  ]}
+                >
+                  <Ionicons
+                    name="ellipsis-horizontal"
+                    size={25}
+                    color={colors.foreground}
+                  />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="New chat"
+                  onPress={search}
+                  style={[
+                    styles.appleCircle,
+                    { backgroundColor: colors.primary },
+                  ]}
+                >
+                  <Ionicons name="add" size={32} color="#FFFFFF" />
+                </Pressable>
+              </View>
+              <View style={styles.appleTitleRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Return to Eventis"
+                  onPress={back}
+                  style={styles.appleBack}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={29}
+                    color={colors.foreground}
+                  />
+                </Pressable>
+                <Text style={[styles.appleTitle, { color: colors.foreground }]}>
+                  Chats
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.topBar}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Return to Eventis"
+                style={styles.icon}
+                onPress={back}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={27}
+                  color={colors.foreground}
+                />
+              </Pressable>
+              <Text style={[styles.title, { color: colors.foreground }]}>
+                Chats
+              </Text>
+              <Pressable
+                ref={menuButton}
+                accessibilityRole="button"
+                accessibilityLabel="Chat options"
+                onPress={openMenu}
+                style={styles.icon}
+              >
+                <Ionicons
+                  name="ellipsis-vertical"
+                  size={23}
+                  color={colors.foreground}
+                />
+              </Pressable>
+            </View>
+          )}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Search contacts and messages"
@@ -213,20 +284,24 @@ export default function ChatScreen() {
             }
           />
         )}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="New chat"
-          onPress={search}
-          style={[
-            styles.newChat,
-            { backgroundColor: colors.primary, bottom: insets.bottom + 18 },
-          ]}
-        >
-          <Ionicons name="add" size={32} color="#FFFFFF" />
-        </Pressable>
+        {appleHeader ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="New chat"
+            onPress={search}
+            style={[
+              styles.newChat,
+              { backgroundColor: colors.primary, bottom: insets.bottom + 18 },
+            ]}
+          >
+            <Ionicons name="add" size={32} color="#FFFFFF" />
+          </Pressable>
+        )}
       </View>
       <ChatPopupMenu
         visible={about}
+        anchor={menuAnchor}
+        align={appleHeader ? "left" : "right"}
         actions={[
           { label: "New chat", icon: "chatbubble-outline", onPress: search },
           { label: "Search", icon: "search-outline", onPress: search },
@@ -289,6 +364,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 6,
+  },
+  appleActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
+  appleCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  appleTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  appleBack: {
+    width: 38,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  appleTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 38,
+    lineHeight: 44,
   },
   icon: {
     width: 46,
