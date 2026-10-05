@@ -20,6 +20,7 @@ import Animated, {
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/events";
+import { shareEvent } from "@/utils/shareEvent";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -84,12 +85,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
 
   const handleNativeShare = useCallback(async () => {
     setShowShareModal(false);
-    try {
-      await Share.share({
-        title: event.title,
-        message: `Check out ${event.title} in ${event.city} on Eventis! https://eventis.app/events/${event.id}`,
-      });
-    } catch {}
+    await shareEvent(event);
   }, [event]);
 
   const handleShareToChat = useCallback(() => {
@@ -545,6 +541,11 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: 10,
   },
+  featuredBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -555,11 +556,6 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.8)",
     fontFamily: "Inter_400Regular",
   },
-  featuredBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   attendeeRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -569,16 +565,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "rgba(255,255,255,0.7)",
     fontFamily: "Inter_400Regular",
-  },
-  pricePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  priceText: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
   },
   compact: {
     width: 160,
@@ -621,10 +607,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 4,
-  },
-  compactPrice: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
   },
   instaCard: {
     borderRadius: 20,
@@ -791,14 +773,6 @@ const styles = StyleSheet.create({
   overlay2: {
     ...StyleSheet.absoluteFill,
     opacity: 0.25,
-  },
-  pricePill2: {
-    position: "absolute",
-    bottom: 10,
-    left: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
   },
   standardContent: {
     padding: 14,

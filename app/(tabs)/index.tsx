@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -22,8 +23,11 @@ import { StoriesBar } from "@/components/StoriesBar";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
+import { useLocationPermission } from "@/hooks/useLocationPermission";
 
 const PAGE_PADDING = 20;
+
+type EventsView = "nearby" | "all";
 
 export default function HomeScreen() {
   const colors = useColors();
@@ -34,18 +38,20 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
+  const location = useLocationPermission();
 
   // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
   const showSkeletons = isLoading && !refreshing;
 
-  const filtered = useMemo(
-    () =>
+  const filtered = useMemo(() => {
+    const list =
       selectedCategory === "All"
         ? events
-        : events.filter((e) => e.category === selectedCategory),
-    [events, selectedCategory]
-  );
-
+        : events.filter((e) => e.category === selectedCategory);
+    return location.status === "granted"
+      ? [...list].sort((a, b) => a.distance - b.distance)
+      : list;
+  }, [events, selectedCategory, location.status]);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refreshEvents();
@@ -105,6 +111,7 @@ export default function HomeScreen() {
             />
           ))}
         </ScrollView>
+
 
         {/* Instagram-style Posts Feed */}
         {showSkeletons ? (
@@ -313,6 +320,93 @@ function SectionHeader({
   );
 }
 
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: EventsView;
+  onChange: (view: EventsView) => void;
+}) {
+  const colors = useColors();
+  const options: {
+    view: EventsView;
+    label: string;
+    icon: React.ComponentProps<typeof Ionicons>["name"];
+  }[] = [
+    { view: "nearby", label: "Nearby", icon: "navigate-outline" },
+    { view: "all", label: "All Events", icon: "grid-outline" },
+  ];
+  return (
+    <View
+      style={[styles.toggle, { backgroundColor: colors.card, borderColor: colors.border }]}
+      accessibilityRole="tablist"
+    >
+      {options.map((option) => {
+        const selected = value === option.view;
+        const tint = selected ? colors.primaryForeground : colors.mutedForeground;
+        return (
+          <Pressable
+            key={option.view}
+            style={[styles.toggleOption, selected && { backgroundColor: colors.primary }]}
+            onPress={() => onChange(option.view)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+          >
+            <Ionicons name={option.icon} size={14} color={tint} />
+            <Text
+              style={[
+                styles.toggleText,
+                { color: tint, fontFamily: selected ? "Inter_600SemiBold" : "Inter_500Medium" },
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function LocationPrompt({
+  onAllow,
+  onDismiss,
+}: {
+  onAllow: () => void;
+  onDismiss: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <View style={[styles.prompt, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.promptBody}>
+        <Ionicons name="location-outline" size={20} color={colors.primary} />
+        <View style={styles.promptCopy}>
+          <Text style={[styles.promptTitle, { color: colors.foreground }]}>
+            See events near you
+          </Text>
+          <Text style={[styles.promptText, { color: colors.mutedForeground }]}>
+            Eventis uses your location to show events happening close to you.
+          </Text>
+        </View>
+      </View>
+      <View style={styles.promptActions}>
+        <Pressable onPress={onDismiss} accessibilityRole="button" style={styles.promptBtn}>
+          <Text style={[styles.promptBtnText, { color: colors.mutedForeground }]}>Not now</Text>
+        </Pressable>
+        <Pressable
+          onPress={onAllow}
+          accessibilityRole="button"
+          style={[styles.promptBtn, { backgroundColor: colors.primary }]}
+        >
+          <Text style={[styles.promptBtnText, { color: colors.primaryForeground }]}>
+            Allow location
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function StateMessage({
   icon,
   title,
@@ -462,6 +556,65 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
+  },
+  browseHeader: {
+    alignItems: "center",
+  },
+  toggle: {
+    flexDirection: "row",
+    padding: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  toggleOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 9,
+  },
+  toggleText: {
+    fontSize: 13,
+  },
+  prompt: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    gap: 12,
+    marginBottom: 16,
+  },
+  promptBody: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  promptCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  promptTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  promptText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 19,
+  },
+  promptActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  promptBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  promptBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
   countText: {
     fontSize: 13,

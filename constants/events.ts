@@ -35,6 +35,8 @@ export interface Event {
   reviewCount: number;
   /** Not in the events API yet; cards hide the count when absent. */
   viewCount?: number;
+  /** Organizer notes (dress code, entry rules, what to bring), one per item. Not in the events API yet. */
+  instructions?: string[];
 }
 
 export interface Organizer {
