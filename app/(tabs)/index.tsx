@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Image,
+  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -21,8 +22,11 @@ import { EventCardSkeleton } from "@/components/SkeletonLoader";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
+import { useLocationPermission } from "@/hooks/useLocationPermission";
 
 const PAGE_PADDING = 20;
+
+type EventsView = "nearby" | "all";
 
 export default function HomeScreen() {
   const colors = useColors();
@@ -32,9 +36,16 @@ export default function HomeScreen() {
   const { events, categories, isLoading, error, refreshEvents } = useEvents();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
+  const location = useLocationPermission();
+  // null until the user picks a view, so the default can follow the permission.
+  const [chosenView, setChosenView] = useState<EventsView | null>(null);
+  const view: EventsView =
+    chosenView ?? (location.status === "granted" ? "nearby" : "all");
 
   // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
   const showSkeletons = isLoading && !refreshing;
+  // Hold the list until the permission is known so it doesn't jump from All to Nearby.
+  const showListSkeletons = showSkeletons || location.status === "checking";
 
   const featured = useMemo(
     () => events.filter((e) => e.isFeatured || e.isSponsored),
@@ -42,18 +53,31 @@ export default function HomeScreen() {
   );
 
   // "All" skips events already shown in Featured so the page doesn't repeat them.
-  const filtered = useMemo(
-    () =>
+  // Nearby orders by the `distance` each event carries from the events data, closest first.
+  const filtered = useMemo(() => {
+    const inCategory =
       selectedCategory === "All"
         ? events.filter((e) => !e.isFeatured && !e.isSponsored)
-        : events.filter((e) => e.category === selectedCategory),
-    [events, selectedCategory]
+        : events.filter((e) => e.category === selectedCategory);
+    return view === "nearby"
+      ? [...inCategory].sort((a, b) => a.distance - b.distance)
+      : inCategory;
+  }, [events, selectedCategory, view]);
+
+  const { status: locationStatus, request: requestLocation } = location;
+
+  const selectView = useCallback(
+    (next: EventsView) => {
+      setChosenView(next);
+      // Choosing Nearby is an explicit ask, so it may show the OS dialog if it hasn't been answered.
+      if (next === "nearby" && locationStatus === "undetermined") requestLocation();
+    },
+    [locationStatus, requestLocation]
   );
 
-  const nearby = useMemo(
-    () => [...events].sort((a, b) => a.distance - b.distance).slice(0, 6),
-    [events]
-  );
+  const allowLocation = useCallback(async () => {
+    if (await requestLocation()) setChosenView("nearby");
+  }, [requestLocation]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -100,41 +124,24 @@ export default function HomeScreen() {
           </Animated.View>
         )}
 
-        {/* Nearby events */}
-        {!showSkeletons && nearby.length > 0 && (
-          <Animated.View
-            entering={Platform.OS !== "web" ? FadeInDown.delay(180).springify() : undefined}
-            style={styles.section}
-          >
-            <SectionHeader title="Nearby" subtitle="Events close to you" />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.bleed}
-              contentContainerStyle={styles.bleedContent}
-            >
-              {nearby.map((event) => (
-                <EventCard key={event.id} event={event} variant="compact" />
-              ))}
-            </ScrollView>
-          </Animated.View>
-        )}
-
         {/* Browse: the category filter sits with the list it filters */}
         <Animated.View
           entering={Platform.OS !== "web" ? FadeInDown.delay(240).springify() : undefined}
           style={styles.section}
         >
-          <SectionHeader
-            title={selectedCategory === "All" ? "All Events" : selectedCategory}
-            trailing={
-              showSkeletons ? undefined : (
-                <Text style={[styles.countText, { color: colors.mutedForeground }]}>
-                  {filtered.length} {filtered.length === 1 ? "event" : "events"}
-                </Text>
-              )
-            }
-          />
+          <View style={[styles.sectionHeader, styles.browseHeader]}>
+            <ViewToggle value={view} onChange={selectView} />
+            {showListSkeletons ? null : (
+              <Text style={[styles.countText, { color: colors.mutedForeground }]}>
+                {filtered.length} {filtered.length === 1 ? "event" : "events"}
+              </Text>
+            )}
+          </View>
+
+          {locationStatus === "undetermined" && (
+            <LocationPrompt onAllow={allowLocation} onDismiss={location.decline} />
+          )}
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -151,11 +158,23 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
 
-          {showSkeletons ? (
+          {showListSkeletons ? (
             <View style={styles.bleed}>
               <EventCardSkeleton inset={PAGE_PADDING} />
               <EventCardSkeleton inset={PAGE_PADDING} />
             </View>
+          ) : view === "nearby" && locationStatus === "denied" ? (
+            <StateMessage
+              icon="navigate-outline"
+              title="Location is off"
+              text="Allow location access to see events near you, or browse all events instead."
+              {...(location.canAskAgain
+                ? { actionLabel: "Allow location", onAction: allowLocation }
+                : Platform.OS !== "web"
+                ? { actionLabel: "Open settings", onAction: () => Linking.openSettings() }
+                : { actionLabel: "Show all events", onAction: () => selectView("all") })}
+              compact
+            />
           ) : filtered.length ? (
             <View style={styles.bleed}>
               {filtered.map((event) => (
@@ -298,6 +317,93 @@ function SectionHeader({
         ) : null}
       </View>
       {trailing}
+    </View>
+  );
+}
+
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: EventsView;
+  onChange: (view: EventsView) => void;
+}) {
+  const colors = useColors();
+  const options: {
+    view: EventsView;
+    label: string;
+    icon: React.ComponentProps<typeof Ionicons>["name"];
+  }[] = [
+    { view: "nearby", label: "Nearby", icon: "navigate-outline" },
+    { view: "all", label: "All Events", icon: "grid-outline" },
+  ];
+  return (
+    <View
+      style={[styles.toggle, { backgroundColor: colors.card, borderColor: colors.border }]}
+      accessibilityRole="tablist"
+    >
+      {options.map((option) => {
+        const selected = value === option.view;
+        const tint = selected ? colors.primaryForeground : colors.mutedForeground;
+        return (
+          <Pressable
+            key={option.view}
+            style={[styles.toggleOption, selected && { backgroundColor: colors.primary }]}
+            onPress={() => onChange(option.view)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+          >
+            <Ionicons name={option.icon} size={14} color={tint} />
+            <Text
+              style={[
+                styles.toggleText,
+                { color: tint, fontFamily: selected ? "Inter_600SemiBold" : "Inter_500Medium" },
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function LocationPrompt({
+  onAllow,
+  onDismiss,
+}: {
+  onAllow: () => void;
+  onDismiss: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <View style={[styles.prompt, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.promptBody}>
+        <Ionicons name="location-outline" size={20} color={colors.primary} />
+        <View style={styles.promptCopy}>
+          <Text style={[styles.promptTitle, { color: colors.foreground }]}>
+            See events near you
+          </Text>
+          <Text style={[styles.promptText, { color: colors.mutedForeground }]}>
+            Eventis uses your location to show events happening close to you.
+          </Text>
+        </View>
+      </View>
+      <View style={styles.promptActions}>
+        <Pressable onPress={onDismiss} accessibilityRole="button" style={styles.promptBtn}>
+          <Text style={[styles.promptBtnText, { color: colors.mutedForeground }]}>Not now</Text>
+        </Pressable>
+        <Pressable
+          onPress={onAllow}
+          accessibilityRole="button"
+          style={[styles.promptBtn, { backgroundColor: colors.primary }]}
+        >
+          <Text style={[styles.promptBtnText, { color: colors.primaryForeground }]}>
+            Allow location
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -457,6 +563,65 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
+  },
+  browseHeader: {
+    alignItems: "center",
+  },
+  toggle: {
+    flexDirection: "row",
+    padding: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  toggleOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 9,
+  },
+  toggleText: {
+    fontSize: 13,
+  },
+  prompt: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    gap: 12,
+    marginBottom: 16,
+  },
+  promptBody: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  promptCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  promptTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  promptText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 19,
+  },
+  promptActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  promptBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  promptBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
   countText: {
     fontSize: 13,

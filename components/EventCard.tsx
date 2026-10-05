@@ -18,6 +18,7 @@ import Animated, {
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/events";
+import { shareEvent } from "@/utils/shareEvent";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -72,10 +73,13 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
     [toggleSaveEvent, event.id]
   );
 
-  const priceLabel =
-    event.price === 0
-      ? "Free"
-      : `${event.currency === "GBP" ? "£" : "$"}${event.price}`;
+  const handleShare = useCallback(
+    (e: any) => {
+      e.stopPropagation();
+      shareEvent(event);
+    },
+    [event]
+  );
 
   if (variant === "featured") {
     return (
@@ -138,32 +142,19 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
                 </Text>
               </View>
             </View>
-            <View style={styles.featuredBottom}>
-              <View style={styles.featuredStats}>
+            <View style={styles.featuredStats}>
+              <View style={styles.attendeeRow}>
+                <Ionicons name="people-outline" size={13} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.attendeeText}>
+                  {formatCount(event.attendees)} attending
+                </Text>
+              </View>
+              {event.viewCount != null && (
                 <View style={styles.attendeeRow}>
-                  <Ionicons name="people-outline" size={13} color="rgba(255,255,255,0.7)" />
-                  <Text style={styles.attendeeText}>
-                    {formatCount(event.attendees)} attending
-                  </Text>
+                  <Ionicons name="eye-outline" size={13} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.attendeeText}>{formatCount(event.viewCount)}</Text>
                 </View>
-                {event.viewCount != null && (
-                  <View style={styles.attendeeRow}>
-                    <Ionicons name="eye-outline" size={13} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.attendeeText}>{formatCount(event.viewCount)}</Text>
-                  </View>
-                )}
-              </View>
-              <View
-                style={[
-                  styles.pricePill,
-                  {
-                    backgroundColor:
-                      event.price === 0 ? colors.success : colors.primary,
-                  },
-                ]}
-              >
-                <Text style={styles.priceText}>{priceLabel}</Text>
-              </View>
+              )}
             </View>
           </View>
         </ImageBackground>
@@ -206,24 +197,14 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
           >
             {event.location}, {event.city}
           </Text>
-          <View style={styles.compactFooter}>
-            <Text
-              style={[
-                styles.compactPrice,
-                { color: event.price === 0 ? colors.success : colors.accent },
-              ]}
-            >
-              {priceLabel}
-            </Text>
-            {event.viewCount != null && (
-              <View style={styles.ratingRow}>
-                <Ionicons name="eye-outline" size={12} color={colors.mutedForeground} />
-                <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
-                  {formatCount(event.viewCount)}
-                </Text>
-              </View>
-            )}
-          </View>
+          {event.viewCount != null && (
+            <View style={[styles.compactFooter, styles.ratingRow]}>
+              <Ionicons name="eye-outline" size={12} color={colors.mutedForeground} />
+              <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
+                {formatCount(event.viewCount)}
+              </Text>
+            </View>
+          )}
         </View>
       </AnimatedPressable>
     );
@@ -264,15 +245,6 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
             color={isSaved ? colors.primary : colors.foreground}
           />
         </Pressable>
-        <View
-          style={[
-            styles.pricePill2,
-            isFeed && { bottom: 12, left: inset },
-            { backgroundColor: event.price === 0 ? colors.success : colors.primary },
-          ]}
-        >
-          <Text style={styles.priceText}>{priceLabel}</Text>
-        </View>
       </ImageBackground>
       <View
         style={[
@@ -295,12 +267,14 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
                 </Text>
               </View>
             )}
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={12} color={colors.accent} />
-              <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
-                {event.rating}
-              </Text>
-            </View>
+            <Pressable
+              onPress={handleShare}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={`Share ${event.title}`}
+            >
+              <Ionicons name="share-outline" size={16} color={colors.mutedForeground} />
+            </Pressable>
           </View>
         </View>
         <Text
@@ -443,11 +417,6 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.8)",
     fontFamily: "Inter_400Regular",
   },
-  featuredBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   attendeeRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -457,16 +426,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "rgba(255,255,255,0.7)",
     fontFamily: "Inter_400Regular",
-  },
-  pricePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  priceText: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
   },
   compact: {
     width: 160,
@@ -510,10 +469,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 4,
   },
-  compactPrice: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-  },
   standard: {
     borderRadius: 16,
     overflow: "hidden",
@@ -541,14 +496,6 @@ const styles = StyleSheet.create({
   overlay2: {
     ...StyleSheet.absoluteFill,
     opacity: 0.25,
-  },
-  pricePill2: {
-    position: "absolute",
-    bottom: 10,
-    left: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
   },
   standardContent: {
     padding: 14,
