@@ -14,6 +14,7 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { Logo } from "@/components/Logo";
+import { ExploreDemoButton } from "@/components/ExploreDemoButton";
 import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
 import { useColors } from "@/hooks/useColors";
 
@@ -177,6 +178,7 @@ export default function RegisterScreen() {
         <Animated.View
           entering={Platform.OS !== "web" ? FadeInDown.delay(320).springify() : undefined}
         >
+          <ExploreDemoButton />
           <View style={styles.footerRow}>
             <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
               Already have an account?

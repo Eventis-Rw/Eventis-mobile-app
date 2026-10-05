@@ -21,20 +21,9 @@ import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/events";
 import { shareEvent } from "@/utils/shareEvent";
+import { getEventImage, POSTER_RATIOS } from "@/constants/eventImages";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-const EVENT_IMAGES: Record<string, number> = {
-  concert: require("../assets/images/banner-concert.png"),
-  tech: require("../assets/images/banner-tech.png"),
-  food: require("../assets/images/banner-food.png"),
-};
-
-// Mock events use bundled image keys; API events are expected to send a URL.
-function getEventImage(image: string) {
-  if (/^https?:\/\//.test(image)) return { uri: image };
-  return EVENT_IMAGES[image] ?? EVENT_IMAGES["concert"];
-}
 
 interface EventCardProps {
   event: Event;
@@ -365,7 +354,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
         </View>
 
         {/* Post Media: Full-width event image */}
-        <View style={styles.instaMediaWrap}>
+        <View style={[styles.instaMediaWrap, POSTER_RATIOS[event.image] ? { aspectRatio: POSTER_RATIOS[event.image] } : null]}>
           <ImageBackground
             source={getEventImage(event.image)}
             style={styles.instaMediaImage}
