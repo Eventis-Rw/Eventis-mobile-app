@@ -33,8 +33,6 @@ export default function SearchScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
-  const headerTop = Platform.OS === "web" ? 67 : insets.top;
-
   const results = useMemo(() => {
     let evts = [...events];
     if (query.trim()) {
@@ -80,7 +78,7 @@ export default function SearchScreen() {
         style={[
           styles.header,
           {
-            paddingTop: headerTop + 8,
+            paddingTop: insets.top + 8,
             backgroundColor: colors.background,
             borderBottomColor: colors.border,
           },
@@ -224,7 +222,7 @@ export default function SearchScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.list,
-          { paddingBottom: Platform.OS === "web" ? 84 + 20 : 100 },
+          { paddingBottom: insets.bottom + 20 },
         ]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={

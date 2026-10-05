@@ -1,16 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Image,
+  LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
@@ -49,10 +50,28 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
-  const { height, width } = useWindowDimensions();
-  const [pageIndex, setPageIndex] = useState(0);
+  const [{ width, height }, setViewport] = useState({ width: 0, height: 0 });
+  const pageIndex = useRef(0);
   const flatListRef = useRef<FlatList>(null);
   const finishing = useRef(false);
+
+  const measureViewport = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setViewport((previous) =>
+      previous.width === width && previous.height === height
+        ? previous
+        : { width, height },
+    );
+  }, []);
+
+  useEffect(() => {
+    if (width > 0) {
+      flatListRef.current?.scrollToOffset({
+        offset: pageIndex.current * width,
+        animated: false,
+      });
+    }
+  }, [width]);
 
   const finish = useCallback(async () => {
     if (finishing.current) return;
@@ -71,7 +90,7 @@ export default function OnboardingScreen() {
         index: index + 1,
         animated: true,
       });
-      setPageIndex(index + 1);
+      pageIndex.current = index + 1;
     } else {
       void finish();
     }
@@ -80,78 +99,84 @@ export default function OnboardingScreen() {
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
-      if (slideIndex !== pageIndex && slideIndex >= 0 && slideIndex < SLIDES.length) {
-        setPageIndex(slideIndex);
+      if (slideIndex >= 0 && slideIndex < SLIDES.length) {
+        pageIndex.current = slideIndex;
       }
     },
-    [width, pageIndex]
+    [width]
   );
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={measureViewport}>
       {/* Full-bleed Horizontal Pager */}
-      <FlatList
-        ref={flatListRef}
-        data={SLIDES}
-        keyExtractor={(item) => item.id}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        bounces={false}
-        onMomentumScrollEnd={onScroll}
-        getItemLayout={(_, index) => ({
-          length: width,
-          offset: width * index,
-          index,
-        })}
-        renderItem={({ item, index }) => (
-          <View style={[styles.slide, { width, height }]}>
-            {/* 100% Full-bleed Background Image */}
-            <Image
-              source={item.image}
-              style={StyleSheet.absoluteFill}
-              resizeMode="cover"
-            />
+      {width > 0 && height > 0 ? (
+        <FlatList
+          ref={flatListRef}
+          data={SLIDES}
+          keyExtractor={(item) => item.id}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          onMomentumScrollEnd={onScroll}
+          getItemLayout={(_, index) => ({
+            length: width,
+            offset: width * index,
+            index,
+          })}
+          renderItem={({ item, index }) => (
+            <View style={[styles.slide, { width, height }]}>
+              {/* 100% Full-bleed Background Image */}
+              <Image
+                source={item.image}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+              />
 
-            {/* Cinematic Gradient Overlays */}
-            <LinearGradient
-              colors={[
-                "rgba(0,0,0,0.6)",
-                "rgba(0,0,0,0.15)",
-                "rgba(12,12,26,0.65)",
-                "rgba(12,12,26,0.95)",
-              ]}
-              locations={[0, 0.3, 0.6, 0.95]}
-              style={StyleSheet.absoluteFill}
-            />
+              {/* Cinematic Gradient Overlays */}
+              <LinearGradient
+                colors={[
+                  "rgba(0,0,0,0.6)",
+                  "rgba(0,0,0,0.15)",
+                  "rgba(12,12,26,0.65)",
+                  "rgba(12,12,26,0.95)",
+                ]}
+                locations={[0, 0.3, 0.6, 0.95]}
+                style={StyleSheet.absoluteFill}
+              />
 
-            {/* Slide Content */}
-            <View
-              style={[
-                styles.container,
-                {
-                  paddingTop: insets.top + 16,
-                  paddingBottom: Math.max(insets.bottom, 16) + 16,
-                },
-              ]}
-            >
-              {/* Top Row with Skip CTA */}
-              <View style={styles.topRow}>
-                <Pressable
-                  onPress={() => void finish()}
-                  hitSlop={16}
-                  style={styles.skipBtn}
-                >
-                  <Text style={styles.skipBtnText}>Skip</Text>
-                </Pressable>
-              </View>
+              {/* Slide Content */}
+              <ScrollView
+                style={styles.slideScroll}
+                contentContainerStyle={[
+                  styles.container,
+                  {
+                    paddingTop: insets.top + 16,
+                    paddingBottom: insets.bottom + 16,
+                  },
+                ]}
+                showsVerticalScrollIndicator={false}
+                contentInsetAdjustmentBehavior="never"
+              >
+                {/* Top Row with Skip CTA */}
+                <View style={styles.topRow}>
+                  <Pressable
+                    onPress={() => void finish()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Skip onboarding"
+                    hitSlop={16}
+                    style={styles.skipBtn}
+                  >
+                    <Text style={styles.skipBtnText}>Skip</Text>
+                  </Pressable>
+                </View>
 
-              {/* Bottom Block: Typography & Action Controls */}
-              <View style={styles.bottomBlock}>
-                <View style={styles.copySection}>
-                  <Text style={styles.heading}>{item.title}</Text>
-                  {item.description ? (
-                    <Text style={styles.description}>{item.description}</Text>
+                {/* Bottom Block: Typography & Action Controls */}
+                <View style={styles.bottomBlock}>
+                  <View style={styles.copySection}>
+                    <Text style={styles.heading}>{item.title}</Text>
+                    {item.description ? (
+                      <Text style={styles.description}>{item.description}</Text>
                   ) : null}
                 </View>
 
@@ -176,6 +201,7 @@ export default function OnboardingScreen() {
                   <Pressable
                     style={[styles.primaryPill, { backgroundColor: colors.primary }]}
                     onPress={() => handlePrimaryPress(index)}
+                    accessibilityRole="button"
                   >
                     <Text style={styles.primaryPillText}>
                       {item.primaryActionLabel}
@@ -183,10 +209,11 @@ export default function OnboardingScreen() {
                   </Pressable>
                 </View>
               </View>
-            </View>
+            </ScrollView>
           </View>
         )}
       />
+      ) : null}
     </View>
   );
 }
@@ -199,10 +226,12 @@ const styles = StyleSheet.create({
   slide: {
     overflow: "hidden",
   },
+  slideScroll: { flex: 1 },
   container: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "space-between",
     paddingHorizontal: 28,
+    gap: 24,
   },
   topRow: {
     flexDirection: "row",

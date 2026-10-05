@@ -86,7 +86,7 @@ export default function HomeScreen() {
   }, [refreshEvents]);
 
   const openSearch = useCallback(() => {
-    router.push("/(tabs)/search" as any);
+    router.push("/search");
   }, [router]);
 
   const renderBody = () => {

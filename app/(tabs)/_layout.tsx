@@ -107,8 +107,8 @@ function TabLayout() {
           borderTopWidth: isWeb ? 1 : 0,
           borderTopColor: colors.border,
           elevation: 0,
-          paddingBottom: insets.bottom,
-          ...(isWeb ? { height: 84 } : {}),
+          height: isWeb ? 84 : (isIOS ? 58 : 62) + insets.bottom,
+          paddingBottom: isWeb ? 0 : insets.bottom,
         },
         tabBarBackground: () =>
           isIOS ? (
@@ -178,8 +178,6 @@ function TabLayout() {
         }}
       />
       <Tabs.Screen name="tickets" options={{ href: null }} />
-      {/* Search opens from the Events page instead of the tab bar */}
-      <Tabs.Screen name="search" options={{ href: null }} />
       <Tabs.Screen
         name="profile"
         options={{

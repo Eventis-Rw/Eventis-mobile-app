@@ -312,6 +312,7 @@ export default function ConversationScreen() {
   });
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [recordingActive, setRecordingActive] = useState(false);
+  const recordingSessionActive = useRef(false);
   const [draftReady, setDraftReady] = useState(false);
   const [reply, setReply] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
@@ -455,15 +456,16 @@ export default function ConversationScreen() {
 
   useEffect(
     () => () => {
-      if (audioRecorder.isRecording) {
-        void audioRecorder.stop().catch(() => {});
+      // expo-audio releases the recorder itself. Only reset the audio mode;
+      // reading a released native recorder here crashes Android.
+      if (recordingSessionActive.current) {
         void setAudioModeAsync({
           allowsRecording: false,
           playsInSilentMode: true,
         }).catch(() => {});
       }
     },
-    [audioRecorder],
+    [],
   );
 
   async function send() {
@@ -587,6 +589,7 @@ export default function ConversationScreen() {
       });
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
+      recordingSessionActive.current = true;
       setRecordingActive(true);
     } catch (cause) {
       void setAudioModeAsync({
@@ -645,6 +648,7 @@ export default function ConversationScreen() {
           : "The voice message could not be saved.",
       );
     } finally {
+      recordingSessionActive.current = false;
       void setAudioModeAsync({
         allowsRecording: false,
         playsInSilentMode: true,
