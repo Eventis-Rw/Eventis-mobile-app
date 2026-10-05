@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Contacts from "expo-contacts";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
@@ -14,7 +14,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
 
@@ -23,7 +23,7 @@ const digits = (value: string) => value.replace(/\D/g, "");
 export default function EditContactScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const colors = useChatColors();
   const chat = useChat();
   const contact = chat.getContact(id);
@@ -40,8 +40,17 @@ export default function EditContactScreen() {
   const [syncToPhone, setSyncToPhone] = useState(Platform.OS !== "web");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const hydratedContactId = useRef<string | null>(null);
   const back = () =>
     router.canGoBack() ? router.back() : router.replace("/chat");
+
+  useEffect(() => {
+    if (!contact || hydratedContactId.current === contact.id) return;
+    hydratedContactId.current = contact.id;
+    setFirstName(initial.first);
+    setLastName(initial.last);
+    setPhone(contact.phone);
+  }, [contact, initial.first, initial.last]);
 
   async function syncContact() {
     if (Platform.OS === "web") return undefined;
@@ -147,6 +156,7 @@ export default function EditContactScreen() {
           </Pressable>
         </View>
         <ScrollView
+          style={styles.scroll}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
             styles.content,
@@ -265,6 +275,7 @@ function Field({
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: "center" },
   workspace: { flex: 1, width: "100%", maxWidth: 720 },
+  scroll: { flex: 1, width: "100%" },
   header: {
     minHeight: 52,
     flexDirection: "row",
@@ -285,7 +296,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     fontSize: 17,
   },
-  content: { padding: 18, alignItems: "center" },
+  content: {
+    width: "100%",
+    maxWidth: 640,
+    alignSelf: "center",
+    padding: 18,
+    alignItems: "center",
+  },
   avatar: { width: 96, height: 96, borderRadius: 48, marginVertical: 22 },
   form: {
     width: "100%",

@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { Logo } from "@/components/Logo";
 import { OTPInput } from "@/components/OTPInput";
@@ -19,7 +19,7 @@ import { useColors } from "@/hooks/useColors";
 
 export default function OTPScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { purpose, eventId, phone, fullName } = useLocalSearchParams<{
     purpose?: string;

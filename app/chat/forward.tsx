@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { ChatListRow } from "@/components/ChatListRow";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
@@ -21,7 +21,7 @@ export default function ForwardMessageScreen() {
     messageId: string;
   }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const colors = useChatColors();
   const chat = useChat();
   const [query, setQuery] = useState("");
@@ -57,6 +57,8 @@ export default function ForwardMessageScreen() {
       await chat.sendMessage(target.id, message.text, {
         forwarded: true,
         imageUri: message.imageUri,
+        audioUri: message.audioUri,
+        audioDurationMs: message.audioDurationMs,
       });
       router.dismissTo({
         pathname: "/chat/[id]",

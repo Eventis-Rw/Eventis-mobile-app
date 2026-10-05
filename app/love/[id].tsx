@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { Skeleton } from "@/components/SkeletonLoader";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
@@ -12,7 +12,7 @@ import { useColors } from "@/hooks/useColors";
 export default function LoveProfileDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const colors = useColors();
   const { isLoading, getProfileById, getConnectionStatus, sendConnectionRequest } = useLoveProfiles();
   const [imageFailed, setImageFailed] = useState(false);

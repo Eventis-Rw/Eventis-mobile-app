@@ -14,7 +14,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { FindLoveQuickActions } from "@/components/FindLoveQuickActions";
 import { LoveProfileCard } from "@/components/LoveProfileCard";
@@ -28,7 +28,7 @@ const FILTERS: GenderFilter[] = ["All", "She", "He", "They"];
 
 export default function FindLoveScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { profiles, isLoading, error, refreshProfiles, getConnectionStatus, sendConnectionRequest } = useLoveProfiles();

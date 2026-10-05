@@ -1,5 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from "expo-audio";
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -14,6 +21,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -31,18 +39,23 @@ import {
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { ChatActionSheet, type ChatAction } from "@/components/ChatActionSheet";
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
+import { ChatEmojiPicker } from "@/components/ChatEmojiPicker";
 import {
   ChatPopupMenu,
   type ChatMenuAnchor,
 } from "@/components/ChatPopupMenu";
+import { VoiceNoteBubble } from "@/components/VoiceNoteBubble";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
 import { useChatBottomInset } from "@/hooks/useChatBottomInset";
-import type { ChatMessage } from "@/services/chatService";
+import {
+  chatMessagePreview,
+  type ChatMessage,
+} from "@/services/chatService";
 
 function dayLabel(value: string) {
   const date = new Date(value);
@@ -52,6 +65,11 @@ function dayLabel(value: string) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function formatRecordingTime(durationMillis: number) {
+  const seconds = Math.floor(durationMillis / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function MessageBubble({
@@ -140,7 +158,7 @@ function MessageBubble({
             }
             delayLongPress={300}
             accessibilityRole="button"
-            accessibilityLabel={`${own ? "You" : contactName}: ${message.text || "Photo"}`}
+            accessibilityLabel={`${own ? "You" : contactName}: ${chatMessagePreview(message)}`}
             accessibilityHint="Long press for message actions"
             onAccessibilityTap={onActions}
             accessibilityActions={[
@@ -186,7 +204,7 @@ function MessageBubble({
                   numberOfLines={2}
                   style={[styles.smallText, { color: colors.foreground }]}
                 >
-                  {message.replyTo.text || "Photo"}
+                  {message.replyTo.text || "Attachment"}
                 </Text>
               </View>
             ) : null}
@@ -195,6 +213,12 @@ function MessageBubble({
                 source={{ uri: message.imageUri }}
                 style={styles.messageImage}
                 resizeMode="cover"
+              />
+            ) : null}
+            {message.audioUri ? (
+              <VoiceNoteBubble
+                uri={message.audioUri}
+                durationMs={message.audioDurationMs}
               />
             ) : null}
             {message.text ? (
@@ -256,11 +280,17 @@ export default function ConversationScreen() {
   }>();
   const router = useRouter();
   const colors = useChatColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const { viewport, measureViewport, bottomInset } =
     useChatBottomInset(keyboardVisible);
   const chat = useChat();
+  const audioRecorder = useAudioRecorder({
+    ...RecordingPresets.HIGH_QUALITY,
+    directory: "document",
+    isMeteringEnabled: true,
+  });
+  const recorderState = useAudioRecorderState(audioRecorder, 100);
   const conversation = chat.getConversation(id ?? "");
   const contact = conversation
     ? chat.getContact(conversation.contactId)
@@ -276,6 +306,12 @@ export default function ConversationScreen() {
   const [showLatest, setShowLatest] = useState(false);
   const input = useRef<TextInput>(null);
   const [composer, setComposer] = useState("");
+  const [composerSelection, setComposerSelection] = useState({
+    start: 0,
+    end: 0,
+  });
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [recordingActive, setRecordingActive] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
   const [reply, setReply] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
@@ -417,6 +453,19 @@ export default function ConversationScreen() {
     return () => clearTimeout(timer);
   }, [notice]);
 
+  useEffect(
+    () => () => {
+      if (audioRecorder.isRecording) {
+        void audioRecorder.stop().catch(() => {});
+        void setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+        }).catch(() => {});
+      }
+    },
+    [audioRecorder],
+  );
+
   async function send() {
     if ((!composer.trim() && !photo) || busy || !contact || contact.blocked)
       return;
@@ -433,6 +482,7 @@ export default function ConversationScreen() {
             : undefined,
         });
       setComposer("");
+      setEmojiOpen(false);
       setReply(null);
       setEditing(null);
       setPhoto(null);
@@ -451,6 +501,7 @@ export default function ConversationScreen() {
   }
 
   async function pickPhoto() {
+    setEmojiOpen(false);
     await run(async () => {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
@@ -471,6 +522,7 @@ export default function ConversationScreen() {
   }
 
   async function takePhoto() {
+    setEmojiOpen(false);
     await run(async () => {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -498,8 +550,108 @@ export default function ConversationScreen() {
     void run(() => Linking.openURL(`tel:${contact.phone.replace(/\s/g, "")}`));
   };
 
-  const showVoiceNoteNotice = () =>
-    setNotice("Voice notes will be available when media upload is connected.");
+  const toggleEmojiPicker = () => {
+    if (emojiOpen) {
+      setEmojiOpen(false);
+      setTimeout(() => input.current?.focus(), 50);
+      return;
+    }
+    Keyboard.dismiss();
+    setEmojiOpen(true);
+  };
+
+  const insertEmoji = (emoji: string) => {
+    const start = Math.min(composerSelection.start, composer.length);
+    const end = Math.min(composerSelection.end, composer.length);
+    const next = `${composer.slice(0, start)}${emoji}${composer.slice(end)}`;
+    const cursor = start + emoji.length;
+    setComposer(next);
+    setComposerSelection({ start: cursor, end: cursor });
+  };
+
+  async function startVoiceRecording() {
+    if (busy || editing || composer.trim() || photo || recordingActive) return;
+    setError(null);
+    setEmojiOpen(false);
+    Keyboard.dismiss();
+    try {
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        throw new Error(
+          "Allow microphone access in your phone settings to record a voice message.",
+        );
+      }
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setRecordingActive(true);
+    } catch (cause) {
+      void setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      }).catch(() => {});
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Voice recording could not start.",
+      );
+    }
+  }
+
+  async function finishVoiceRecording(shouldSend: boolean) {
+    if (!recordingActive) return;
+    const durationMs = recorderState.durationMillis;
+    setBusy(shouldSend);
+    setError(null);
+    try {
+      await audioRecorder.stop();
+      setRecordingActive(false);
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+      if (!shouldSend) {
+        setNotice("Voice recording cancelled");
+        return;
+      }
+      const uri = audioRecorder.uri ?? recorderState.url;
+      if (!uri) throw new Error("The voice recording could not be saved.");
+      if (durationMs < 500) {
+        setNotice("Hold on a little longer to record a voice message.");
+        return;
+      }
+      await chat.sendMessage(id, "", {
+        audioUri: uri,
+        audioDurationMs: durationMs,
+        replyTo: reply
+          ? {
+              id: reply.id,
+              text: chatMessagePreview(reply),
+              direction: reply.direction,
+            }
+          : undefined,
+      });
+      setReply(null);
+      nearBottom.current = true;
+      showNewest();
+    } catch (cause) {
+      setRecordingActive(false);
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The voice message could not be saved.",
+      );
+    } finally {
+      void setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      }).catch(() => {});
+      setBusy(false);
+    }
+  }
 
   const messageActions: ChatAction[] = selected
     ? [
@@ -922,7 +1074,9 @@ export default function ConversationScreen() {
                   numberOfLines={2}
                   style={[styles.smallText, { color: colors.foreground }]}
                 >
-                  {(editing ?? reply)?.text || "Photo"}
+                  {editing ?? reply
+                    ? chatMessagePreview(editing ?? reply!)
+                    : "Message"}
                 </Text>
               </View>
               <Pressable
@@ -954,6 +1108,14 @@ export default function ConversationScreen() {
               </Pressable>
             </View>
           ) : null}
+          <ChatEmojiPicker
+            visible={emojiOpen && !recordingActive && !contact.blocked}
+            onSelect={insertEmoji}
+            onClose={() => {
+              setEmojiOpen(false);
+              setTimeout(() => input.current?.focus(), 50);
+            }}
+          />
           {contact.blocked ? (
             <Pressable
               onPress={() => void run(() => chat.setBlocked(contact.id, false))}
@@ -970,6 +1132,82 @@ export default function ConversationScreen() {
                 This contact is blocked. Tap to unblock.
               </Text>
             </Pressable>
+          ) : recordingActive ? (
+            <View
+              style={[
+                styles.recordingComposer,
+                {
+                  paddingBottom: bottomInset + 7,
+                  backgroundColor: colors.background,
+                },
+              ]}
+            >
+              <Pressable
+                onPress={() => void finishVoiceRecording(false)}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel voice recording"
+                style={styles.recordingAction}
+              >
+                <Ionicons
+                  name="trash-outline"
+                  size={24}
+                  color={colors.destructive}
+                />
+              </Pressable>
+              <View style={styles.recordingStatus}>
+                <View
+                  style={[
+                    styles.recordingDot,
+                    {
+                      backgroundColor: colors.destructive,
+                      opacity:
+                        Math.floor(recorderState.durationMillis / 500) % 2
+                          ? 0.35
+                          : 1,
+                    },
+                  ]}
+                />
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[styles.recordingTime, { color: colors.foreground }]}
+                >
+                  {formatRecordingTime(recorderState.durationMillis)}
+                </Text>
+                <View style={styles.recordingWave}>
+                  {Array.from({ length: 13 }, (_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.recordingBar,
+                        {
+                          height:
+                            7 +
+                            ((Math.floor(recorderState.durationMillis / 100) +
+                              index * 3) %
+                              5) *
+                              4,
+                          backgroundColor: colors.primary,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+              </View>
+              <Pressable
+                onPress={() => void finishVoiceRecording(true)}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Send voice message"
+                style={[styles.send, { backgroundColor: colors.primary }]}
+              >
+                {busy ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="send" size={23} color="#FFFFFF" />
+                )}
+              </Pressable>
+            </View>
           ) : (
             <View
               style={[
@@ -1000,9 +1238,11 @@ export default function ConversationScreen() {
               >
                 {Platform.OS === "android" ? (
                   <Pressable
-                    onPress={() => input.current?.focus()}
+                    onPress={toggleEmojiPicker}
                     accessibilityRole="button"
-                    accessibilityLabel="Focus the message field"
+                    accessibilityLabel={
+                      emojiOpen ? "Close emoji picker" : "Open emoji picker"
+                    }
                     style={styles.inputAction}
                   >
                     <Ionicons
@@ -1015,7 +1255,14 @@ export default function ConversationScreen() {
                 <TextInput
                   ref={input}
                   value={composer}
-                  onChangeText={setComposer}
+                  onChangeText={(value) => {
+                    setComposer(value);
+                    if (emojiOpen) setEmojiOpen(false);
+                  }}
+                  selection={composerSelection}
+                  onSelectionChange={(event) =>
+                    setComposerSelection(event.nativeEvent.selection)
+                  }
                   placeholder={editing ? "Edit message" : "Message"}
                   placeholderTextColor={colors.mutedForeground}
                   style={[styles.input, { color: colors.foreground }]}
@@ -1044,9 +1291,11 @@ export default function ConversationScreen() {
                   </Pressable>
                 ) : (
                   <Pressable
-                    onPress={() => input.current?.focus()}
+                    onPress={toggleEmojiPicker}
                     accessibilityRole="button"
-                    accessibilityLabel="Focus the message field"
+                    accessibilityLabel={
+                      emojiOpen ? "Close emoji picker" : "Open emoji picker"
+                    }
                     style={styles.inputAction}
                   >
                     <Ionicons
@@ -1097,7 +1346,7 @@ export default function ConversationScreen() {
                 onPress={
                   composer.trim() || photo || editing
                     ? () => void send()
-                    : showVoiceNoteNotice
+                    : () => void startVoiceRecording()
                 }
                 disabled={busy}
                 accessibilityRole="button"
@@ -1369,6 +1618,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     gap: 4,
   },
+  recordingComposer: {
+    minHeight: 62,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 7,
+    paddingHorizontal: 9,
+    gap: 8,
+  },
+  recordingAction: {
+    width: 42,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recordingStatus: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  recordingDot: { width: 9, height: 9, borderRadius: 5 },
+  recordingTime: {
+    minWidth: 38,
+    fontFamily: "Inter_500Medium",
+    fontVariant: ["tabular-nums"],
+  },
+  recordingWave: {
+    flex: 1,
+    minWidth: 0,
+    height: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+  },
+  recordingBar: { width: 3, borderRadius: 2 },
   inputPill: {
     flex: 1,
     flexDirection: "row",

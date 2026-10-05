@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
@@ -20,7 +20,7 @@ type AccountType = "business" | "individual";
 
 export default function BusinessRegisterScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user, registerBusiness } = useAuth();
   const [accountType, setAccountType] = useState<AccountType>("individual");

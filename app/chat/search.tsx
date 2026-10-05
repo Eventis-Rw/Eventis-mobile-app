@@ -12,7 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { ChatListRow } from "@/components/ChatListRow";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
@@ -30,7 +30,7 @@ type SearchRow =
 export default function ChatSearchScreen() {
   const chat = useChat();
   const colors = useChatColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const callMode = mode === "call";

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import type { LoveActivity, LoveActivityType } from "@/context/FindLoveDemoContext";
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
@@ -22,7 +22,7 @@ export default function LoveConnectionsScreen() {
   const { tab } = useLocalSearchParams<{ tab?: ConnectionsTab }>();
   const router = useRouter();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const initialTab = tab === "pending" || tab === "activity" ? tab : "connections";
   const [activeTab, setActiveTab] = useState<ConnectionsTab>(initialTab);
   const { connections, pendingProfiles, activity, tokenBalance } = useFindLoveDemo();

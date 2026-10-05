@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
 
@@ -10,7 +10,7 @@ export default function ChatLayout() {
   const { notification, dismissNotification, getContact, getConversation } =
     useChat();
   const colors = useChatColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   useEffect(() => {
     if (!notification) return;
@@ -21,9 +21,13 @@ export default function ChatLayout() {
     ? getContact(getConversation(notification.conversationId)?.contactId ?? "")
     : undefined;
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <Stack
-        screenOptions={{ headerShown: false, animation: "slide_from_right" }}
+        screenOptions={{
+          headerShown: false,
+          animation: "slide_from_right",
+          contentStyle: { backgroundColor: colors.background },
+        }}
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="search" options={{ animation: "none" }} />

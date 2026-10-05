@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
 import { ChatListRow } from "@/components/ChatListRow";
 import {
@@ -23,7 +23,7 @@ import type { ChatConversation } from "@/services/chatService";
 
 export default function ChatScreen() {
   const colors = useChatColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const chat = useChat();
   const menuButton = useRef<View>(null);

@@ -8,7 +8,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useChatColors } from "@/hooks/useChatColors";
 
 export interface ChatMenuAction {
@@ -41,7 +41,7 @@ export function ChatPopupMenu({
   align?: "left" | "right";
 }) {
   const colors = useChatColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const menuWidth = Math.min(280, windowWidth - 20);
   const anchoredLeft = anchor

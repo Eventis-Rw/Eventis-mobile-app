@@ -50,6 +50,12 @@
             "image": "./assets/images/logo-primary.png"
           }
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Eventis to record voice messages."
+        }
       ]
     ],
     "experiments": {
@@ -57,5 +63,4 @@
       "reactCompiler": true
     }
   }
-
 }

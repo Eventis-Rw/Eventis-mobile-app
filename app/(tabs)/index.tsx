@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { BannerCarousel } from "@/components/BannerCarousel";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -30,7 +30,7 @@ type EventsView = "nearby" | "all";
 
 export default function HomeScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
   const { events, categories, isLoading, error, refreshEvents } = useEvents();

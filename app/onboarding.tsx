@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import { useColors } from "@/hooks/useColors";
@@ -48,7 +48,7 @@ const SLIDES: SlideData[] = [
 export default function OnboardingScreen() {
   const router = useRouter();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const [pageIndex, setPageIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);

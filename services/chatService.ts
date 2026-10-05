@@ -44,12 +44,25 @@ export interface ChatMessage {
   editedAt?: string;
   forwarded?: boolean;
   imageUri?: string;
+  audioUri?: string;
+  audioDurationMs?: number;
 }
 
 export interface SendMessageOptions {
   replyTo?: ChatMessage["replyTo"];
   forwarded?: boolean;
   imageUri?: string;
+  audioUri?: string;
+  audioDurationMs?: number;
+}
+
+export function chatMessagePreview(
+  message: Pick<ChatMessage, "text" | "imageUri" | "audioUri">,
+) {
+  if (message.text) return message.text;
+  if (message.audioUri) return "Voice message";
+  if (message.imageUri) return "Photo";
+  return "Message";
 }
 
 export interface ChatReport {
@@ -407,7 +420,8 @@ export class MockChatService implements ChatService {
       state.contacts.find((item) => item.id === conversation.contactId)?.blocked
     )
       throw new Error("Unblock this contact to send a message.");
-    if (!text.trim() && !options?.imageUri) throw new Error("Enter a message.");
+    if (!text.trim() && !options?.imageUri && !options?.audioUri)
+      throw new Error("Enter a message.");
 
     const message: ChatMessage = {
       id: localId("message"),
@@ -422,7 +436,7 @@ export class MockChatService implements ChatService {
       item.id === conversationId
         ? {
             ...item,
-            lastMessage: message.text || "Photo",
+            lastMessage: chatMessagePreview(message),
             lastMessageAt: message.sentAt,
             unreadCount: 0,
           }
@@ -449,7 +463,9 @@ export class MockChatService implements ChatService {
         item.id === conversationId
           ? {
               ...item,
-              lastMessage: last ? last.text || "Photo" : "Start a conversation",
+              lastMessage: last
+                ? chatMessagePreview(last)
+                : "Start a conversation",
               lastMessageAt: last?.sentAt ?? item.lastMessageAt,
             }
           : item,

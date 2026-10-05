@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useColors } from "@/hooks/useColors";
 
@@ -34,7 +34,7 @@ By continuing, you confirm that you have read and understood the above terms and
 
 export default function TermsScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const [accepted, setAccepted] = useState(false);
 

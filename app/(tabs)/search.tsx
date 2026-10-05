@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
@@ -23,7 +23,7 @@ type PriceFilter = "all" | "free" | "paid";
 
 export default function SearchScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const { events, categories } = useEvents();

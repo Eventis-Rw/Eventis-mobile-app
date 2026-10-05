@@ -14,7 +14,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
@@ -34,7 +34,7 @@ export default function LoveChatScreen() {
   const { id, gift } = useLocalSearchParams<{ id: string; gift?: string }>();
   const router = useRouter();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const { getProfileById } = useLoveProfiles();
   const { tokenBalance, sendGift, recordMessage } = useFindLoveDemo();
   const profile = getProfileById(id ?? "");

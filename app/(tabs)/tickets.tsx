@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { TicketCard } from "@/components/TicketCard";
 import { useBookings } from "@/context/BookingsContext";
@@ -19,7 +19,7 @@ type Tab = "upcoming" | "past" | "cancelled";
 
 export default function TicketsScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { bookings } = useBookings();
   const [activeTab, setActiveTab] = useState<Tab>("upcoming");
