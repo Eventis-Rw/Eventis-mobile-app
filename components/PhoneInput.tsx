@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useColors } from "@/hooks/useColors";
 
@@ -56,7 +56,7 @@ export function PhoneInput({
   placeholder = "7XX XXX XXX",
 }: PhoneInputProps) {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState("");
 

@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
@@ -23,16 +23,12 @@ import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 import { shareEvent } from "@/utils/shareEvent";
 
-const EVENT_IMAGES: Record<string, number> = {
-  concert: require("../../assets/images/banner-concert.png"),
-  tech: require("../../assets/images/banner-tech.png"),
-  food: require("../../assets/images/banner-food.png"),
-};
+import { getEventImage, POSTER_RATIOS } from "@/constants/eventImages";
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user, toggleSaveEvent, requestOTP } = useAuth();
   const { hasBookedEvent, addBooking } = useBookings();
@@ -132,8 +128,8 @@ export default function EventDetailScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <ImageBackground
-          source={EVENT_IMAGES[event.image] ?? EVENT_IMAGES["concert"]}
-          style={styles.hero}
+          source={getEventImage(event.image)}
+          style={[styles.hero, POSTER_RATIOS[event.image] ? { height: undefined, aspectRatio: POSTER_RATIOS[event.image] } : null]}
         >
           <View style={[styles.heroOverlay, { backgroundColor: colors.overlay }]} />
           <View style={[styles.heroTop, { paddingTop: insets.top + 8 }]}>

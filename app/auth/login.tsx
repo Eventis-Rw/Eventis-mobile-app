@@ -9,15 +9,16 @@ import {
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { Logo } from "@/components/Logo";
+import { ExploreDemoButton } from "@/components/ExploreDemoButton";
 import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
 import { useColors } from "@/hooks/useColors";
 
 export default function LoginScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
   const [phone, setPhone] = useState("");
@@ -122,6 +123,7 @@ export default function LoginScreen() {
         <Animated.View
           entering={Platform.OS !== "web" ? FadeInDown.delay(300).springify() : undefined}
         >
+          <ExploreDemoButton />
           <View style={styles.footerRow}>
             <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
               Don't have an account?

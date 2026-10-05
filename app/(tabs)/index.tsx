@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Image,
+  FlatList,
   Linking,
   Modal,
   Platform,
@@ -14,7 +15,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
@@ -24,19 +25,22 @@ import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
+import { DEMO_POST_ORDER } from "@/constants/featuredDemoPosts";
 
 const PAGE_PADDING = 20;
+const FEED_PAGE_SIZE = 6;
 
 type EventsView = "nearby" | "all";
 
 export default function HomeScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
   const { events, categories, isLoading, error, refreshEvents } = useEvents();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const location = useLocationPermission();
 
@@ -48,18 +52,37 @@ export default function HomeScreen() {
       selectedCategory === "All"
         ? events
         : events.filter((e) => e.category === selectedCategory);
-    return location.status === "granted"
-      ? [...list].sort((a, b) => a.distance - b.distance)
-      : list;
+    return [...list].sort((a, b) => {
+      const first = DEMO_POST_ORDER.indexOf(a.id);
+      const second = DEMO_POST_ORDER.indexOf(b.id);
+      if (first >= 0 || second >= 0) {
+        return (first < 0 ? Infinity : first) - (second < 0 ? Infinity : second);
+      }
+      return location.status === "granted" ? a.distance - b.distance : 0;
+    });
   }, [events, selectedCategory, location.status]);
   const onRefresh = useCallback(async () => {
+    setVisibleCount(FEED_PAGE_SIZE);
     setRefreshing(true);
     await refreshEvents();
     setRefreshing(false);
   }, [refreshEvents]);
 
+  const selectCategory = useCallback((category: string) => {
+    setVisibleCount(FEED_PAGE_SIZE);
+    setSelectedCategory(category);
+  }, []);
+  const visibleEvents = useMemo(
+    () => showSkeletons ? [] : filtered.slice(0, visibleCount),
+    [filtered, visibleCount, showSkeletons],
+  );
+  const loadMore = useCallback(() => {
+    if (isLoading || refreshing) return;
+    setVisibleCount((count) => Math.min(count + FEED_PAGE_SIZE, filtered.length));
+  }, [isLoading, refreshing, filtered.length]);
+
   const openSearch = useCallback(() => {
-    router.push("/(tabs)/search" as any);
+    router.push("/search");
   }, [router]);
 
   const renderBody = () => {
@@ -107,7 +130,7 @@ export default function HomeScreen() {
               key={cat}
               category={cat}
               isSelected={selectedCategory === cat}
-              onPress={setSelectedCategory}
+              onPress={selectCategory}
             />
           ))}
         </ScrollView>
@@ -119,22 +142,16 @@ export default function HomeScreen() {
             <EventCardSkeleton inset={PAGE_PADDING} />
             <EventCardSkeleton inset={PAGE_PADDING} />
           </View>
-        ) : filtered.length ? (
-          <View style={styles.feedContainer}>
-            {filtered.map((event) => (
-              <EventCard key={event.id} event={event} variant="feed" inset={PAGE_PADDING} />
-            ))}
-          </View>
-        ) : (
+        ) : !filtered.length ? (
           <StateMessage
             icon="search-outline"
             title={`No ${selectedCategory} events`}
             text="Try another category or browse everything."
             actionLabel="Show all events"
-            onAction={() => setSelectedCategory("All")}
+            onAction={() => selectCategory("All")}
             compact
           />
-        )}
+        ) : null}
       </>
     );
   };
@@ -221,7 +238,24 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <ScrollView
+      <FlatList
+        key={selectedCategory}
+        data={visibleEvents}
+        keyExtractor={(event) => event.id}
+        renderItem={({ item }) => (
+          <EventCard event={item} variant="feed" inset={PAGE_PADDING} />
+        )}
+        ListHeaderComponent={renderBody()}
+        ListFooterComponent={visibleEvents.length ? (
+          <Text style={{ color: colors.mutedForeground, textAlign: "center", paddingVertical: 20 }}>
+            {visibleCount < filtered.length ? "Scroll for more events" : "You're all caught up"}
+          </Text>
+        ) : null}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        initialNumToRender={FEED_PAGE_SIZE}
+        maxToRenderPerBatch={FEED_PAGE_SIZE}
+        windowSize={5}
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -237,9 +271,7 @@ export default function HomeScreen() {
             tintColor={colors.primary}
           />
         }
-      >
-        {renderBody()}
-      </ScrollView>
+      />
 
       {/* Organiser Modal */}
       <Modal

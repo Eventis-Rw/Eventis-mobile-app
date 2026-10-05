@@ -5,9 +5,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useChatColors } from "@/hooks/useChatColors";
 
 export interface ChatMenuAction {
@@ -17,19 +18,41 @@ export interface ChatMenuAction {
   onPress: () => void;
 }
 
+export interface ChatMenuAnchor {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export function ChatPopupMenu({
   visible,
   actions,
   onClose,
   top,
+  anchor,
+  align = "right",
 }: {
   visible: boolean;
   actions: ChatMenuAction[];
   onClose: () => void;
   top?: number;
+  anchor?: ChatMenuAnchor;
+  align?: "left" | "right";
 }) {
   const colors = useChatColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const menuWidth = Math.min(280, windowWidth - 20);
+  const anchoredLeft = anchor
+    ? align === "left"
+      ? anchor.x
+      : anchor.x + anchor.width - menuWidth
+    : undefined;
+  const left =
+    anchoredLeft === undefined
+      ? undefined
+      : Math.max(10, Math.min(anchoredLeft, windowWidth - menuWidth - 10));
   return (
     <Modal
       visible={visible}
@@ -49,7 +72,14 @@ export function ChatPopupMenu({
           style={[
             styles.menu,
             {
-              top: top ?? insets.top + 52,
+              top:
+                top ??
+                (anchor
+                  ? Math.max(insets.top + 4, anchor.y + anchor.height + 6)
+                  : insets.top + 52),
+              left,
+              right: left === undefined ? 10 : undefined,
+              width: menuWidth,
               backgroundColor: colors.card,
               borderColor: colors.border,
             },
@@ -101,8 +131,6 @@ export function ChatPopupMenu({
 const styles = StyleSheet.create({
   menu: {
     position: "absolute",
-    right: 10,
-    width: 280,
     maxHeight: "76%",
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,

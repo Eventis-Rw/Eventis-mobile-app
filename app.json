@@ -23,6 +23,14 @@
           "contactsPermission": "Allow Eventis to save and update people in your phone contacts."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Eventis to attach photos to your messages.",
+          "cameraPermission": "Allow Eventis to take photos for your messages.",
+          "microphonePermission": false
+        }
+      ],
       "expo-web-browser",
       [
         "expo-location",
@@ -42,6 +50,12 @@
             "image": "./assets/images/logo-primary.png"
           }
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Eventis to record voice messages."
+        }
       ]
     ],
     "experiments": {
@@ -49,5 +63,4 @@
       "reactCompiler": true
     }
   }
-
 }

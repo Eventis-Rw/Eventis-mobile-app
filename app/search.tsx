@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
@@ -23,7 +23,7 @@ type PriceFilter = "all" | "free" | "paid";
 
 export default function SearchScreen() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const { events, categories } = useEvents();
@@ -32,8 +32,6 @@ export default function SearchScreen() {
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [showFilters, setShowFilters] = useState(false);
   const inputRef = useRef<TextInput>(null);
-
-  const headerTop = Platform.OS === "web" ? 67 : insets.top;
 
   const results = useMemo(() => {
     let evts = [...events];
@@ -80,7 +78,7 @@ export default function SearchScreen() {
         style={[
           styles.header,
           {
-            paddingTop: headerTop + 8,
+            paddingTop: insets.top + 8,
             backgroundColor: colors.background,
             borderBottomColor: colors.border,
           },
@@ -224,7 +222,7 @@ export default function SearchScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.list,
-          { paddingBottom: Platform.OS === "web" ? 84 + 20 : 100 },
+          { paddingBottom: insets.bottom + 20 },
         ]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={

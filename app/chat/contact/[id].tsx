@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { ChatActionSheet } from "@/components/ChatActionSheet";
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
 import { useChat } from "@/context/ChatContext";
@@ -18,7 +18,7 @@ import { useChatColors } from "@/hooks/useChatColors";
 export default function ContactDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const colors = useChatColors();
   const chat = useChat();
   const contact = chat.getContact(id);
@@ -47,6 +47,7 @@ export default function ContactDetails() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={[
           styles.content,
           { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 },
@@ -71,10 +72,18 @@ export default function ContactDetails() {
             style={styles.avatar}
             accessibilityLabel={`Photo of ${contact.name}`}
           />
-          <Text style={[styles.name, { color: colors.foreground }]}>
+          <Text
+            numberOfLines={2}
+            maxFontSizeMultiplier={1.35}
+            style={[styles.name, { color: colors.foreground }]}
+          >
             {contact.name}
           </Text>
-          <Text style={[styles.phone, { color: colors.mutedForeground }]}>
+          <Text
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.3}
+            style={[styles.phone, { color: colors.mutedForeground }]}
+          >
             {contact.phone}
           </Text>
           <Text style={[styles.subtitle, { color: colors.primary }]}>
@@ -259,14 +268,31 @@ export default function ContactDetails() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: "center" },
-  content: { width: "100%", maxWidth: 640, paddingHorizontal: 20 },
+  scroll: { flex: 1, width: "100%" },
+  content: {
+    width: "100%",
+    maxWidth: 640,
+    alignSelf: "center",
+    paddingHorizontal: 20,
+  },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 15 },
   header: { flexDirection: "row", alignItems: "center", gap: 8 },
   back: { width: 44, height: 44, justifyContent: "center" },
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 17 },
-  identity: { alignItems: "center", paddingVertical: 28, gap: 7 },
+  identity: {
+    width: "100%",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 28,
+    gap: 7,
+  },
   avatar: { width: 108, height: 108, borderRadius: 54, marginBottom: 10 },
-  name: { fontFamily: "Inter_800ExtraBold", fontSize: 24, textAlign: "center" },
+  name: {
+    maxWidth: "100%",
+    fontFamily: "Inter_800ExtraBold",
+    fontSize: 24,
+    textAlign: "center",
+  },
   phone: { fontSize: 14 },
   subtitle: { fontFamily: "Inter_600SemiBold", fontSize: 12 },
   card: { padding: 18, borderWidth: 1, borderRadius: 18, marginBottom: 12 },

@@ -202,7 +202,7 @@ test("failed persistence does not claim a saved message and the queue recovers",
   );
 });
 
-test("photo messages persist, oversize state is rejected, and empty messages are rejected", async () => {
+test("photo and voice messages persist with useful previews", async () => {
   const service = freshService();
   const message = await service.sendMessage("conversation-aline", "", {
     imageUri: "data:image/jpeg;base64,AAAA",
@@ -212,6 +212,23 @@ test("photo messages persist, oversize state is rejected, and empty messages are
     message.imageUri,
   );
   assert.equal((await service.load()).conversations[0].lastMessage, "Photo");
+  const voice = await service.sendMessage("conversation-aline", "", {
+    audioUri: "file:///eventis-demo-voice.m4a",
+    audioDurationMs: 3200,
+  });
+  const reloadedVoice = (
+    await freshService().getMessages("conversation-aline")
+  ).at(-1);
+  assert.equal(reloadedVoice.audioUri, voice.audioUri);
+  assert.equal(reloadedVoice.audioDurationMs, 3200);
+  assert.equal(
+    (await service.load()).conversations[0].lastMessage,
+    "Voice message",
+  );
+});
+
+test("oversize state and empty messages are rejected", async () => {
+  const service = freshService();
   await assert.rejects(
     service.sendMessage("conversation-aline", "", {
       imageUri: "A".repeat(1600000),

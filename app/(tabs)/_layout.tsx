@@ -10,7 +10,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
@@ -86,15 +86,17 @@ function TabLayout() {
   );
   const colors = useColors();
   const { scheme } = useTheme();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const isDark = scheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
   return (
     <Tabs
+      safeAreaInsets={insets}
       screenOptions={{
         headerShown: false,
+        sceneStyle: { backgroundColor: colors.background },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         tabBarLabelStyle: styles.label,
@@ -105,8 +107,8 @@ function TabLayout() {
           borderTopWidth: isWeb ? 1 : 0,
           borderTopColor: colors.border,
           elevation: 0,
-          paddingBottom: insets.bottom,
-          ...(isWeb ? { height: 84 } : {}),
+          height: isWeb ? 84 : (isIOS ? 58 : 62) + insets.bottom,
+          paddingBottom: isWeb ? 0 : insets.bottom,
         },
         tabBarBackground: () =>
           isIOS ? (
@@ -176,8 +178,6 @@ function TabLayout() {
         }}
       />
       <Tabs.Screen name="tickets" options={{ href: null }} />
-      {/* Search opens from the Events page instead of the tab bar */}
-      <Tabs.Screen name="search" options={{ href: null }} />
       <Tabs.Screen
         name="profile"
         options={{

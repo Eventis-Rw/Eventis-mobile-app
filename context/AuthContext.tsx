@@ -24,6 +24,7 @@ export interface User {
   businessWebsite?: string;
   savedEvents: string[];
   joinedDate: string;
+  isDemo?: boolean;
 }
 
 interface AuthContextType {
@@ -40,6 +41,7 @@ interface AuthContextType {
     password: string;
   }) => Promise<void>;
   completeOnboarding: () => Promise<void>;
+  exploreDemo: () => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   signInWithPhoneSession: (phone: string, fullName?: string) => Promise<void>;
@@ -116,6 +118,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     [persistUser]
   );
+
+  const exploreDemo = useCallback(async () => {
+    await clearToken();
+    await persistUser({
+      ...DEFAULT_USER,
+      username: "Demo Explorer",
+      email: "demo@example.invalid",
+      phone: undefined,
+      avatarUrl: undefined,
+      isPhoneVerified: false,
+      isDemo: true,
+    });
+  }, [persistUser]);
 
   const register = useCallback(
     async (regData: { username: string; email?: string; phone?: string; password: string }) => {
@@ -274,6 +289,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         completeOnboarding,
+        exploreDemo,
         logout,
         deleteAccount,
         signInWithPhoneSession,

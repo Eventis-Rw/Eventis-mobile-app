@@ -9,6 +9,7 @@ import React, {
 } from "react";
 
 import {
+  chatMessagePreview,
   chatService,
   type ChatContact,
   type ChatConversation,
@@ -176,7 +177,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             conversation.id === conversationId
               ? {
                   ...conversation,
-                  lastMessage: pendingMessage.text || "Photo",
+                  lastMessage: chatMessagePreview(pendingMessage),
                   lastMessageAt: pendingMessage.sentAt,
                   unreadCount: 0,
                 }

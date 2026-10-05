@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useColors } from "@/hooks/useColors";
@@ -23,7 +23,7 @@ const PAYMENT_METHODS = [
 export default function LoveWalletScreen() {
   const router = useRouter();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const { tokenBalance, activity, purchaseTokens } = useFindLoveDemo();
   const [selectedAmount, setSelectedAmount] = useState(120);
   const [paymentMethod, setPaymentMethod] = useState("mobile");

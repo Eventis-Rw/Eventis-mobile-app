@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
-import {
-  useSafeAreaFrame,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaFrame } from "react-native-safe-area-context";
+
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 /** Reserve only the system inset that actually overlaps this screen's viewport. */
 export function useChatBottomInset(keyboardVisible: boolean) {
   const viewport = useRef<View>(null);
   const frame = useSafeAreaFrame();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const [overlap, setOverlap] = useState(insets.bottom);
   const measureViewport = useCallback(() => {
     viewport.current?.measureInWindow((_x, y, _width, height) => {

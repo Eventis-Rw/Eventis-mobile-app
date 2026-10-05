@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
@@ -29,7 +29,7 @@ const EVENT_IMAGES: Record<string, number> = {
 export default function BookingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
+  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
   const { addBooking, hasBookedEvent } = useBookings();
