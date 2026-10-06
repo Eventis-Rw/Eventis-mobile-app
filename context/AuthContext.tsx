@@ -8,6 +8,16 @@ import React, {
 } from "react";
 
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
+import {
+  createOrganisation,
+  startSubscription,
+  type DemoOutcome,
+  type Organisation,
+  type OrganisationInput,
+  type OrganiserSubscription,
+  type PaymentMethod,
+  type SubscriptionResult,
+} from "@/services/organiserService";
 import { api, ApiError, clearToken, getToken, setToken } from "@/utils/apiClient";
 
 export interface User {
@@ -25,6 +35,10 @@ export interface User {
   savedEvents: string[];
   joinedDate: string;
   isDemo?: boolean;
+  /** Paid organiser plan. Active but without `organisation` means setup is still pending. */
+  organiserSubscription?: OrganiserSubscription;
+  /** The user's organisation. It belongs to this account; there is no separate organisation login. */
+  organisation?: Organisation;
 }
 
 interface AuthContextType {
@@ -50,11 +64,11 @@ interface AuthContextType {
   clearOTPContext: () => void;
   toggleSaveEvent: (eventId: string) => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
-  registerBusiness: (data: {
-    businessName: string;
-    type: "business" | "individual";
-    website?: string;
-  }) => Promise<void>;
+  subscribeAsOrganiser: (
+    input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string },
+    demoOutcome?: DemoOutcome,
+  ) => Promise<SubscriptionResult>;
+  setupOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -269,11 +283,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, persistUser]
   );
 
-  const registerBusiness = useCallback(
-    async (data: { businessName: string; type: "business" | "individual"; website?: string }) => {
-      if (!user) return;
-      const resp = await api.post<{ user: User }>("/users/me/business", data);
-      await persistUser(resp.user);
+  const subscribeAsOrganiser = useCallback(
+    async (
+      input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string },
+      demoOutcome?: DemoOutcome,
+    ) => {
+      const result = await startSubscription(input, demoOutcome);
+      if (result.status === "succeeded" && user) {
+        await persistUser({ ...user, organiserSubscription: result.subscription });
+      }
+      return result;
+    },
+    [user, persistUser]
+  );
+
+  // Organiser access is granted on the user's own account: existing screens read
+  // isBusinessAccount/businessName/businessWebsite, so keep them in sync.
+  const setupOrganisation = useCallback(
+    async (input: OrganisationInput, demoShouldFail?: boolean) => {
+      if (!user) throw new Error("Sign in to set up an organisation.");
+      const organisation = await createOrganisation(input, demoShouldFail);
+      await persistUser({
+        ...user,
+        organisation,
+        isBusinessAccount: true,
+        businessName: organisation.name,
+        businessWebsite: organisation.website,
+      });
     },
     [user, persistUser]
   );
@@ -298,7 +334,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearOTPContext,
         toggleSaveEvent,
         updateProfile,
-        registerBusiness,
+        subscribeAsOrganiser,
+        setupOrganisation,
       }}
     >
       {children}

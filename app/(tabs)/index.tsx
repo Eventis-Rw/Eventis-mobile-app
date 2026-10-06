@@ -25,6 +25,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
+import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { DEMO_POST_ORDER } from "@/constants/featuredDemoPosts";
 
 const PAGE_PADDING = 20;
@@ -43,6 +44,7 @@ export default function HomeScreen() {
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const location = useLocationPermission();
+  const { hasOrganiserAccess, openCreatePost, openOrganiserFlow } = useOrganiserAccess();
 
   // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
   const showSkeletons = isLoading && !refreshing;
@@ -194,8 +196,8 @@ export default function HomeScreen() {
             </Pressable>
             <Pressable
               onPress={() =>
-                user?.isBusinessAccount
-                  ? router.push("/business/register" as any)
+                hasOrganiserAccess
+                  ? router.push("/business/dashboard" as any)
                   : setShowOrganizerModal(true)
               }
               style={[
@@ -203,15 +205,24 @@ export default function HomeScreen() {
                 { backgroundColor: colors.primary, borderRadius: 999 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Become an organizer"
+              accessibilityLabel={hasOrganiserAccess ? "Organiser dashboard" : "Become an organizer"}
             >
               <Ionicons name="sparkles" size={13} color="#FFFFFF" />
               <Text style={styles.becomeOrganizerHeaderBtnText}>
-                {user?.isBusinessAccount ? "Dashboard" : "Become an organizer"}
+                {hasOrganiserAccess ? "Dashboard" : "Become an organizer"}
               </Text>
             </Pressable>
           </View>
           <View style={styles.headerActions}>
+            <Pressable
+              onPress={openCreatePost}
+              style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Create post"
+              accessibilityHint={hasOrganiserAccess ? undefined : "Organiser access is required to post"}
+            >
+              <Ionicons name="add" size={22} color={colors.foreground} />
+            </Pressable>
             <Pressable
               style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
               accessibilityRole="button"
@@ -296,7 +307,7 @@ export default function HomeScreen() {
               Become an organizer
             </Text>
             <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>
-              List your events, post live stories, manage bookings, and reach thousands of people near you. It is free to get started.
+              List your events, post live stories, manage bookings, and reach thousands of people near you. Upgrade your existing account with an organiser subscription.
             </Text>
             <View style={styles.modalFeatures}>
               {["Create and manage events", "Post live stories for your audience", "View attendee insights"].map((f) => (
@@ -310,7 +321,7 @@ export default function HomeScreen() {
               style={[styles.modalCta, { backgroundColor: colors.primary }]}
               onPress={() => {
                 setShowOrganizerModal(false);
-                router.push("/business/register" as any);
+                openOrganiserFlow();
               }}
             >
               <Text style={styles.modalCtaText}>Get Started as Organizer</Text>
