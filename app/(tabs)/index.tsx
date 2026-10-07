@@ -14,14 +14,17 @@ import {
   Text,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
+import { GlassSurface } from "@/components/GlassSurface";
 import { EventCard } from "@/components/EventCard";
 import { EventCardSkeleton } from "@/components/SkeletonLoader";
 import { StoriesBar } from "@/components/StoriesBar";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
@@ -34,6 +37,7 @@ type EventsView = "nearby" | "all";
 
 export default function HomeScreen() {
   const colors = useColors();
+  const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
@@ -139,8 +143,8 @@ export default function HomeScreen() {
         {/* Instagram-style Posts Feed */}
         {showSkeletons ? (
           <View style={styles.feedContainer}>
-            <EventCardSkeleton inset={PAGE_PADDING} />
-            <EventCardSkeleton inset={PAGE_PADDING} />
+            <EventCardSkeleton inset={0} />
+            <EventCardSkeleton inset={16} />
           </View>
         ) : !filtered.length ? (
           <StateMessage
@@ -158,13 +162,21 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View
+      <LinearGradient
+        pointerEvents="none"
+        colors={
+          scheme === "dark"
+            ? ["#1A2458", "#070814", "#070814"]
+            : ["#D9E6FF", "#E8EEF8", "#F7F4FF"]
+        }
+        locations={[0, 0.42, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <GlassSurface
         style={[
           styles.header,
           {
             paddingTop: insets.top + 8,
-            backgroundColor: colors.background,
-            borderBottomColor: colors.border,
           },
         ]}
       >
@@ -236,18 +248,18 @@ export default function HomeScreen() {
             <Ionicons name="options-outline" size={14} color="#fff" />
           </View>
         </Pressable>
-      </View>
+      </GlassSurface>
 
       <FlatList
         key={selectedCategory}
         data={visibleEvents}
         keyExtractor={(event) => event.id}
         renderItem={({ item }) => (
-          <EventCard event={item} variant="feed" inset={PAGE_PADDING} />
+          <EventCard event={item} variant="feed" inset={0} />
         )}
         ListHeaderComponent={renderBody()}
         ListFooterComponent={visibleEvents.length ? (
-          <Text style={{ color: colors.mutedForeground, textAlign: "center", paddingVertical: 20 }}>
+          <Text style={{ color: colors.mutedForeground, textAlign: "center", paddingVertical: 20, paddingHorizontal: PAGE_PADDING }}>
             {visibleCount < filtered.length ? "Scroll for more events" : "You're all caught up"}
           </Text>
         ) : null}
@@ -260,7 +272,7 @@ export default function HomeScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingBottom: Platform.OS === "web" ? 84 + 20 : 100,
+            paddingBottom: Platform.OS === "web" ? 120 : 128,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -479,8 +491,10 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: PAGE_PADDING,
-    paddingBottom: 12,
+    paddingBottom: 14,
+    borderWidth: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: 0,
   },
   headerRow: {
     flexDirection: "row",
@@ -564,8 +578,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: PAGE_PADDING,
-    paddingTop: 20,
+    paddingHorizontal: 0,
+    paddingTop: 8,
   },
   section: {
     marginTop: 32,
@@ -615,6 +629,7 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
     marginBottom: 16,
+    marginHorizontal: PAGE_PADDING,
   },
   promptBody: {
     flexDirection: "row",
@@ -654,7 +669,7 @@ const styles = StyleSheet.create({
   },
   // Horizontal rows scroll edge to edge but start aligned with the page padding.
   bleed: {
-    marginHorizontal: -PAGE_PADDING,
+    marginHorizontal: 0,
   },
   bleedContent: {
     paddingHorizontal: PAGE_PADDING,

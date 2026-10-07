@@ -103,28 +103,47 @@ function TabLayout() {
         tabBarItemStyle: styles.item,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.background,
-          borderTopWidth: isWeb ? 1 : 0,
-          borderTopColor: colors.border,
-          elevation: 0,
-          height: isWeb ? 84 : (isIOS ? 58 : 62) + insets.bottom,
-          paddingBottom: isWeb ? 0 : insets.bottom,
+          backgroundColor: "transparent",
+          borderTopWidth: 0,
+          borderWidth: 1,
+          borderColor: colors.border,
+          elevation: 12,
+          marginHorizontal: 14,
+          bottom: Math.max(insets.bottom, 10),
+          height: 66,
+          borderRadius: 28,
+          paddingBottom: 0,
+          overflow: "hidden",
+          shadowColor: "#2F6BFF",
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.22,
+          shadowRadius: 16,
         },
-        tabBarBackground: () =>
-          isIOS ? (
-            <BlurView
-              intensity={100}
-              tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : isWeb ? (
+        tabBarBackground: () => (
+          <View style={StyleSheet.absoluteFill}>
+            {isIOS || isWeb ? (
+              <BlurView
+                intensity={isWeb ? 32 : 80}
+                tint={isDark ? "dark" : "light"}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : null}
             <View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: colors.background },
+                {
+                  backgroundColor: colors.glass,
+                  ...(isWeb
+                    ? ({
+                        backdropFilter: "blur(22px) saturate(1.45)",
+                        WebkitBackdropFilter: "blur(22px) saturate(1.45)",
+                      } as object)
+                    : null),
+                },
               ]}
             />
-          ) : null,
+          </View>
+        ),
       }}
     >
       <Tabs.Screen
@@ -179,6 +198,15 @@ function TabLayout() {
       />
       <Tabs.Screen name="tickets" options={{ href: null }} />
       <Tabs.Screen
+        name="share"
+        options={{
+          title: "Share",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="share-2" color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
@@ -211,7 +239,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     marginTop: 3,
   },

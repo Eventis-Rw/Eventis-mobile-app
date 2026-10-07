@@ -315,6 +315,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
       <AnimatedPressable
         style={[
           styles.instaCard,
+          variant === "feed" && styles.feedBleed,
           { backgroundColor: colors.card, borderColor: colors.border },
           animatedStyle,
         ]}
@@ -598,10 +599,25 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   instaCard: {
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     overflow: "hidden",
-    marginBottom: 20,
+    marginBottom: 22,
+    shadowColor: "#6E96FF",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  feedBleed: {
+    width: "100%",
+    alignSelf: "stretch",
+    borderRadius: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    marginBottom: 10,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   instaHeader: {
     flexDirection: "row",

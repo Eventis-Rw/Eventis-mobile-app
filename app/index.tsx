@@ -36,6 +36,8 @@ export default function AppEntryScreen() {
       const userCache = await AsyncStorage.getItem("@eventis_user_cache");
       if (completed === "true" && userCache) {
         router.replace("/(tabs)");
+      } else if (completed === "true") {
+        router.replace("/auth/login" as any);
       } else {
         router.replace("/onboarding" as any);
       }

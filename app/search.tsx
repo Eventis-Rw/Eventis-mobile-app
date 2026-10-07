@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -14,8 +15,10 @@ import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
+import { GlassSurface } from "@/components/GlassSurface";
 import { EventCard } from "@/components/EventCard";
 import { useEvents } from "@/context/EventsContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
 type SortOption = "relevance" | "date" | "distance" | "price";
@@ -23,6 +26,7 @@ type PriceFilter = "all" | "free" | "paid";
 
 export default function SearchScreen() {
   const colors = useColors();
+  const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -73,14 +77,24 @@ export default function SearchScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View
+      <LinearGradient
+        pointerEvents="none"
+        colors={
+          scheme === "dark"
+            ? ["#1A2458", "#070814", "#070814"]
+            : ["#D9E6FF", "#E8EEF8", "#F7F4FF"]
+        }
+        locations={[0, 0.42, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <GlassSurface
         style={[
           styles.header,
           {
             paddingTop: insets.top + 8,
-            backgroundColor: colors.background,
-            borderBottomColor: colors.border,
+            borderWidth: 0,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderRadius: 0,
           },
         ]}
       >
@@ -214,7 +228,7 @@ export default function SearchScreen() {
             </View>
           </Animated.View>
         )}
-      </View>
+      </GlassSurface>
 
       {/* Results */}
       <FlatList

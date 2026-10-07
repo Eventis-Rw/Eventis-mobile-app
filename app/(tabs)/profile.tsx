@@ -42,7 +42,7 @@ export default function ProfileScreen() {
   const handleLogout = () => {
     const doLogout = async () => {
       await logout();
-      router.replace("/onboarding" as any);
+      router.replace("/auth/login" as any);
     };
 
     if (Platform.OS === "web") {
@@ -58,7 +58,7 @@ export default function ProfileScreen() {
   const handleDeleteAccount = () => {
     const doDelete = async () => {
       await deleteAccount();
-      router.replace("/onboarding" as any);
+      router.replace("/auth/login" as any);
     };
 
     if (Platform.OS === "web") {

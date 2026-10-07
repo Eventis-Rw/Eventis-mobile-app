@@ -146,29 +146,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setHasCompletedOnboarding(true);
   }, []);
   const logout = useCallback(async () => {
-    try {
-      await api.post("/auth/logout");
-    } catch {}
+    setUser(null);
     await clearToken();
     await AsyncStorage.removeItem(USER_CACHE_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
-    await AsyncStorage.removeItem("@eventis_logged_out");
-    setHasCompletedOnboarding(false);
-    setUser(null);
+    void Promise.race([
+      api.post("/auth/logout").catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
   }, []);
 
   const deleteAccount = useCallback(async () => {
-    try {
-      await api.delete("/users/me");
-    } catch {}
+    setUser(null);
     await clearToken();
     await AsyncStorage.removeItem(USER_CACHE_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
-    await AsyncStorage.removeItem("@eventis_logged_out");
-    setHasCompletedOnboarding(false);
-    setUser(null);
+    void Promise.race([
+      api.delete("/users/me").catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
   }, []);
 
   const signInWithPhoneSession = useCallback(
