@@ -21,6 +21,7 @@ import { useBookings } from "@/context/BookingsContext";
 import { useEvents } from "@/context/EventsContext";
 import { useTheme, type ThemePreference } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { EventCard } from "@/components/EventCard";
 
 export default function ProfileScreen() {
@@ -32,6 +33,7 @@ export default function ProfileScreen() {
   const { events } = useEvents();
   const [activeSection, setActiveSection] = useState<"saved" | "settings">("saved");
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
+  const { openOrganiserFlow } = useOrganiserAccess();
 
   const headerTop = Platform.OS === "web" ? 67 : insets.top;
 
@@ -129,7 +131,7 @@ export default function ProfileScreen() {
           <Pressable
             onPress={() =>
               user?.isBusinessAccount
-                ? router.push("/business/register" as any)
+                ? router.push("/business/dashboard" as any)
                 : setShowOrganizerModal(true)
             }
             style={[styles.organizerHeaderBtn, { backgroundColor: colors.primary }]}
@@ -390,7 +392,7 @@ export default function ProfileScreen() {
             </View>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>Become an organizer</Text>
             <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>
-              List your events, manage bookings, and reach thousands of people near you. It is free to get started.
+              List your events, manage bookings, and reach thousands of people near you. Upgrade your existing account with an organiser subscription.
             </Text>
             <View style={styles.modalFeatures}>
               {["Create and manage events", "Publish free or paid tickets", "View attendee analytics"].map((f) => (
@@ -404,7 +406,7 @@ export default function ProfileScreen() {
               style={[styles.modalCta, { backgroundColor: colors.primary }]}
               onPress={() => {
                 setShowOrganizerModal(false);
-                router.push("/business/register" as any);
+                openOrganiserFlow();
               }}
             >
               <Text style={styles.modalCtaText}>Get Started as Organizer</Text>

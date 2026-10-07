@@ -122,7 +122,7 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: StoriesBarProps) {
   const handleUserStoryPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (user?.isBusinessAccount) {
-      router.push("/business/register" as any);
+      router.push("/business/dashboard" as any);
     } else {
       setShowOrganizerGateModal(true);
     }
