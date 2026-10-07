@@ -111,9 +111,14 @@ export default function ChatScreen() {
                     color={colors.foreground}
                   />
                 </Pressable>
-                <Text style={[styles.appleTitle, { color: colors.foreground }]}>
-                  Chats
-                </Text>
+                <View style={styles.titleBlock}>
+                  <Text style={[styles.appleTitle, { color: colors.foreground }]}>
+                    Chats
+                  </Text>
+                  <Text style={[styles.appleSubtitle, { color: colors.mutedForeground }]}>
+                    Plans, people, and the group after the show.
+                  </Text>
+                </View>
               </View>
             </>
           ) : (
@@ -130,9 +135,14 @@ export default function ChatScreen() {
                   color={colors.foreground}
                 />
               </Pressable>
-              <Text style={[styles.title, { color: colors.foreground }]}>
-                Chats
-              </Text>
+              <View style={styles.titleBlock}>
+                <Text style={[styles.title, { color: colors.foreground }]}>
+                  Chats
+                </Text>
+                <Text style={[styles.appleSubtitle, { color: colors.mutedForeground }]}>
+                  Plans, people, and the group after the show.
+                </Text>
+              </View>
               <Pressable
                 ref={menuButton}
                 accessibilityRole="button"
@@ -229,6 +239,7 @@ export default function ChatScreen() {
             data={conversations}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{
+              paddingTop: 8,
               paddingBottom: insets.bottom + 92,
               flexGrow: 1,
             }}
@@ -392,10 +403,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  titleBlock: {
+    flex: 1,
+  },
   appleTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 38,
     lineHeight: 44,
+  },
+  appleSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    lineHeight: 18,
+    marginTop: 2,
   },
   icon: {
     width: 46,

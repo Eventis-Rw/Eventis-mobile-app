@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -25,6 +26,7 @@ import { EventCard } from "@/components/EventCard";
 
 export default function ProfileScreen() {
   const colors = useColors();
+  const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user, logout, deleteAccount, isAuthenticated } = useAuth();
@@ -114,13 +116,22 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={
+          scheme === "dark"
+            ? ["#1A2458", "#070814", colors.background]
+            : ["#D9E6FF", "#E8EEF8", colors.background]
+        }
+        style={StyleSheet.absoluteFill}
+      />
       <View
         style={[
           styles.header,
           {
             paddingTop: headerTop + 8,
-            backgroundColor: colors.background,
-            borderBottomColor: colors.border,
+            backgroundColor: "transparent",
+            borderBottomColor: "transparent",
           },
         ]}
       >
@@ -545,15 +556,15 @@ const styles = StyleSheet.create({
   profileCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 20,
+    padding: 18,
+    borderRadius: 28,
     borderWidth: 1,
-    gap: 14,
+    gap: 16,
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -568,7 +579,7 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   profileInfo: { flex: 1 },
-  profileName: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  profileName: { fontSize: 22, fontFamily: "Inter_700Bold", letterSpacing: -0.3 },
   profileEmail: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   badgeRow: { flexDirection: "row", gap: 6, marginTop: 6 },
   verifiedBadge: {
@@ -593,7 +604,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     padding: 14,
-    borderRadius: 16,
+    borderRadius: 22,
     borderWidth: 1,
     gap: 4,
   },

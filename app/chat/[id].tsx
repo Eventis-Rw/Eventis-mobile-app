@@ -787,7 +787,7 @@ export default function ConversationScreen() {
             {
               paddingTop: insets.top + 4,
               borderBottomColor: colors.border,
-              backgroundColor: colors.background,
+              backgroundColor: colors.glass,
             },
           ]}
         >

@@ -23,7 +23,7 @@ import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 import { shareEvent } from "@/utils/shareEvent";
 
-import { getEventImage, POSTER_RATIOS } from "@/constants/eventImages";
+import { getEventImage } from "@/constants/eventImages";
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -129,7 +129,7 @@ export default function EventDetailScreen() {
         {/* Hero */}
         <ImageBackground
           source={getEventImage(event.image)}
-          style={[styles.hero, POSTER_RATIOS[event.image] ? { height: undefined, aspectRatio: POSTER_RATIOS[event.image] } : null]}
+          style={styles.hero}
         >
           <View style={[styles.heroOverlay, { backgroundColor: colors.overlay }]} />
           <View style={[styles.heroTop, { paddingTop: insets.top + 8 }]}>
@@ -161,12 +161,6 @@ export default function EventDetailScreen() {
             </View>
           </View>
 
-          <View style={styles.heroBottom}>
-            <View style={[styles.catBadge, { backgroundColor: colors.primary }]}>
-              <Text style={styles.catBadgeText}>{event.category}</Text>
-            </View>
-            <Text style={styles.heroTitle}>{event.title}</Text>
-          </View>
         </ImageBackground>
 
         {/* Content */}
@@ -174,11 +168,22 @@ export default function EventDetailScreen() {
           entering={Platform.OS !== "web" ? FadeInDown.delay(100).springify() : undefined}
           style={[styles.content, { backgroundColor: colors.background }]}
         >
+          <View style={styles.titleBlock}>
+            <View style={[styles.catBadge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.catBadgeText}>{event.category}</Text>
+            </View>
+            <Text style={[styles.heroTitle, { color: colors.foreground }]}>{event.title}</Text>
+          </View>
+
           {/* Info cards row */}
           <View style={styles.infoRow}>
             {[
               { icon: "calendar-outline", label: "Date", value: formatDate(event.date) },
-              { icon: "time-outline", label: "Time", value: `${event.time} – ${event.endTime}` },
+              {
+                icon: "time-outline",
+                label: "Time",
+                value: event.endTime ? `${event.time} – ${event.endTime}` : event.time,
+              },
               { icon: "location-outline", label: "Distance", value: `${event.distance}km away` },
             ].map((item, i) => (
               <View
@@ -189,7 +194,7 @@ export default function EventDetailScreen() {
                 <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>
                   {item.label}
                 </Text>
-                <Text style={[styles.infoValue, { color: colors.foreground }]}>
+                <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={2}>
                   {item.value}
                 </Text>
               </View>
@@ -200,11 +205,11 @@ export default function EventDetailScreen() {
           <View style={[styles.locationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.locationLeft}>
               <Ionicons name="location" size={18} color={colors.primary} />
-              <View>
-                <Text style={[styles.locationName, { color: colors.foreground }]}>
+              <View style={styles.locationCopy}>
+                <Text style={[styles.locationName, { color: colors.foreground }]} numberOfLines={2}>
                   {event.location}
                 </Text>
-                <Text style={[styles.locationCity, { color: colors.mutedForeground }]}>
+                <Text style={[styles.locationCity, { color: colors.mutedForeground }]} numberOfLines={1}>
                   {event.city}
                 </Text>
               </View>
@@ -231,7 +236,7 @@ export default function EventDetailScreen() {
               <Text style={[styles.organizerLabel, { color: colors.mutedForeground }]}>
                 Organizer
               </Text>
-              <Text style={[styles.organizerName, { color: colors.foreground }]}>
+              <Text style={[styles.organizerName, { color: colors.foreground }]} numberOfLines={2}>
                 {event.organizer}
               </Text>
             </View>
@@ -493,7 +498,7 @@ function formatCount(n: number): string {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { flex: 1 },
-  hero: { height: 320, justifyContent: "space-between" },
+  hero: { height: 280, justifyContent: "flex-start" },
   heroOverlay: { ...StyleSheet.absoluteFill, opacity: 0.35 },
   heroTop: {
     flexDirection: "row",
@@ -508,7 +513,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   heroActions: { flexDirection: "row", gap: 8 },
-  heroBottom: { padding: 20, gap: 8 },
   catBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 10,
@@ -516,11 +520,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   catBadgeText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  titleBlock: { gap: 8 },
   heroTitle: {
     fontSize: 26,
     fontFamily: "Inter_700Bold",
-    color: "#fff",
-    lineHeight: 34,
+    lineHeight: 32,
   },
   content: { padding: 20, gap: 14 },
   infoRow: { flexDirection: "row", gap: 10 },
@@ -533,7 +537,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   infoLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5 },
-  infoValue: { fontSize: 12, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  infoValue: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: "Inter_600SemiBold",
+    textAlign: "center",
+    width: "100%",
+  },
   locationCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -542,8 +552,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 10,
   },
-  locationLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  locationName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  locationLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10 },
+  locationCopy: { flex: 1, minWidth: 0 },
+  locationName: { fontSize: 14, lineHeight: 18, fontFamily: "Inter_600SemiBold" },
   locationCity: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
   mapBtn: {
     paddingHorizontal: 16,
@@ -566,9 +577,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  organizerInfo: { flex: 1 },
+  organizerInfo: { flex: 1, minWidth: 0 },
   organizerLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  organizerName: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginTop: 1 },
+  organizerName: { fontSize: 15, lineHeight: 20, fontFamily: "Inter_600SemiBold", marginTop: 1 },
   visitBtn: {
     flexDirection: "row",
     alignItems: "center",

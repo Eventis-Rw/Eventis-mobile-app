@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Image,
-  FlatList,
   Linking,
   Modal,
   Platform,
@@ -31,7 +30,6 @@ import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { DEMO_POST_ORDER } from "@/constants/featuredDemoPosts";
 
 const PAGE_PADDING = 20;
-const FEED_PAGE_SIZE = 6;
 
 type EventsView = "nearby" | "all";
 
@@ -44,7 +42,6 @@ export default function HomeScreen() {
   const { events, categories, isLoading, error, refreshEvents } = useEvents();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const location = useLocationPermission();
 
@@ -66,24 +63,14 @@ export default function HomeScreen() {
     });
   }, [events, selectedCategory, location.status]);
   const onRefresh = useCallback(async () => {
-    setVisibleCount(FEED_PAGE_SIZE);
     setRefreshing(true);
     await refreshEvents();
     setRefreshing(false);
   }, [refreshEvents]);
 
   const selectCategory = useCallback((category: string) => {
-    setVisibleCount(FEED_PAGE_SIZE);
     setSelectedCategory(category);
   }, []);
-  const visibleEvents = useMemo(
-    () => showSkeletons ? [] : filtered.slice(0, visibleCount),
-    [filtered, visibleCount, showSkeletons],
-  );
-  const loadMore = useCallback(() => {
-    if (isLoading || refreshing) return;
-    setVisibleCount((count) => Math.min(count + FEED_PAGE_SIZE, filtered.length));
-  }, [isLoading, refreshing, filtered.length]);
 
   const openSearch = useCallback(() => {
     router.push("/search");
@@ -155,7 +142,11 @@ export default function HomeScreen() {
             onAction={() => selectCategory("All")}
             compact
           />
-        ) : null}
+        ) : (
+          filtered.map((event) => (
+            <EventCard key={event.id} event={event} variant="feed" inset={0} />
+          ))
+        )}
       </>
     );
   };
@@ -250,24 +241,7 @@ export default function HomeScreen() {
         </Pressable>
       </GlassSurface>
 
-      <FlatList
-        key={selectedCategory}
-        data={visibleEvents}
-        keyExtractor={(event) => event.id}
-        renderItem={({ item }) => (
-          <EventCard event={item} variant="feed" inset={0} />
-        )}
-        ListHeaderComponent={renderBody()}
-        ListFooterComponent={visibleEvents.length ? (
-          <Text style={{ color: colors.mutedForeground, textAlign: "center", paddingVertical: 20, paddingHorizontal: PAGE_PADDING }}>
-            {visibleCount < filtered.length ? "Scroll for more events" : "You're all caught up"}
-          </Text>
-        ) : null}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        initialNumToRender={FEED_PAGE_SIZE}
-        maxToRenderPerBatch={FEED_PAGE_SIZE}
-        windowSize={5}
+      <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -283,7 +257,9 @@ export default function HomeScreen() {
             tintColor={colors.primary}
           />
         }
-      />
+      >
+        {renderBody()}
+      </ScrollView>
 
       {/* Organiser Modal */}
       <Modal
@@ -491,7 +467,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: PAGE_PADDING,
-    paddingBottom: 14,
+    paddingBottom: 8,
     borderWidth: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderRadius: 0,
@@ -579,7 +555,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 0,
-    paddingTop: 8,
+    paddingTop: 0,
   },
   section: {
     marginTop: 32,

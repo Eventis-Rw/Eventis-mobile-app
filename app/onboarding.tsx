@@ -21,6 +21,7 @@ import { useColors } from "@/hooks/useColors";
 
 interface SlideData {
   id: string;
+  kicker: string;
   title: string;
   description: string;
   image: any;
@@ -30,19 +31,30 @@ interface SlideData {
 const SLIDES: SlideData[] = [
   {
     id: "slide-1",
-    title: "EXPLORE EVENTS.\nLIST YOUR OWN.\nLIVE THE MOMENT.",
+    kicker: "The night, curated",
+    title: "Find the room\nbefore it fills up.",
     description:
-      "Find unforgettable concerts, vibrant nightlife, and local gatherings, or list and sell out your own events in seconds.",
-    image: require("../assets/images/splash1.png"),
-    primaryActionLabel: "NEXT",
+      "Concerts, rooftop sets, and the plans people are already making near you.",
+    image: require("../assets/images/onboarding-nights.jpg"),
+    primaryActionLabel: "Continue",
   },
   {
     id: "slide-2",
-    title: "CONNECT, MATCH\nAND FIND LOVE\nAT LIVE EVENTS.",
+    kicker: "Go with someone",
+    title: "Meet the people\ngoing too.",
     description:
-      "Meet people going to the same concerts and gatherings. Spark genuine connections and find someone special where moments happen.",
-    image: require("../assets/images/splash2.png"),
-    primaryActionLabel: "GET STARTED",
+      "See who's in the crowd, start a chat, and turn a ticket into a night out.",
+    image: require("../assets/images/onboarding-people.jpg"),
+    primaryActionLabel: "Continue",
+  },
+  {
+    id: "slide-3",
+    kicker: "Your city, tonight",
+    title: "Kigali doesn't\nsleep quietly.",
+    description:
+      "From a cooking class tomorrow morning to the match under the lights.",
+    image: require("../assets/images/onboarding-city.jpg"),
+    primaryActionLabel: "Get started",
   },
 ];
 
@@ -129,7 +141,7 @@ export default function OnboardingScreen() {
               {/* 100% Full-bleed Background Image */}
               <Image
                 source={item.image}
-                style={StyleSheet.absoluteFill}
+                style={{ position: "absolute", width, height }}
                 resizeMode="cover"
               />
 
@@ -173,8 +185,9 @@ export default function OnboardingScreen() {
 
                 {/* Bottom Block: Typography & Action Controls */}
                 <View style={styles.bottomBlock}>
-                  <View style={styles.copySection}>
-                    <Text style={styles.heading}>{item.title}</Text>
+                <View style={styles.copySection}>
+                  <Text style={styles.kicker}>{item.kicker}</Text>
+                  <Text style={styles.heading}>{item.title}</Text>
                     {item.description ? (
                       <Text style={styles.description}>{item.description}</Text>
                   ) : null}
@@ -240,34 +253,36 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   skipBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.16)",
   },
   skipBtnText: {
-    fontSize: 17,
-    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
     color: "#FFFFFF",
-    letterSpacing: 0.2,
-    textShadowColor: "rgba(0, 0, 0, 0.7)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
   },
   bottomBlock: {
     gap: 20,
     width: "100%",
   },
   copySection: {
-    gap: 12,
+    gap: 10,
+  },
+  kicker: {
+    color: "#FFD36A",
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
   },
   heading: {
-    fontSize: 34,
-    lineHeight: 40,
-    fontFamily: "Inter_900Black",
-    letterSpacing: -0.8,
+    fontSize: 40,
+    lineHeight: 44,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -1.1,
     color: "#FFFFFF",
-    textShadowColor: "rgba(0, 0, 0, 0.5)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 10,
   },
   description: {
     fontSize: 15,
@@ -314,8 +329,7 @@ const styles = StyleSheet.create({
   primaryPillText: {
     color: "#FFFFFF",
     fontSize: 15,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
   },
 });

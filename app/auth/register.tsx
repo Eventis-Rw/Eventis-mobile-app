@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -16,10 +17,12 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { Logo } from "@/components/Logo";
 import { ExploreDemoButton } from "@/components/ExploreDemoButton";
 import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
+import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
 export default function RegisterScreen() {
   const colors = useColors();
+  const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
@@ -64,6 +67,15 @@ export default function RegisterScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={
+          scheme === "dark"
+            ? ["#1A2458", "#070814", colors.background]
+            : ["#D9E6FF", "#E8EEF8", colors.background]
+        }
+        style={StyleSheet.absoluteFill}
+      />
       <KeyboardAwareScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -83,11 +95,12 @@ export default function RegisterScreen() {
             style={styles.brandSection}
           >
             <Logo style={styles.brandLogo} />
+          <Text style={[styles.kicker, { color: colors.primary }]}>Join Eventis</Text>
           <Text style={[styles.title, { color: colors.foreground }]}>
             Create an account
           </Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            Enter your details to register and verify your number.
+            A name and a number. Then you're in the city.
           </Text>
         </Animated.View>
 
@@ -211,9 +224,15 @@ const styles = StyleSheet.create({
     gap: 22,
   },
   brandSection: {
-    alignItems: "center",
-    gap: 10,
+    alignItems: "flex-start",
+    gap: 8,
     marginBottom: 6,
+  },
+  kicker: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
   },
   brandLogo: {
     width: 68,
@@ -223,15 +242,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontFamily: "Inter_900Black",
-    letterSpacing: -0.5,
-    textAlign: "center",
+    letterSpacing: -0.8,
+    textAlign: "left",
   },
   subtitle: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    maxWidth: 300,
-    lineHeight: 21,
+    textAlign: "left",
+    lineHeight: 22,
   },
   fieldSection: {
     gap: 8,
