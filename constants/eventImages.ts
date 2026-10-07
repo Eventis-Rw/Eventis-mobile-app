@@ -2,9 +2,9 @@ export const EVENT_IMAGES: Record<string, number> = {
   concert: require("../assets/images/banner-concert.png"),
   tech: require("../assets/images/banner-tech.png"),
   food: require("../assets/images/banner-food.png"),
-  "friday-fiesta": require("../assets/images/Second Post.jpeg"),
-  "thursday-rewind": require("../assets/images/WhatsApp Image 2026-10-05 at 09.18.10.jpeg"),
-  "grill-and-chill": require("../assets/images/WhatsApp Image 2026-10-05 at 09.18.12.jpeg"),
+  "friday-fiesta": require("../assets/images/friday-fiesta.jpeg"),
+  "thursday-rewind": require("../assets/images/thursday-rewind.jpeg"),
+  "grill-and-chill": require("../assets/images/grill-and-chill.jpeg"),
 };
 
 export const POSTER_RATIOS: Record<string, number> = {

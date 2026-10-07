@@ -1,33 +1,25 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
-import {
-  ActivityIndicator,
-  ImageBackground,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, ImageBackground, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
-import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { getEventImage } from "@/constants/eventImages";
+import { getEventPalette, getEventTiming } from "@/constants/eventPresentation";
 import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
 import { useEvents } from "@/context/EventsContext";
+import { useTheme } from "@/context/ThemeContext";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import { shareEvent } from "@/utils/shareEvent";
-
-import { getEventImage } from "@/constants/eventImages";
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
+  const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user, toggleSaveEvent, requestOTP } = useAuth();
@@ -39,20 +31,22 @@ export default function EventDetailScreen() {
   const event = getEventById(id ?? "");
   const isBooked = hasBookedEvent(id ?? "");
   const isSaved = user?.savedEvents.includes(id ?? "") ?? false;
+  const palette = getEventPalette(event?.category ?? "Business");
+  const timing = useMemo(() => event ? getEventTiming(event) : null, [event]);
 
   const handleBook = useCallback(async () => {
-    if (!event) return;
+    if (!event || timing?.kind === "ended") return;
     if (!user) {
-      router.push("/auth/register" as any);
+      router.push("/auth/register" as never);
       return;
     }
     if (event.isPaid && !user.isPhoneVerified) {
       requestOTP("payment", event.id);
-      router.push({ pathname: "/auth/otp", params: { purpose: "payment", eventId: event.id } } as any);
+      router.push({ pathname: "/auth/otp", params: { purpose: "payment", eventId: event.id } } as never);
       return;
     }
     if (event.isPaid && event.organizerWebsite) {
-      Linking.openURL(event.organizerWebsite);
+      await Linking.openURL(event.organizerWebsite);
       return;
     }
     setBookingLoading(true);
@@ -71,14 +65,14 @@ export default function EventDetailScreen() {
       isPaid: event.isPaid,
     });
     setBookingLoading(false);
-    router.push("/(tabs)/tickets" as any);
-  }, [user, event, router, requestOTP, addBooking]);
+    router.push("/(tabs)/tickets" as never);
+  }, [addBooking, event, requestOTP, router, timing?.kind, user]);
 
   const handleSave = useCallback(() => {
     if (!event) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     toggleSaveEvent(event.id);
-  }, [toggleSaveEvent, event]);
+  }, [event, toggleSaveEvent]);
 
   const handleShare = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -94,26 +88,16 @@ export default function EventDetailScreen() {
   const handleShareToChat = useCallback(() => {
     if (!event) return;
     setShowShareModal(false);
-    router.push({
-      pathname: "/chat",
-      params: { eventId: event.id, eventTitle: event.title },
-    } as any);
-  }, [router, event]);
+    router.push({ pathname: "/chat", params: { eventId: event.id, eventTitle: event.title } } as never);
+  }, [event, router]);
 
-  // Hooks above must run on every render, so the early returns come after them.
-  if (!event) {
+  if (!event || !timing) {
     return (
       <View style={[styles.notFound, { backgroundColor: colors.background }]}>
-        {isLoading ? (
-          <ActivityIndicator color={colors.primary} />
-        ) : (
+        {isLoading ? <ActivityIndicator color={colors.primary} /> : (
           <>
-            <Text style={[styles.notFoundText, { color: colors.foreground }]}>
-              Event not found
-            </Text>
-            <Pressable onPress={() => router.back()}>
-              <Text style={[styles.backLink, { color: colors.primary }]}>Go back</Text>
-            </Pressable>
+            <Text style={[styles.notFoundText, { color: colors.foreground }]}>Event not found</Text>
+            <Pressable onPress={() => router.back()} accessibilityRole="button"><Text style={[styles.backLink, { color: colors.primary }]}>Go back</Text></Pressable>
           </>
         )}
       </View>
@@ -122,610 +106,203 @@ export default function EventDetailScreen() {
 
   const viewsCount = event.viewCount ?? (event.attendees * 4 + 180);
   const instructions = (event.instructions ?? []).map((item) => item.trim()).filter(Boolean);
+  const hasCapacity = event.capacity > 0;
+  const remainingSpots = Math.max(event.capacity - event.attendees, 0);
+  const price = !event.isPaid || event.price <= 0 ? "Free entry" : `${event.currency} ${event.price.toLocaleString()}`;
+  const pageGradient = scheme === "dark" ? palette.pageDark : palette.pageLight;
+  const sheetColor = scheme === "dark" ? "rgba(8,10,22,0.97)" : "rgba(248,250,255,0.97)";
+  const cardColor = scheme === "dark" ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.72)";
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Hero */}
-        <ImageBackground
-          source={getEventImage(event.image)}
-          style={styles.hero}
-        >
-          <View style={[styles.heroOverlay, { backgroundColor: colors.overlay }]} />
-          <View style={[styles.heroTop, { paddingTop: insets.top + 8 }]}>
-            <Pressable
-              style={[styles.navBtn, { backgroundColor: colors.surface }]}
-              onPress={() => router.back()}
-            >
-              <Ionicons name="chevron-back" size={22} color={colors.foreground} />
-            </Pressable>
+    <View style={styles.root}>
+      <LinearGradient colors={pageGradient} locations={[0, 0.42, 1]} style={StyleSheet.absoluteFill} />
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ImageBackground source={getEventImage(event.image)} style={styles.hero} resizeMode="cover">
+          <LinearGradient colors={["rgba(3,5,14,0.04)", "rgba(3,5,14,0.24)", palette.deep]} locations={[0, 0.42, 1]} style={StyleSheet.absoluteFill} />
+          <View style={[styles.heroTop, { paddingTop: insets.top + 10 }]}>
+            <CircleButton icon="chevron-back" label="Go back" onPress={() => router.back()} />
             <View style={styles.heroActions}>
-              <Pressable
-                style={[styles.navBtn, { backgroundColor: colors.surface }]}
-                onPress={handleSave}
-              >
-                <Ionicons
-                  name={isSaved ? "bookmark" : "bookmark-outline"}
-                  size={20}
-                  color={isSaved ? colors.primary : colors.foreground}
-                />
-              </Pressable>
-              <Pressable
-                style={[styles.navBtn, { backgroundColor: colors.surface }]}
-                onPress={handleShare}
-                accessibilityRole="button"
-                accessibilityLabel="Share event"
-              >
-                <Ionicons name="share-outline" size={20} color={colors.foreground} />
-              </Pressable>
+              <CircleButton icon={isSaved ? "bookmark" : "bookmark-outline"} label={isSaved ? "Remove bookmark" : "Save event"} onPress={handleSave} accent={isSaved ? palette.accent : undefined} />
+              <CircleButton icon="share-outline" label="Share event" onPress={handleShare} />
             </View>
           </View>
 
+          <View style={styles.heroCopy}>
+            <View style={styles.heroBadges}>
+              <View style={[styles.timingBadge, timing.kind === "live" && styles.liveTimingBadge]}>
+                {timing.kind === "live" ? <View style={styles.liveDot} /> : null}
+                <Text style={styles.timingText}>{timing.label}</Text>
+              </View>
+              <View style={[styles.categoryBadge, { backgroundColor: palette.accent }]}><Text style={styles.categoryText}>{event.category}</Text></View>
+            </View>
+            <Text style={styles.heroTitle}>{event.title}</Text>
+            <View style={styles.heroLocationRow}>
+              <Ionicons name="location" size={15} color={palette.accentSoft} />
+              <Text style={styles.heroLocation} numberOfLines={1}>{event.location}</Text>
+            </View>
+            <View style={styles.heroBottomRow}>
+              <View><Text style={styles.priceLabel}>ENTRY FROM</Text><Text style={styles.priceValue}>{price}</Text></View>
+              <View style={[styles.dateTile, { backgroundColor: palette.accent }]}>
+                <Text style={styles.dateDay}>{new Date(event.date).toLocaleDateString("en-GB", { day: "2-digit" })}</Text>
+                <Text style={styles.dateMonth}>{new Date(event.date).toLocaleDateString("en-GB", { month: "short" }).toUpperCase()}</Text>
+              </View>
+            </View>
+          </View>
         </ImageBackground>
 
-        {/* Content */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(100).springify() : undefined}
-          style={[styles.content, { backgroundColor: colors.background }]}
-        >
-          <View style={styles.titleBlock}>
-            <View style={[styles.catBadge, { backgroundColor: colors.primary }]}>
-              <Text style={styles.catBadgeText}>{event.category}</Text>
-            </View>
-            <Text style={[styles.heroTitle, { color: colors.foreground }]}>{event.title}</Text>
-          </View>
-
-          {/* Info cards row */}
+        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(100).springify() : undefined} style={[styles.contentSheet, { backgroundColor: sheetColor }]}>
+          <View style={[styles.sheetHandle, { backgroundColor: `${palette.accent}55` }]} />
+          <SectionHeader eyebrow="THE PLAN" title="At a glance" accent={palette.accent} foreground={colors.foreground} />
           <View style={styles.infoRow}>
-            {[
-              { icon: "calendar-outline", label: "Date", value: formatDate(event.date) },
-              {
-                icon: "time-outline",
-                label: "Time",
-                value: event.endTime ? `${event.time} – ${event.endTime}` : event.time,
-              },
-              { icon: "location-outline", label: "Distance", value: `${event.distance}km away` },
-            ].map((item, i) => (
-              <View
-                key={i}
-                style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-              >
-                <Ionicons name={item.icon as any} size={18} color={colors.primary} />
-                <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>
-                  {item.label}
-                </Text>
-                <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={2}>
-                  {item.value}
-                </Text>
-              </View>
-            ))}
+            <InfoTile icon="calendar-outline" label="Date" value={formatDate(event.date)} accent={palette.accent} background={cardColor} foreground={colors.foreground} muted={colors.mutedForeground} />
+            <InfoTile icon="time-outline" label="Time" value={event.endTime ? `${event.time}–${event.endTime}` : event.time} accent={palette.accent} background={cardColor} foreground={colors.foreground} muted={colors.mutedForeground} />
+            <InfoTile icon="navigate-outline" label="Distance" value={`${event.distance} km`} accent={palette.accent} background={cardColor} foreground={colors.foreground} muted={colors.mutedForeground} />
           </View>
 
-          {/* Location */}
-          <View style={[styles.locationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.locationLeft}>
-              <Ionicons name="location" size={18} color={colors.primary} />
-              <View style={styles.locationCopy}>
-                <Text style={[styles.locationName, { color: colors.foreground }]} numberOfLines={2}>
-                  {event.location}
-                </Text>
-                <Text style={[styles.locationCity, { color: colors.mutedForeground }]} numberOfLines={1}>
-                  {event.city}
-                </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open ${event.location} in maps`} onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(`${event.location}, ${event.city}`)}`)} style={styles.blockSpacing}>
+            <LinearGradient colors={[`${palette.accent}28`, `${palette.accent}0A`]} style={[styles.locationCard, { borderColor: `${palette.accent}38` }]}>
+              <View style={[styles.locationIcon, { backgroundColor: palette.accent }]}><Ionicons name="location" size={21} color="#FFFFFF" /></View>
+              <View style={styles.flexCopy}>
+                <Text style={[styles.cardEyebrow, { color: palette.accent }]}>WHERE YOU’LL BE</Text>
+                <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={2}>{event.location}</Text>
+                <Text style={[styles.cardCaption, { color: colors.mutedForeground }]}>{event.city}</Text>
               </View>
-            </View>
-            <Pressable
-              style={[styles.mapBtn, { backgroundColor: colors.primary }]}
-              onPress={() => {
-                const q = encodeURIComponent(`${event.location}, ${event.city}`);
-                Linking.openURL(`https://maps.google.com/?q=${q}`);
-              }}
-            >
-              <Text style={styles.mapBtnText}>Map</Text>
-            </Pressable>
-          </View>
+              <View style={[styles.cardArrow, { backgroundColor: cardColor }]}><Ionicons name="arrow-forward" size={17} color={palette.accent} /></View>
+            </LinearGradient>
+          </Pressable>
 
-          {/* Organizer */}
-          <View
-            style={[styles.organizerCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-          >
-            <View style={[styles.organizerAvatar, { backgroundColor: colors.primary }]}>
-              <Ionicons name="business-outline" size={20} color="#fff" />
+          <View style={[styles.organizerCard, { backgroundColor: cardColor, borderColor: `${palette.accent}28` }]}>
+            <View style={[styles.organizerAvatar, { backgroundColor: palette.deep }]}><Text style={styles.organizerLetter}>{event.organizer.charAt(0).toUpperCase()}</Text></View>
+            <View style={styles.flexCopy}>
+              <Text style={[styles.cardEyebrow, { color: palette.accent }]}>HOSTED BY</Text>
+              <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>{event.organizer}</Text>
+              <Text style={[styles.cardCaption, { color: colors.mutedForeground }]}>Event organizer</Text>
             </View>
-            <View style={styles.organizerInfo}>
-              <Text style={[styles.organizerLabel, { color: colors.mutedForeground }]}>
-                Organizer
-              </Text>
-              <Text style={[styles.organizerName, { color: colors.foreground }]} numberOfLines={2}>
-                {event.organizer}
-              </Text>
-            </View>
-            {event.organizerWebsite && (
-              <Pressable
-                style={[styles.visitBtn, { backgroundColor: colors.secondary }]}
-                onPress={() => Linking.openURL(event.organizerWebsite!)}
-              >
-                <Text style={[styles.visitBtnText, { color: colors.primary }]}>
-                  Visit
-                </Text>
-                <Ionicons name="open-outline" size={14} color={colors.primary} />
+            {event.organizerWebsite ? (
+              <Pressable onPress={() => Linking.openURL(event.organizerWebsite!)} accessibilityRole="button" style={[styles.visitButton, { backgroundColor: `${palette.accent}18` }]}>
+                <Text style={[styles.visitText, { color: palette.accent }]}>Visit</Text><Ionicons name="open-outline" size={14} color={palette.accent} />
               </Pressable>
-            )}
+            ) : null}
           </View>
 
-          {/* Attendees */}
-          <View style={styles.attendeeSection}>
-            <View style={styles.attendeeLeft}>
+          <View style={[styles.crowdCard, { backgroundColor: palette.deep }]}>
+            <LinearGradient colors={[`${palette.accent}44`, "transparent"]} style={StyleSheet.absoluteFill} />
+            <View style={styles.crowdTopRow}>
+              <View style={styles.flexCopy}>
+                <Text style={styles.crowdEyebrow}>THE CROWD</Text>
+                <Text style={styles.crowdTitle}>{event.attendees.toLocaleString()} people are going</Text>
+                <Text style={styles.crowdCaption}>{hasCapacity ? `${remainingSpots.toLocaleString()} spots still available` : "Attendance updates come from the organizer"}</Text>
+              </View>
               <View style={styles.avatarStack}>
-                {[colors.primary, colors.accent, colors.secondary].map((c, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.miniAvatar,
-                      { backgroundColor: c, left: i * 18, borderColor: colors.background },
-                    ]}
-                  >
-                    <Ionicons name="person" size={10} color="#fff" />
-                  </View>
+                {[palette.accent, "#FFB020", "#FFFFFF"].map((color, index) => (
+                  <View key={color} style={[styles.miniAvatar, { backgroundColor: color, marginLeft: index ? -10 : 0 }]}><Ionicons name="person" size={12} color={index === 2 ? palette.deep : "#FFFFFF"} /></View>
                 ))}
               </View>
-              <Text style={[styles.attendeeText, { color: colors.mutedForeground }]}>
-                <Text style={[styles.attendeeCount, { color: colors.foreground }]}>
-                  {event.attendees.toLocaleString()}
-                </Text>{" "}
-                attending · {event.capacity - event.attendees} spots left
-              </Text>
             </View>
-            <View
-              style={[
-                styles.capacityBar,
-                { backgroundColor: colors.border },
-              ]}
-            >
-              <View
-                style={[
-                  styles.capacityFill,
-                  {
-                    backgroundColor: colors.primary,
-                    width: `${Math.min(
-                      (event.attendees / event.capacity) * 100,
-                      100
-                    )}%`,
-                  },
-                ]}
-              />
-            </View>
+            {hasCapacity ? <View style={styles.capacityTrack}><View style={[styles.capacityFill, { backgroundColor: palette.accent, width: `${Math.min((event.attendees / event.capacity) * 100, 100)}%` }]} /></View> : null}
           </View>
 
-          {/* Description */}
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            About
-          </Text>
-          <Text style={[styles.description, { color: colors.mutedForeground }]}>
-            {event.description}
-          </Text>
+          <View style={styles.copySection}>
+            <SectionHeader eyebrow="THE STORY" title="About this event" accent={palette.accent} foreground={colors.foreground} />
+            <Text style={[styles.description, { color: colors.mutedForeground }]}>{event.description}</Text>
+          </View>
 
-          {/* Organizer instructions, only when the organizer provided some */}
-          {instructions.length > 0 ? (
-            <>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                Instructions
-              </Text>
-              <View
-                style={[styles.instructionsCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-              >
-                {instructions.map((item, index) => (
-                  <View key={index} style={styles.instructionRow}>
-                    <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
-                    <Text style={[styles.instructionsText, { color: colors.mutedForeground }]}>
-                      {item}
-                    </Text>
+          {instructions.length ? (
+            <View style={styles.copySection}>
+              <SectionHeader eyebrow="GOOD TO KNOW" title="Before you go" accent={palette.accent} foreground={colors.foreground} />
+              <View style={[styles.instructionsCard, { backgroundColor: cardColor, borderColor: `${palette.accent}28` }]}>
+                {instructions.map((instruction) => (
+                  <View key={instruction} style={styles.instructionRow}>
+                    <View style={[styles.checkIcon, { backgroundColor: `${palette.accent}1F` }]}><Ionicons name="checkmark" size={14} color={palette.accent} /></View>
+                    <Text style={[styles.instructionText, { color: colors.foreground }]}>{instruction}</Text>
                   </View>
                 ))}
               </View>
-            </>
+            </View>
           ) : null}
 
-          {/* Tags */}
           <View style={styles.tagRow}>
-            {event.tags.map((tag) => (
-              <View
-                key={tag}
-                style={[styles.tag, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-              >
-                <Text style={[styles.tagText, { color: colors.secondaryForeground }]}>
-                  {tag}
-                </Text>
-              </View>
-            ))}
+            {event.tags.map((tag) => <View key={tag} style={[styles.tag, { backgroundColor: `${palette.accent}14`, borderColor: `${palette.accent}28` }]}><Text style={[styles.tagText, { color: palette.accent }]}>#{tag.replace(/\s+/g, "")}</Text></View>)}
           </View>
-
-          <View style={{ height: 110 }} />
         </Animated.View>
       </ScrollView>
 
-      {/* Sticky bottom CTA */}
-      <Animated.View
-        entering={Platform.OS !== "web" ? FadeInUp.delay(200).springify() : undefined}
-        style={[
-          styles.bottomBar,
-          {
-            backgroundColor: colors.background,
-            borderTopColor: colors.border,
-            paddingBottom: insets.bottom + 12,
-          },
-        ]}
-      >
-        <View style={styles.insightSection}>
-          <View style={styles.insightRow}>
-            <Ionicons name="eye-outline" size={16} color={colors.primary} />
-            <Text style={[styles.insightCount, { color: colors.foreground }]}>
-              {formatCount(viewsCount)}
-            </Text>
-            <Text style={[styles.insightLabel, { color: colors.mutedForeground }]}>
-              views
-            </Text>
-          </View>
-          <Text style={[styles.insightSub, { color: colors.mutedForeground }]}>
-            {event.attendees} attending
-          </Text>
-        </View>
-        <Pressable
-          style={[
-            styles.ctaBtn,
-            {
-              backgroundColor: isBooked
-                ? colors.success
-                : event.isPaid && event.organizerWebsite
-                ? colors.accent
-                : colors.primary,
-              opacity: bookingLoading ? 0.7 : 1,
-            },
-          ]}
-          onPress={isBooked ? undefined : handleBook}
-          disabled={bookingLoading}
-        >
-          <Ionicons
-            name={
-              isBooked
-                ? "checkmark-circle-outline"
-                : event.isPaid
-                ? "open-outline"
-                : "ticket-outline"
-            }
-            size={20}
-            color="#fff"
-          />
-          <Text style={styles.ctaBtnText}>
-            {isBooked
-              ? "Booked"
-              : event.isPaid && event.organizerWebsite
-              ? "Get Tickets"
-              : event.isPaid
-              ? "Book Now"
-              : "Reserve Free Spot"}
-          </Text>
+      <Animated.View entering={Platform.OS !== "web" ? FadeInUp.delay(200).springify() : undefined} style={[styles.bottomBar, { paddingBottom: insets.bottom + 10, backgroundColor: scheme === "dark" ? "rgba(7,8,20,0.97)" : "rgba(255,255,255,0.97)", borderTopColor: `${palette.accent}24` }]}>
+        <View style={styles.insightSection}><Text style={[styles.bottomPrice, { color: colors.foreground }]}>{price}</Text><Text style={[styles.insightText, { color: colors.mutedForeground }]}>{formatCount(viewsCount)} views · {event.attendees} going</Text></View>
+        <Pressable onPress={isBooked || timing.kind === "ended" ? undefined : handleBook} disabled={bookingLoading || timing.kind === "ended"} accessibilityRole="button" style={[styles.ctaButton, { backgroundColor: isBooked ? colors.success : timing.kind === "ended" ? colors.disabled : palette.accent, opacity: bookingLoading ? 0.7 : 1 }]}>
+          {bookingLoading ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Ionicons name={isBooked ? "checkmark-circle" : timing.kind === "ended" ? "time-outline" : event.isPaid ? "ticket" : "add-circle"} size={20} color="#FFFFFF" />}
+          <Text style={styles.ctaText}>{isBooked ? "Booked" : timing.kind === "ended" ? "Event ended" : event.isPaid ? "Get tickets" : "Reserve spot"}</Text>
         </Pressable>
       </Animated.View>
 
-      {/* Share Modal */}
-      <Modal
-        visible={showShareModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowShareModal(false)}
-      >
-        <Pressable
-          style={styles.shareOverlay}
-          onPress={() => setShowShareModal(false)}
-        >
-          <Pressable
-            style={[styles.shareCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <View style={[styles.shareHandle, { backgroundColor: colors.border }]} />
-            <Text style={[styles.shareTitle, { color: colors.foreground }]}>Share Event</Text>
-            <Text style={[styles.shareSub, { color: colors.mutedForeground }]} numberOfLines={1}>
-              {event.title}
-            </Text>
-
-            <View style={styles.shareOptions}>
-              <Pressable
-                style={[styles.shareOption, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-                onPress={handleShareToChat}
-              >
-                <View style={[styles.shareIconWrap, { backgroundColor: colors.primary }]}>
-                  <Ionicons name="chatbubbles" size={20} color="#FFFFFF" />
-                </View>
-                <View style={styles.shareOptionInfo}>
-                  <Text style={[styles.shareOptionTitle, { color: colors.foreground }]}>
-                    Share in Eventis Chat
-                  </Text>
-                  <Text style={[styles.shareOptionDesc, { color: colors.mutedForeground }]}>
-                    Send to attendees and event organizers
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-              </Pressable>
-
-              <Pressable
-                style={[styles.shareOption, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-                onPress={handleNativeShare}
-              >
-                <View style={[styles.shareIconWrap, { backgroundColor: colors.accent }]}>
-                  <Ionicons name="share-outline" size={20} color="#FFFFFF" />
-                </View>
-                <View style={styles.shareOptionInfo}>
-                  <Text style={[styles.shareOptionTitle, { color: colors.foreground }]}>
-                    Share via Other Apps
-                  </Text>
-                  <Text style={[styles.shareOptionDesc, { color: colors.mutedForeground }]}>
-                    Copy link or send via WhatsApp, Messages
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-              </Pressable>
-            </View>
-
-            <Pressable
-              style={[styles.shareCancelBtn, { backgroundColor: colors.input }]}
-              onPress={() => setShowShareModal(false)}
-            >
-              <Text style={[styles.shareCancelText, { color: colors.foreground }]}>Close</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <ShareModal visible={showShareModal} title={event.title} palette={palette} colors={colors} onClose={() => setShowShareModal(false)} onChat={handleShareToChat} onNative={handleNativeShare} />
     </View>
   );
 }
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+function CircleButton({ icon, label, onPress, accent }: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; onPress: () => void; accent?: string }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.circleButton}><Ionicons name={icon} size={21} color={accent ?? "#FFFFFF"} /></Pressable>;
 }
 
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
-  return String(n);
+function InfoTile({ icon, label, value, accent, background, foreground, muted }: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; value: string; accent: string; background: string; foreground: string; muted: string }) {
+  return <View style={[styles.infoTile, { backgroundColor: background, borderColor: `${accent}24` }]}><View style={[styles.infoIcon, { backgroundColor: `${accent}18` }]}><Ionicons name={icon} size={18} color={accent} /></View><Text style={[styles.infoLabel, { color: muted }]}>{label}</Text><Text style={[styles.infoValue, { color: foreground }]} numberOfLines={2}>{value}</Text></View>;
+}
+
+function SectionHeader({ eyebrow, title, accent, foreground }: { eyebrow: string; title: string; accent: string; foreground: string }) {
+  return <View style={styles.sectionHeader}><Text style={[styles.sectionEyebrow, { color: accent }]}>{eyebrow}</Text><Text style={[styles.sectionTitle, { color: foreground }]}>{title}</Text></View>;
+}
+
+function ShareModal({ visible, title, palette, colors, onClose, onChat, onNative }: { visible: boolean; title: string; palette: ReturnType<typeof getEventPalette>; colors: ReturnType<typeof useColors>; onClose: () => void; onChat: () => void; onNative: () => void }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.shareOverlay} onPress={onClose}>
+        <Pressable style={[styles.shareCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={(event) => event.stopPropagation()}>
+          <Text style={[styles.shareTitle, { color: colors.foreground }]}>Share the moment</Text>
+          <Text style={[styles.shareSubtitle, { color: colors.mutedForeground }]} numberOfLines={1}>{title}</Text>
+          <ShareOption icon="chatbubbles" title="Eventis Chat" text="Send it to a connection" background={palette.accent} colors={colors} onPress={onChat} />
+          <ShareOption icon="share-outline" title="Other apps" text="Copy or share the event link" background={palette.deep} colors={colors} onPress={onNative} />
+          <Pressable style={styles.closeButton} onPress={onClose} accessibilityRole="button"><Text style={[styles.closeText, { color: colors.mutedForeground }]}>Close</Text></Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function ShareOption({ icon, title, text, background, colors, onPress }: { icon: React.ComponentProps<typeof Ionicons>["name"]; title: string; text: string; background: string; colors: ReturnType<typeof useColors>; onPress: () => void }) {
+  return <Pressable style={[styles.shareOption, { backgroundColor: colors.secondary }]} onPress={onPress} accessibilityRole="button"><View style={[styles.shareIcon, { backgroundColor: background }]}><Ionicons name={icon} size={20} color="#FFFFFF" /></View><View style={styles.flexCopy}><Text style={[styles.shareOptionTitle, { color: colors.foreground }]}>{title}</Text><Text style={[styles.shareOptionText, { color: colors.mutedForeground }]}>{text}</Text></View><Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} /></Pressable>;
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function formatCount(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(value);
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { flex: 1 },
-  hero: { height: 280, justifyContent: "flex-start" },
-  heroOverlay: { ...StyleSheet.absoluteFill, opacity: 0.35 },
-  heroTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-  },
-  navBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroActions: { flexDirection: "row", gap: 8 },
-  catBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  catBadgeText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  titleBlock: { gap: 8 },
-  heroTitle: {
-    fontSize: 26,
-    fontFamily: "Inter_700Bold",
-    lineHeight: 32,
-  },
-  content: { padding: 20, gap: 14 },
-  infoRow: { flexDirection: "row", gap: 10 },
-  infoCard: {
-    flex: 1,
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 4,
-  },
-  infoLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5 },
-  infoValue: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontFamily: "Inter_600SemiBold",
-    textAlign: "center",
-    width: "100%",
-  },
-  locationCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 10,
-  },
-  locationLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10 },
-  locationCopy: { flex: 1, minWidth: 0 },
-  locationName: { fontSize: 14, lineHeight: 18, fontFamily: "Inter_600SemiBold" },
-  locationCity: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
-  mapBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  mapBtnText: { color: "#fff", fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  organizerCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 12,
-  },
-  organizerAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  organizerInfo: { flex: 1, minWidth: 0 },
-  organizerLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  organizerName: { fontSize: 15, lineHeight: 20, fontFamily: "Inter_600SemiBold", marginTop: 1 },
-  visitBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  visitBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  attendeeSection: { gap: 8 },
-  attendeeLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  avatarStack: { flexDirection: "row", width: 56, height: 24, position: "relative" },
-  miniAvatar: {
-    position: "absolute",
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-  },
-  attendeeText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  attendeeCount: { fontFamily: "Inter_600SemiBold" },
-  capacityBar: { height: 4, borderRadius: 2, overflow: "hidden" },
-  capacityFill: { height: "100%", borderRadius: 2 },
-  sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  description: {
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 24,
-  },
-  instructionsCard: {
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 10,
-  },
-  instructionRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  instructionsText: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 22 },
-  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  tag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  tagText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  insightSection: { flex: 1, gap: 2 },
-  insightRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  insightCount: { fontSize: 20, fontFamily: "Inter_700Bold" },
-  insightLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  insightSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  ctaBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 28,
-    paddingVertical: 16,
-    borderRadius: 16,
-  },
-  ctaBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
-  shareOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
-    justifyContent: "flex-end",
-  },
-  shareCard: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 34,
-    gap: 12,
-  },
-  shareHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: 4,
-  },
-  shareTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-  },
-  shareSub: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-  shareOptions: {
-    gap: 10,
-    marginTop: 6,
-  },
-  shareOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 12,
-  },
-  shareIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  shareOptionInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  shareOptionTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-  },
-  shareOptionDesc: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
-  shareCancelBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 4,
-  },
-  shareCancelText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-  },
-  notFound: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  notFoundText: { fontSize: 18, fontFamily: "Inter_600SemiBold" },
-  backLink: { fontSize: 16, fontFamily: "Inter_400Regular" },
+  root: { flex: 1 }, scroll: { flex: 1 }, scrollContent: { paddingBottom: 122 },
+  hero: { height: 480, justifyContent: "space-between", backgroundColor: "#101426" },
+  heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16 }, heroActions: { flexDirection: "row", gap: 9 },
+  circleButton: { width: 43, height: 43, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(7,9,18,0.68)", borderWidth: 1, borderColor: "rgba(255,255,255,0.18)" },
+  heroCopy: { paddingHorizontal: 20, paddingBottom: 48, gap: 10 }, heroBadges: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  timingBadge: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, backgroundColor: "rgba(7,9,18,0.72)", paddingHorizontal: 11, paddingVertical: 7 }, liveTimingBadge: { backgroundColor: "#E5484D" }, liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#FFFFFF" },
+  timingText: { color: "#FFFFFF", fontSize: 10, letterSpacing: 0.45, textTransform: "uppercase", fontFamily: "Inter_700Bold" }, categoryBadge: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 }, categoryText: { color: "#FFFFFF", fontSize: 10, letterSpacing: 0.55, textTransform: "uppercase", fontFamily: "Inter_700Bold" },
+  heroTitle: { color: "#FFFFFF", fontSize: 38, lineHeight: 42, letterSpacing: -1.2, fontFamily: "Inter_900Black" }, heroLocationRow: { flexDirection: "row", alignItems: "center", gap: 6 }, heroLocation: { flex: 1, color: "rgba(255,255,255,0.82)", fontSize: 13, fontFamily: "Inter_500Medium" },
+  heroBottomRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 7 }, priceLabel: { color: "rgba(255,255,255,0.58)", fontSize: 9, letterSpacing: 1, fontFamily: "Inter_700Bold" }, priceValue: { color: "#FFFFFF", fontSize: 17, marginTop: 3, fontFamily: "Inter_700Bold" },
+  dateTile: { width: 58, height: 62, borderRadius: 18, alignItems: "center", justifyContent: "center" }, dateDay: { color: "#FFFFFF", fontSize: 23, lineHeight: 25, fontFamily: "Inter_900Black" }, dateMonth: { color: "rgba(255,255,255,0.8)", fontSize: 9, letterSpacing: 0.8, fontFamily: "Inter_700Bold" },
+  contentSheet: { marginTop: -28, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 16, paddingTop: 11, paddingBottom: 32 }, sheetHandle: { width: 42, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 24 },
+  sectionHeader: { gap: 2, marginBottom: 13 }, sectionEyebrow: { fontSize: 9, letterSpacing: 1.25, fontFamily: "Inter_700Bold" }, sectionTitle: { fontSize: 23, lineHeight: 29, letterSpacing: -0.5, fontFamily: "Inter_800ExtraBold" },
+  infoRow: { flexDirection: "row", gap: 9 }, infoTile: { flex: 1, minWidth: 0, minHeight: 124, borderRadius: 20, borderWidth: 1, padding: 11 }, infoIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 9 }, infoLabel: { fontSize: 9, textTransform: "uppercase", letterSpacing: 0.45, fontFamily: "Inter_600SemiBold" }, infoValue: { fontSize: 12, lineHeight: 16, marginTop: 3, fontFamily: "Inter_700Bold" },
+  blockSpacing: { marginTop: 22 }, locationCard: { minHeight: 104, flexDirection: "row", alignItems: "center", borderRadius: 23, borderWidth: 1, padding: 14, gap: 12, overflow: "hidden" }, locationIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" }, flexCopy: { flex: 1, minWidth: 0 },
+  cardEyebrow: { fontSize: 9, letterSpacing: 0.8, fontFamily: "Inter_700Bold", marginBottom: 3 }, cardTitle: { fontSize: 15, lineHeight: 20, fontFamily: "Inter_700Bold" }, cardCaption: { fontSize: 11, marginTop: 2, fontFamily: "Inter_400Regular" }, cardArrow: { width: 36, height: 36, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  organizerCard: { flexDirection: "row", alignItems: "center", borderRadius: 23, borderWidth: 1, padding: 14, gap: 12, marginTop: 12 }, organizerAvatar: { width: 47, height: 47, borderRadius: 17, alignItems: "center", justifyContent: "center" }, organizerLetter: { color: "#FFFFFF", fontSize: 19, fontFamily: "Inter_800ExtraBold" }, visitButton: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8 }, visitText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  crowdCard: { borderRadius: 25, padding: 17, marginTop: 22, overflow: "hidden" }, crowdTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }, crowdEyebrow: { color: "rgba(255,255,255,0.55)", fontSize: 9, letterSpacing: 1.1, fontFamily: "Inter_700Bold" }, crowdTitle: { color: "#FFFFFF", fontSize: 18, marginTop: 4, fontFamily: "Inter_700Bold" }, crowdCaption: { color: "rgba(255,255,255,0.64)", fontSize: 11, marginTop: 3, fontFamily: "Inter_400Regular" }, avatarStack: { flexDirection: "row", alignItems: "center" }, miniAvatar: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: "rgba(255,255,255,0.8)", alignItems: "center", justifyContent: "center" }, capacityTrack: { height: 5, borderRadius: 3, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.14)", marginTop: 16 }, capacityFill: { height: "100%", borderRadius: 3 },
+  copySection: { marginTop: 28 }, description: { fontSize: 15, lineHeight: 24, fontFamily: "Inter_400Regular" }, instructionsCard: { borderRadius: 21, borderWidth: 1, padding: 14, gap: 12 }, instructionRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 }, checkIcon: { width: 26, height: 26, borderRadius: 9, alignItems: "center", justifyContent: "center" }, instructionText: { flex: 1, fontSize: 13, lineHeight: 20, fontFamily: "Inter_500Medium" },
+  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 25 }, tag: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 11, paddingVertical: 7 }, tagText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  bottomBar: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth }, insightSection: { flex: 1, minWidth: 0 }, bottomPrice: { fontSize: 16, fontFamily: "Inter_800ExtraBold" }, insightText: { fontSize: 10, marginTop: 2, fontFamily: "Inter_500Medium" }, ctaButton: { minWidth: 160, minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 17, paddingHorizontal: 17 }, ctaText: { color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_700Bold" },
+  shareOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.68)", justifyContent: "center", padding: 22 }, shareCard: { width: "100%", maxWidth: 420, alignSelf: "center", borderRadius: 26, borderWidth: 1, padding: 20, gap: 11 }, shareTitle: { fontSize: 21, fontFamily: "Inter_800ExtraBold" }, shareSubtitle: { fontSize: 12, marginBottom: 5, fontFamily: "Inter_400Regular" }, shareOption: { flexDirection: "row", alignItems: "center", borderRadius: 17, padding: 12, gap: 11 }, shareIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" }, shareOptionTitle: { fontSize: 14, fontFamily: "Inter_700Bold" }, shareOptionText: { fontSize: 11, marginTop: 2, fontFamily: "Inter_400Regular" }, closeButton: { alignItems: "center", paddingTop: 8, paddingBottom: 2 }, closeText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  notFound: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }, notFoundText: { fontSize: 18, fontFamily: "Inter_600SemiBold" }, backLink: { fontSize: 16, fontFamily: "Inter_400Regular" },
 });

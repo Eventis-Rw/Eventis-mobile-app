@@ -1,4 +1,3 @@
-import { BlurView } from "expo-blur";
 import { Tabs, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
@@ -6,7 +5,6 @@ import {
   Animated,
   ColorValue,
   Easing,
-  Platform,
   StyleSheet,
   View,
 } from "react-native";
@@ -87,9 +85,6 @@ function TabLayout() {
   const colors = useColors();
   const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
-  const isDark = scheme === "dark";
-  const isIOS = Platform.OS === "ios";
-  const isWeb = Platform.OS === "web";
 
   return (
     <Tabs
@@ -103,47 +98,22 @@ function TabLayout() {
         tabBarItemStyle: styles.item,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: "transparent",
+          backgroundColor: scheme === "dark" ? "#11162A" : "#FFFFFF",
           borderTopWidth: 0,
           borderWidth: 1,
-          borderColor: colors.border,
-          elevation: 12,
-          marginHorizontal: 14,
-          bottom: Math.max(insets.bottom, 10),
-          height: 66,
-          borderRadius: 28,
+          borderColor: scheme === "dark" ? "rgba(255,255,255,0.13)" : "rgba(20,35,70,0.10)",
+          elevation: 18,
+          marginHorizontal: 12,
+          bottom: Math.max(insets.bottom, 8),
+          height: 70,
+          borderRadius: 24,
           paddingBottom: 0,
           overflow: "hidden",
-          shadowColor: "#2F6BFF",
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.22,
-          shadowRadius: 16,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: scheme === "dark" ? 0.5 : 0.2,
+          shadowRadius: 20,
         },
-        tabBarBackground: () => (
-          <View style={StyleSheet.absoluteFill}>
-            {isIOS || isWeb ? (
-              <BlurView
-                intensity={isWeb ? 32 : 80}
-                tint={isDark ? "dark" : "light"}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null}
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  backgroundColor: colors.glass,
-                  ...(isWeb
-                    ? ({
-                        backdropFilter: "blur(22px) saturate(1.45)",
-                        WebkitBackdropFilter: "blur(22px) saturate(1.45)",
-                      } as object)
-                    : null),
-                },
-              ]}
-            />
-          </View>
-        ),
       }}
     >
       <Tabs.Screen
@@ -221,27 +191,27 @@ function TabLayout() {
 
 const styles = StyleSheet.create({
   activePill: {
-    borderRadius: 16,
-    height: 32,
+    borderRadius: 14,
+    height: 34,
     position: "absolute",
-    width: 48,
+    width: 52,
   },
   iconSlot: {
     alignItems: "center",
-    height: 32,
+    height: 34,
     justifyContent: "center",
-    width: 48,
+    width: 52,
   },
   item: {
-    paddingTop: 6,
+    paddingTop: 7,
   },
   disabledItem: {
     opacity: 0.5,
   },
   label: {
     fontSize: 10,
-    fontWeight: "600",
-    marginTop: 3,
+    fontWeight: "700",
+    marginTop: 4,
   },
 });
 
