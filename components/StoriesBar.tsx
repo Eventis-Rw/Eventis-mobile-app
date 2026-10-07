@@ -431,17 +431,17 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: StoriesBarProps) {
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 2,
-    paddingBottom: 4,
+    paddingTop: 18,
+    paddingBottom: 16,
     alignSelf: "stretch",
   },
   scroller: {
     width: "100%",
   },
   scrollContent: {
-    paddingLeft: 12,
-    paddingRight: 16,
-    gap: 12,
+    paddingLeft: 16,
+    paddingRight: 20,
+    gap: 18,
   },
   storyItem: {
     alignItems: "center",

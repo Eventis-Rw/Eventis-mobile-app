@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: PAGE_PADDING,
-    paddingBottom: 8,
+    paddingBottom: 12,
     borderWidth: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderRadius: 0,
@@ -651,7 +651,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: PAGE_PADDING,
   },
   categoryScroll: {
-    marginBottom: 16,
+    marginTop: 4,
+    marginBottom: 18,
   },
   state: {
     alignItems: "center",

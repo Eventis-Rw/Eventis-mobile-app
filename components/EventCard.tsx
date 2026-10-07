@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
@@ -309,7 +310,55 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
     );
   }
 
-  // Instagram-style event post (standard and feed)
+  if (variant === "feed") {
+    const priceLabel = !event.isPaid || event.price <= 0
+      ? "Free"
+      : `${event.currency} ${event.price.toLocaleString()}`;
+    return (
+      <Animated.View style={[styles.posterCard, animatedStyle]}>
+        <Pressable
+          onPress={handlePress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          accessibilityRole="button"
+          accessibilityLabel={event.title}
+        >
+          <ImageBackground source={getEventImage(event.image)} style={styles.posterMedia}>
+            <LinearGradient
+              colors={["rgba(0,0,0,0.05)", "rgba(0,0,0,0.05)", "rgba(0,0,0,0.82)"]}
+              locations={[0, 0.45, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.posterFooter}>
+              <Text style={styles.posterTitle} numberOfLines={2}>
+                {event.title}
+              </Text>
+              <View style={styles.posterMeta}>
+                <Text style={styles.posterOrganizer} numberOfLines={1}>
+                  {event.organizer}
+                </Text>
+                <Text style={styles.posterPrice}>{priceLabel}</Text>
+              </View>
+            </View>
+          </ImageBackground>
+        </Pressable>
+        <Pressable
+          onPress={handleSave}
+          accessibilityRole="button"
+          accessibilityLabel={isSaved ? "Unsave event" : "Save event"}
+          style={styles.posterHeart}
+        >
+          <Ionicons
+            name={isSaved ? "heart" : "heart-outline"}
+            size={22}
+            color="#FFFFFF"
+          />
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  // Instagram-style event post used outside the home feed
   return (
     <>
       <AnimatedPressable
@@ -608,6 +657,58 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 18,
     elevation: 6,
+  },
+  posterCard: {
+    marginHorizontal: 16,
+    marginBottom: 18,
+    borderRadius: 28,
+    overflow: "hidden",
+  },
+  posterMedia: {
+    width: "100%",
+    aspectRatio: 4 / 5,
+    justifyContent: "flex-end",
+  },
+  posterHeart: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(20, 20, 28, 0.35)",
+  },
+  posterFooter: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 28,
+    gap: 8,
+  },
+  posterTitle: {
+    color: "#FFFFFF",
+    fontSize: 26,
+    lineHeight: 30,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.4,
+  },
+  posterMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  posterOrganizer: {
+    flex: 1,
+    color: "rgba(255,255,255,0.88)",
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  posterPrice: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
   },
   feedBleed: {
     width: "100%",
