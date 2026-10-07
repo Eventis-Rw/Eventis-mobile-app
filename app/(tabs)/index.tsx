@@ -205,11 +205,11 @@ export default function HomeScreen() {
                 { backgroundColor: colors.primary, borderRadius: 999 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel={hasOrganiserAccess ? "Organiser dashboard" : "Become an organizer"}
+              accessibilityLabel={hasOrganiserAccess ? "Open organiser portal" : "Become an organizer"}
             >
               <Ionicons name="sparkles" size={13} color="#FFFFFF" />
               <Text style={styles.becomeOrganizerHeaderBtnText}>
-                {hasOrganiserAccess ? "Dashboard" : "Become an organizer"}
+                {hasOrganiserAccess ? "Organiser portal" : "Become an organizer"}
               </Text>
             </Pressable>
           </View>
@@ -218,7 +218,7 @@ export default function HomeScreen() {
               onPress={openCreatePost}
               style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
               accessibilityRole="button"
-              accessibilityLabel="Create post"
+              accessibilityLabel="Create"
               accessibilityHint={hasOrganiserAccess ? undefined : "Organiser access is required to post"}
             >
               <Ionicons name="add" size={22} color={colors.foreground} />

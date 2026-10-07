@@ -16,6 +16,7 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { CATEGORIES, type EventCategory } from "@/constants/events";
 import { useColors } from "@/hooks/useColors";
 
@@ -76,7 +77,6 @@ export default function CreateEventScreen() {
   const [form, setForm] = useState<FormState>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
   const set = (key: keyof FormState, value: string | boolean) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -95,26 +95,16 @@ export default function CreateEventScreen() {
     setSubmitting(true);
     await new Promise((r) => setTimeout(r, 800));
     setSubmitting(false);
-    router.replace("/business/dashboard" as any);
+    // Back to wherever it was opened from (portal Overview or Create tab).
+    if (router.canGoBack()) router.back();
+    else router.replace("/business/dashboard" as any);
   }
 
   const inputStyle = [styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }];
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { paddingTop: topPad + 8, backgroundColor: colors.background, borderBottomColor: colors.border },
-        ]}
-      >
-        <Pressable onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color={colors.foreground} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Create Event</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <PortalScreenHeader title="Create Event" disabled={submitting} />
 
       <KeyboardAvoidingView
         style={styles.kav}
@@ -352,15 +342,6 @@ export default function CreateEventScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold" },
   kav: { flex: 1 },
   scroll: { flex: 1 },
   content: { paddingHorizontal: 16, paddingTop: 20, gap: 16 },

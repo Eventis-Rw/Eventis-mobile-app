@@ -11,6 +11,7 @@ import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import {
   createOrganisation,
   startSubscription,
+  updateOrganisation as saveOrganisation,
   type DemoOutcome,
   type Organisation,
   type OrganisationInput,
@@ -69,6 +70,7 @@ interface AuthContextType {
     demoOutcome?: DemoOutcome,
   ) => Promise<SubscriptionResult>;
   setupOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
+  updateOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -314,6 +316,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, persistUser]
   );
 
+  const updateOrganisation = useCallback(
+    async (input: OrganisationInput, demoShouldFail?: boolean) => {
+      if (!user?.isBusinessAccount) throw new Error("Only organisers can edit an organisation.");
+      const organisation = await saveOrganisation(user.organisation, input, demoShouldFail);
+      await persistUser({
+        ...user,
+        organisation,
+        businessName: organisation.name,
+        businessWebsite: organisation.website,
+      });
+    },
+    [user, persistUser]
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -336,6 +352,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateProfile,
         subscribeAsOrganiser,
         setupOrganisation,
+        updateOrganisation,
       }}
     >
       {children}

@@ -138,7 +138,7 @@ export default function ProfileScreen() {
           >
             <Ionicons name="sparkles" size={13} color="#FFFFFF" />
             <Text style={styles.organizerHeaderBtnText}>
-              {user?.isBusinessAccount ? "Dashboard" : "Become an organizer"}
+              {user?.isBusinessAccount ? "Organiser portal" : "Become an organizer"}
             </Text>
           </Pressable>
         </View>
@@ -226,8 +226,33 @@ export default function ProfileScreen() {
           ))}
         </Animated.View>
 
-        {/* Become an Organiser banner */}
-        {!user?.isBusinessAccount && (
+        {/* Organiser portal switch / Become an Organiser banner */}
+        {user?.isBusinessAccount ? (
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(160).springify() : undefined}
+          >
+            <Pressable
+              style={[styles.portalSwitch, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => router.push("/business/dashboard" as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Switch to organiser portal"
+              accessibilityHint="Manage your organisation and create content. You stay signed in."
+            >
+              <View style={styles.organiserBannerLeft}>
+                <View style={[styles.portalSwitchIcon, { backgroundColor: `${colors.primary}1F` }]}>
+                  <Ionicons name="briefcase" size={20} color={colors.primary} />
+                </View>
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={[styles.portalSwitchTitle, { color: colors.foreground }]}>Switch to organiser portal</Text>
+                  <Text style={[styles.portalSwitchSub, { color: colors.mutedForeground }]} numberOfLines={1}>
+                    Manage {user.organisation?.name ?? user.businessName ?? "your organisation"}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="swap-horizontal" size={20} color={colors.primary} />
+            </Pressable>
+          </Animated.View>
+        ) : (
           <Animated.View
             entering={Platform.OS !== "web" ? FadeInDown.delay(160).springify() : undefined}
           >
@@ -695,7 +720,11 @@ const styles = StyleSheet.create({
   modeOption: { flex: 1, alignItems: "center", paddingVertical: 8, borderRadius: 10 },
   // Organiser banner
   organiserBanner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 16, borderRadius: 16 },
-  organiserBannerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  organiserBannerLeft: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 1 },
+  portalSwitch: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 16, borderRadius: 16, borderWidth: 1 },
+  portalSwitchIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  portalSwitchTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  portalSwitchSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   organiserBannerTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
   organiserBannerSub: { color: "rgba(255,255,255,0.75)", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   // Modal

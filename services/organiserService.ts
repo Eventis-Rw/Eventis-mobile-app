@@ -148,6 +148,25 @@ export async function createOrganisation(
   return resp.organisation;
 }
 
+// INTEGRATION POINT: PATCH /api/v1/organisers/me/organisation -> { organisation: Organisation }
+// Same logo caveat as createOrganisation. Organisers set up before the
+// organisation record existed have no id yet, so the demo creates one.
+export async function updateOrganisation(
+  current: Organisation | undefined,
+  input: OrganisationInput,
+  demoShouldFail = false,
+): Promise<Organisation> {
+  if (!USE_ORGANISER_API) {
+    await wait(1000);
+    if (demoShouldFail) throw new Error("We couldn't save your changes. Please try again.");
+    const { logoUri, ...rest } = input;
+    return { id: current?.id ?? "org_" + Date.now().toString(36), ...rest, logoUrl: logoUri };
+  }
+  const { logoUri: _localLogo, ...body } = input;
+  const resp = await api.patch<{ organisation: Organisation }>("/api/v1/organisers/me/organisation", body);
+  return resp.organisation;
+}
+
 export function describeError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) return error.message || fallback;
   if (error instanceof Error && error.message) return error.message;
