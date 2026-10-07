@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -10,8 +11,8 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { OrganiserPortalHeader } from "@/components/OrganiserPortalHeader";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -30,14 +31,12 @@ const ACTIVITY = [
   { icon: "star-outline" as const, text: "New 5-star review received", time: "Yesterday", colorKey: "accent" as const },
 ];
 
-export default function BusinessDashboard() {
+export default function OrganiserDashboard() {
   const colors = useColors();
-  const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<DashTab>("overview");
-  const { events } = useEvents();
+  const { events, isLoading, error, refreshEvents } = useEvents();
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
   // No organizer filter yet: the events API doesn't say which events belong to this business.
   const myEvents = events.slice(0, 4);
 
@@ -45,34 +44,8 @@ export default function BusinessDashboard() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: topPad + 8,
-            backgroundColor: colors.background,
-            borderBottomColor: colors.border,
-          },
-        ]}
-      >
-        <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={24} color={colors.foreground} />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            Dashboard
-          </Text>
-          <Pressable
-            style={[styles.addBtn, { backgroundColor: colors.primary }]}
-            onPress={() => router.push("/business/create-event" as any)}
-          >
-            <Ionicons name="add" size={20} color="#fff" />
-          </Pressable>
-        </View>
-
-        {/* Tab switcher */}
-        <View style={[styles.tabBar, { backgroundColor: colors.secondary }]}>
+      <OrganiserPortalHeader title="Overview">
+        <View style={[styles.tabBar, { backgroundColor: colors.secondary }]} accessibilityRole="tablist">
           {(["overview", "events"] as DashTab[]).map((t) => (
             <Pressable
               key={t}
@@ -81,6 +54,8 @@ export default function BusinessDashboard() {
                 activeTab === t && [styles.tabBtnActive, { backgroundColor: colors.card }],
               ]}
               onPress={() => setActiveTab(t)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: activeTab === t }}
             >
               <Text
                 style={[
@@ -96,15 +71,18 @@ export default function BusinessDashboard() {
             </Pressable>
           ))}
         </View>
-      </View>
+      </OrganiserPortalHeader>
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: 40 }]}
         showsVerticalScrollIndicator={false}
       >
         {activeTab === "overview" ? (
           <>
+            <Text style={[styles.sampleNote, { color: colors.mutedForeground }]}>
+              Sample insights. Live analytics arrive with the organiser API.
+            </Text>
             {/* Stats grid */}
             <View style={styles.statsGrid}>
               {STATS.map((s, i) => {
@@ -186,9 +164,10 @@ export default function BusinessDashboard() {
                   styles.actionBtn,
                   { backgroundColor: colors.secondary, borderColor: colors.border, borderWidth: 1 },
                 ]}
+                onPress={() => router.push("/business/create-post" as any)}
               >
-                <Ionicons name="megaphone-outline" size={24} color={colors.primary} />
-                <Text style={[styles.actionBtnText, { color: colors.primary }]}>Promote</Text>
+                <Ionicons name="create-outline" size={24} color={colors.primary} />
+                <Text style={[styles.actionBtnText, { color: colors.primary }]}>New Post</Text>
               </Pressable>
             </View>
           </>
@@ -197,6 +176,40 @@ export default function BusinessDashboard() {
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
               Your Events
             </Text>
+            {isLoading && !myEvents.length ? (
+              <View style={styles.stateBox}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={[styles.stateText, { color: colors.mutedForeground }]}>Loading your events…</Text>
+              </View>
+            ) : error && !myEvents.length ? (
+              <View style={[styles.stateBox, styles.stateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Ionicons name="cloud-offline-outline" size={28} color={colors.mutedForeground} />
+                <Text style={[styles.stateTitle, { color: colors.foreground }]}>Couldn't load your events</Text>
+                <Text style={[styles.stateText, { color: colors.mutedForeground }]}>{error}</Text>
+                <Pressable
+                  style={[styles.stateBtn, { backgroundColor: colors.primary }]}
+                  onPress={refreshEvents}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.stateBtnText}>Try again</Text>
+                </Pressable>
+              </View>
+            ) : !myEvents.length ? (
+              <View style={[styles.stateBox, styles.stateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Ionicons name="calendar-outline" size={28} color={colors.mutedForeground} />
+                <Text style={[styles.stateTitle, { color: colors.foreground }]}>No events yet</Text>
+                <Text style={[styles.stateText, { color: colors.mutedForeground }]}>
+                  Events you create will show up here.
+                </Text>
+                <Pressable
+                  style={[styles.stateBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => router.push("/business/create-event" as any)}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.stateBtnText}>Create your first event</Text>
+                </Pressable>
+              </View>
+            ) : null}
             {myEvents.map((event, i) => (
               <Animated.View
                 key={event.id}
@@ -257,29 +270,6 @@ export default function BusinessDashboard() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-  },
-  addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   tabBar: {
     flexDirection: "row",
     borderRadius: 12,
@@ -390,4 +380,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   eventActionText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+
+  sampleNote: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  stateBox: { alignItems: "center", gap: 8, paddingVertical: 32, paddingHorizontal: 20 },
+  stateCard: { borderRadius: 16, borderWidth: 1 },
+  stateTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  stateText: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, textAlign: "center" },
+  stateBtn: { marginTop: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999 },
+  stateBtnText: { color: "#fff", fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });

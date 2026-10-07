@@ -16,7 +16,11 @@ export function getOrganiserStep(user: User | null): OrganiserStep {
   return "intro";
 }
 
-/** Single place that decides where "Create Post" and "Become an organiser" lead. */
+/**
+ * Single place that decides where "Create", "Become an organiser" and the
+ * organiser portal entry points lead. The portal lives under /business and is
+ * pushed on top of the regular tabs, so leaving it never touches the session.
+ */
 export function useOrganiserAccess() {
   const { user } = useAuth();
   const router = useRouter();
@@ -36,9 +40,9 @@ export function useOrganiserAccess() {
     [router, step],
   );
 
-  // Non-organisers are sent into onboarding instead of the create screen.
+  // Opens the portal's Create tab. Non-organisers are sent into onboarding instead.
   const openCreatePost = useCallback(() => {
-    if (step === "ready") router.push("/business/create-event" as any);
+    if (step === "ready") router.push("/business/create" as any);
     else openOrganiserFlow("create-post");
   }, [router, step, openOrganiserFlow]);
 

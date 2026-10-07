@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as ImagePicker from "expo-image-picker";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
@@ -13,12 +12,17 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
-  type TextInputProps,
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 
+import {
+  OrganisationFields,
+  organisationFormValues,
+  toOrganisationInput,
+  validateOrganisation,
+  type OrganisationFormValues,
+} from "@/components/OrganisationForm";
 import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
@@ -26,38 +30,7 @@ import { useColors } from "@/hooks/useColors";
 import { getOrganiserStep } from "@/hooks/useOrganiserAccess";
 import { describeError, USE_ORGANISER_API } from "@/services/organiserService";
 
-interface FormValues {
-  name: string;
-  description: string;
-  activities: string;
-  location: string;
-  website: string;
-}
-
-type FormErrors = Partial<Record<keyof FormValues, string>>;
-
-const LIMITS = { name: 80, description: 1000, activities: 300, location: 120 };
 const SHOW_DEMO_CONTROLS = __DEV__ && !USE_ORGANISER_API;
-
-/** Organisation name/description limits mirror organizerApplication in @eventis/contracts. */
-function validateOrganisation(v: FormValues): FormErrors {
-  const errors: FormErrors = {};
-  if (v.name.trim().length < 2) errors.name = "Enter your organisation's name (at least 2 characters).";
-  if (v.description.trim().length < 20) errors.description = "Describe your organisation in at least 20 characters.";
-  if (v.activities.trim().length < 3) errors.activities = "Tell attendees what your organisation does.";
-  if (v.location.trim().length < 2) errors.location = "Enter where your organisation is based.";
-  const website = v.website.trim();
-  if (website && !/^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(website)) {
-    errors.website = "Enter a valid website, e.g. https://example.com";
-  }
-  return errors;
-}
-
-function normaliseWebsite(url: string): string | undefined {
-  const trimmed = url.trim();
-  if (!trimmed) return undefined;
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-}
 
 export default function OrganisationSetupScreen() {
   const colors = useColors();
@@ -67,16 +40,11 @@ export default function OrganisationSetupScreen() {
   const { user, setupOrganisation } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
 
-  const [values, setValues] = useState<FormValues>({
-    name: user?.businessName ?? "",
-    description: "",
-    activities: "",
-    location: "",
-    website: user?.businessWebsite ?? "",
-  });
+  const [values, setValues] = useState<OrganisationFormValues>(() =>
+    organisationFormValues({ name: user?.businessName, website: user?.businessWebsite }),
+  );
   const [logoUri, setLogoUri] = useState<string | undefined>();
-  const [logoError, setLogoError] = useState<string | undefined>();
-  const [touched, setTouched] = useState<Partial<Record<keyof FormValues, boolean>>>({});
+  const [touched, setTouched] = useState<Partial<Record<keyof OrganisationFormValues, boolean>>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -94,29 +62,6 @@ export default function OrganisationSetupScreen() {
   }
 
   const errors = validateOrganisation(values);
-  const visibleError = (key: keyof FormValues) =>
-    touched[key] || submitAttempted ? errors[key] : undefined;
-
-  const set = (key: keyof FormValues) => (text: string) => {
-    setValues((v) => ({ ...v, [key]: text }));
-    if (submitError) setSubmitError(null);
-  };
-  const blur = (key: keyof FormValues) => () => setTouched((t) => ({ ...t, [key]: true }));
-
-  const pickLogo = async () => {
-    setLogoError(undefined);
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.5,
-      });
-      if (!result.canceled) setLogoUri(result.assets[0].uri);
-    } catch {
-      setLogoError("We couldn't open your photos. Check photo permissions and try again.");
-    }
-  };
 
   const submit = async () => {
     setSubmitAttempted(true);
@@ -128,17 +73,7 @@ export default function OrganisationSetupScreen() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await setupOrganisation(
-        {
-          name: values.name.trim(),
-          description: values.description.trim(),
-          activities: values.activities.trim(),
-          location: values.location.trim(),
-          website: normaliseWebsite(values.website),
-          logoUri,
-        },
-        demoFail,
-      );
+      await setupOrganisation(toOrganisationInput(values, logoUri), demoFail);
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setCompleted(true);
     } catch (error) {
@@ -151,14 +86,14 @@ export default function OrganisationSetupScreen() {
 
   if (completed) {
     // replace() swaps the whole onboarding stack out, so Back doesn't return into it.
-    const toCreatePost = () => router.replace("/business/create-event" as any);
-    const toDashboard = () => router.replace("/business/dashboard" as any);
+    const toCreate = () => router.replace("/business/create" as any);
+    const toPortal = () => router.replace("/business/dashboard" as any);
     const primary = from === "create-post"
-      ? { label: "Create your first post", icon: "create-outline" as const, onPress: toCreatePost }
-      : { label: "Go to organiser dashboard", icon: "grid-outline" as const, onPress: toDashboard };
+      ? { label: "Start creating", icon: "create-outline" as const, onPress: toCreate }
+      : { label: "Open organiser portal", icon: "grid-outline" as const, onPress: toPortal };
     const secondary = from === "create-post"
-      ? { label: "Go to organiser dashboard", onPress: toDashboard }
-      : { label: "Create your first post", onPress: toCreatePost };
+      ? { label: "Open organiser portal", onPress: toPortal }
+      : { label: "Start creating", onPress: toCreate };
 
     return (
       <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -176,8 +111,8 @@ export default function OrganisationSetupScreen() {
             </View>
             <Text style={[styles.doneTitle, { color: colors.foreground }]}>You're an organiser</Text>
             <Text style={[styles.doneText, { color: colors.mutedForeground }]}>
-              {values.name.trim()} is set up on your account. You can now create posts and events, and
-              you can keep browsing Eventis as usual.
+              {values.name.trim()} is set up on your account. Manage it and create events, posts and
+              stories from the organiser portal, and keep browsing Eventis as usual.
             </Text>
             <View style={styles.doneActions}>
               <Pressable style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={primary.onPress}>
@@ -233,97 +168,17 @@ export default function OrganisationSetupScreen() {
           </View>
         )}
 
-        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.logoRow}>
-            <Pressable
-              onPress={pickLogo}
-              style={[styles.logo, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel={logoUri ? "Change organisation logo" : "Add organisation logo"}
-            >
-              {logoUri ? (
-                <Image source={{ uri: logoUri }} style={styles.logoImg} />
-              ) : (
-                <Ionicons name="camera-outline" size={26} color={colors.mutedForeground} />
-              )}
-            </Pressable>
-            <View style={styles.logoCopy}>
-              <Text style={[styles.label, { color: colors.foreground }]}>
-                Logo / profile image <Text style={{ color: colors.mutedForeground }}>(optional)</Text>
-              </Text>
-              <Text style={[styles.hint, { color: colors.mutedForeground }]}>Square images work best.</Text>
-              <View style={styles.logoActions}>
-                <Pressable onPress={pickLogo} hitSlop={6}>
-                  <Text style={[styles.link, { color: colors.primary }]}>{logoUri ? "Change" : "Upload image"}</Text>
-                </Pressable>
-                {logoUri && (
-                  <Pressable onPress={() => setLogoUri(undefined)} hitSlop={6}>
-                    <Text style={[styles.link, { color: colors.destructive }]}>Remove</Text>
-                  </Pressable>
-                )}
-              </View>
-              {logoError && <Text style={[styles.error, { color: colors.destructive }]}>{logoError}</Text>}
-            </View>
-          </View>
-
-          <FormField
-            label="Organisation name"
-            required
-            icon="business-outline"
-            value={values.name}
-            onChangeText={set("name")}
-            onBlur={blur("name")}
-            error={visibleError("name")}
-            placeholder="e.g. Kigali Jazz Collective"
-            maxLength={LIMITS.name}
-          />
-          <FormField
-            label="Description"
-            required
-            value={values.description}
-            onChangeText={set("description")}
-            onBlur={blur("description")}
-            error={visibleError("description")}
-            placeholder="Who you are and the kind of events you host"
-            multiline
-            maxLength={LIMITS.description}
-            showCount
-          />
-          <FormField
-            label="What your organisation does"
-            required
-            icon="sparkles-outline"
-            value={values.activities}
-            onChangeText={set("activities")}
-            onBlur={blur("activities")}
-            error={visibleError("activities")}
-            placeholder="e.g. Live music nights, workshops, festivals"
-            maxLength={LIMITS.activities}
-          />
-          <FormField
-            label="Location"
-            required
-            icon="location-outline"
-            value={values.location}
-            onChangeText={set("location")}
-            onBlur={blur("location")}
-            error={visibleError("location")}
-            placeholder="e.g. Kigali, Rwanda"
-            maxLength={LIMITS.location}
-          />
-          <FormField
-            label="Website"
-            icon="globe-outline"
-            value={values.website}
-            onChangeText={set("website")}
-            onBlur={blur("website")}
-            error={visibleError("website")}
-            placeholder="https://yourorganisation.com"
-            keyboardType="url"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
+        <OrganisationFields
+          values={values}
+          onChange={(key, text) => {
+            setValues((v) => ({ ...v, [key]: text }));
+            if (submitError) setSubmitError(null);
+          }}
+          onBlur={(key) => setTouched((t) => ({ ...t, [key]: true }))}
+          errorFor={(key) => (touched[key] || submitAttempted ? errors[key] : undefined)}
+          logoUri={logoUri}
+          onLogoChange={setLogoUri}
+        />
 
         {SHOW_DEMO_CONTROLS && (
           <View style={[styles.demoBox, { borderColor: colors.border }]}>
@@ -372,66 +227,6 @@ export default function OrganisationSetupScreen() {
   );
 }
 
-function FormField({
-  label,
-  required,
-  icon,
-  error,
-  multiline,
-  showCount,
-  value,
-  maxLength,
-  ...input
-}: {
-  label: string;
-  required?: boolean;
-  icon?: React.ComponentProps<typeof Ionicons>["name"];
-  error?: string;
-  showCount?: boolean;
-} & TextInputProps) {
-  const colors = useColors();
-  return (
-    <View style={styles.field}>
-      <Text style={[styles.label, { color: colors.foreground }]}>
-        {label}
-        {required && <Text style={{ color: colors.primary }}> *</Text>}
-      </Text>
-      <View
-        style={[
-          styles.inputWrap,
-          multiline && styles.inputWrapMulti,
-          { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border },
-        ]}
-      >
-        {icon && <Ionicons name={icon} size={18} color={colors.mutedForeground} />}
-        <TextInput
-          {...input}
-          value={value}
-          maxLength={maxLength}
-          multiline={multiline}
-          textAlignVertical={multiline ? "top" : "center"}
-          placeholderTextColor={colors.mutedForeground}
-          style={[styles.input, multiline && styles.inputMulti, { color: colors.foreground }]}
-          accessibilityLabel={label}
-          accessibilityHint={error}
-        />
-      </View>
-      <View style={styles.fieldFooter}>
-        {error ? (
-          <Text style={[styles.error, styles.flex, { color: colors.destructive }]}>{error}</Text>
-        ) : (
-          <View style={styles.flex} />
-        )}
-        {showCount && maxLength && (
-          <Text style={[styles.hint, { color: colors.mutedForeground }]}>
-            {(value ?? "").length}/{maxLength}
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
@@ -439,37 +234,8 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 20, gap: 16 },
   title: { fontSize: 24, fontFamily: "Inter_700Bold", marginBottom: 6 },
   subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 21 },
-  section: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 14 },
-  logoRow: { flexDirection: "row", alignItems: "center", gap: 14 },
-  logo: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
   logoImg: { width: "100%", height: "100%" },
-  logoCopy: { flex: 1, gap: 3 },
-  logoActions: { flexDirection: "row", gap: 16, marginTop: 4 },
-  link: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  field: { gap: 6 },
-  label: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  inputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    gap: 10,
-  },
-  inputWrapMulti: { alignItems: "flex-start" },
-  input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", paddingVertical: 12 },
-  inputMulti: { height: 110 },
-  fieldFooter: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   hint: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
-  error: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17 },
   banner: {
     flexDirection: "row",
     alignItems: "flex-start",
