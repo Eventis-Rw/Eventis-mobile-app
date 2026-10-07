@@ -9,7 +9,7 @@ import { EventCard } from "@/components/EventCard";
 import { HomeDiscovery, SectionHeading } from "@/components/HomeDiscovery";
 import { EventCardSkeleton } from "@/components/SkeletonLoader";
 import { StoriesBar } from "@/components/StoriesBar";
-import { DEMO_POST_ORDER } from "@/constants/featuredDemoPosts";
+import { EVENT_GROUP_LABELS, getEventGroup, type EventGroup } from "@/constants/eventPresentation";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -32,20 +32,22 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
 
-  const orderedEvents = useMemo(() => [...events].sort((a, b) => {
-    const first = DEMO_POST_ORDER.indexOf(a.id);
-    const second = DEMO_POST_ORDER.indexOf(b.id);
-    if (first >= 0 || second >= 0) {
-      return (first < 0 ? Infinity : first) - (second < 0 ? Infinity : second);
-    }
-    return location.status === "granted" ? a.distance - b.distance : 0;
+  const orderedEvents = useMemo(() => [...events].sort((first, second) => {
+    const dateDifference = eventTimestamp(first.date, first.time) - eventTimestamp(second.date, second.time);
+    if (dateDifference !== 0) return dateDifference;
+    return location.status === "granted" ? first.distance - second.distance : 0;
   }), [events, location.status]);
 
-  const filtered = useMemo(() => selectedCategory === "All"
-    ? orderedEvents.filter((event) => !DEMO_POST_ORDER.includes(event.id))
-    : orderedEvents.filter((event) => event.category === selectedCategory),
-  [orderedEvents, selectedCategory]);
+  const featuredId = orderedEvents[0]?.id;
+  const filtered = useMemo(() => orderedEvents.filter((event) => (
+    event.id !== featuredId && (selectedCategory === "All" || event.category === selectedCategory)
+  )), [featuredId, orderedEvents, selectedCategory]);
   const visibleEvents = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+  const groupCounts = useMemo(() => filtered.reduce<Record<EventGroup, number>>((counts, event) => {
+    const group = getEventGroup(event);
+    counts[group] += 1;
+    return counts;
+  }, { today: 0, tomorrow: 0, weekend: 0, upcoming: 0 }), [filtered]);
   const showSkeletons = isLoading && !refreshing;
 
   const openSearch = useCallback(() => router.push("/search"), [router]);
@@ -89,7 +91,7 @@ export default function HomeScreen() {
 
       {events.length ? (
         <View style={styles.exploreSection}>
-          <SectionHeading title="Find your next plan" subtitle="Choose a category and discover three events at a time" />
+          <SectionHeading title="Events by when" subtitle="Start with today, tomorrow or your coming weekend" />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryContent}>
             {categories.map((category) => (
               <CategoryPill key={category} category={category} isSelected={selectedCategory === category} onPress={selectCategory} />
@@ -97,12 +99,12 @@ export default function HomeScreen() {
           </ScrollView>
           <View style={styles.feedHeading}>
             <View>
-              <Text style={[styles.feedTitle, { color: colors.foreground }]}>More events to explore</Text>
-              <Text style={[styles.feedCount, { color: colors.mutedForeground }]}>Showing {Math.min(visibleEvents.length, filtered.length)} of {filtered.length}</Text>
+              <Text style={[styles.feedTitle, { color: colors.foreground }]}>Your upcoming shortlist</Text>
+              <Text style={[styles.feedCount, { color: colors.mutedForeground }]}>Showing {Math.min(visibleEvents.length, filtered.length)} of {filtered.length} upcoming</Text>
             </View>
             <View style={[styles.recommendationBadge, { backgroundColor: `${colors.primary}16` }]}>
-              <Ionicons name={location.status === "granted" ? "navigate" : "sparkles"} size={12} color={colors.primary} />
-              <Text style={[styles.recommendationText, { color: colors.primary }]}>{location.status === "granted" ? "NEAREST FIRST" : "RECOMMENDED"}</Text>
+              <Ionicons name="calendar-clear" size={12} color={colors.primary} />
+              <Text style={[styles.recommendationText, { color: colors.primary }]}>SOONEST FIRST</Text>
             </View>
           </View>
         </View>
@@ -143,12 +145,21 @@ export default function HomeScreen() {
       <FlatList
         data={showSkeletons ? [] : visibleEvents}
         keyExtractor={(event) => event.id}
-        renderItem={({ item }) => <EventCard event={item} variant="feed" inset={0} />}
+        renderItem={({ item, index }) => {
+          const group = getEventGroup(item);
+          const previousGroup = index > 0 ? getEventGroup(visibleEvents[index - 1]) : null;
+          return (
+            <>
+              {group !== previousGroup ? <EventGroupHeader group={group} count={groupCounts[group]} /> : null}
+              <EventCard event={item} variant="feed" inset={0} />
+            </>
+          );
+        }}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={!showSkeletons && events.length && !filtered.length ? (
           <StateMessage icon="search-outline" title={`No ${selectedCategory} events`} text="Try another category or browse everything." actionLabel="Show all events" onAction={() => selectCategory("All")} compact />
         ) : null}
-        ListFooterComponent={visibleEvents.length ? <Text style={[styles.footerText, { color: colors.mutedForeground }]}>{visibleCount < filtered.length ? "Keep scrolling — more is coming" : "You're all caught up"}</Text> : null}
+        ListFooterComponent={visibleEvents.length ? <Text style={[styles.footerText, { color: colors.mutedForeground }]}>{visibleCount < filtered.length ? "Keep scrolling for the next three" : "You're all caught up"}</Text> : null}
         contentContainerStyle={[styles.listContent, { paddingBottom: Platform.OS === "web" ? 128 : 126 }]}
         showsVerticalScrollIndicator={false}
         onEndReached={loadMore}
@@ -160,6 +171,22 @@ export default function HomeScreen() {
       />
 
       <OrganizerModal visible={showOrganizerModal} onClose={() => setShowOrganizerModal(false)} onContinue={() => { setShowOrganizerModal(false); router.push("/business/register" as never); }} />
+    </View>
+  );
+}
+
+function EventGroupHeader({ group, count }: { group: EventGroup; count: number }) {
+  const colors = useColors();
+  const copy = EVENT_GROUP_LABELS[group];
+  return (
+    <View style={styles.groupHeader}>
+      <View style={styles.groupCopy}>
+        <Text style={[styles.groupTitle, { color: colors.foreground }]}>{copy.title}</Text>
+        <Text style={[styles.groupSubtitle, { color: colors.mutedForeground }]}>{copy.subtitle}</Text>
+      </View>
+      <View style={[styles.groupCount, { backgroundColor: `${colors.primary}16` }]}>
+        <Text style={[styles.groupCountText, { color: colors.primary }]}>{count} {count === 1 ? "event" : "events"}</Text>
+      </View>
     </View>
   );
 }
@@ -205,6 +232,11 @@ function getGreeting() {
   return "Good evening";
 }
 
+function eventTimestamp(date: string, time: string) {
+  const value = new Date(`${date}T${time || "00:00"}:00`).getTime();
+  return Number.isNaN(value) ? Number.MAX_SAFE_INTEGER : value;
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth, zIndex: 2 },
@@ -232,6 +264,12 @@ const styles = StyleSheet.create({
   feedCount: { fontSize: 12, fontFamily: "Inter_500Medium" },
   recommendationBadge: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 7 },
   recommendationText: { fontSize: 8, letterSpacing: 0.65, fontFamily: "Inter_700Bold" },
+  groupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingHorizontal: 16, paddingTop: 15, paddingBottom: 11 },
+  groupCopy: { flex: 1, minWidth: 0 },
+  groupTitle: { fontSize: 22, lineHeight: 27, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.45 },
+  groupSubtitle: { fontSize: 11, lineHeight: 16, marginTop: 2, fontFamily: "Inter_400Regular" },
+  groupCount: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  groupCountText: { fontSize: 9, fontFamily: "Inter_700Bold" },
   footerText: { textAlign: "center", paddingTop: 8, paddingBottom: 26, fontSize: 12, fontFamily: "Inter_500Medium" },
   state: { alignItems: "center", paddingHorizontal: 30, paddingVertical: 58, gap: 10 },
   stateCompact: { paddingVertical: 32 },

@@ -18,54 +18,54 @@ const DEFAULT_PALETTE: EventPalette = {
 
 const EVENT_PALETTES: Record<string, EventPalette> = {
   Music: {
-    accent: "#9B6DFF",
-    accentSoft: "#E9E0FF",
-    deep: "#21113F",
-    pageLight: ["#E9E0FF", "#FAF7FF", "#ECE9F7"],
-    pageDark: ["#251346", "#100B1C", "#070814"],
+    accent: "#7667F2",
+    accentSoft: "#E3E0FF",
+    deep: "#151A3D",
+    pageLight: ["#E2E7FF", "#F8F9FF", "#E8EEF8"],
+    pageDark: ["#171D45", "#090D1D", "#070814"],
   },
   Nightlife: {
-    accent: "#FF5A9F",
-    accentSoft: "#FFE0ED",
-    deep: "#3D102B",
-    pageLight: ["#FFE0ED", "#FFF7FA", "#F5E9F0"],
-    pageDark: ["#40122E", "#170A15", "#070814"],
+    accent: "#8B5CF6",
+    accentSoft: "#E9DFFF",
+    deep: "#17183D",
+    pageLight: ["#E5E7FF", "#F8F9FF", "#E8EEF8"],
+    pageDark: ["#191D45", "#090D1D", "#070814"],
   },
   Food: {
-    accent: "#FF8B3D",
-    accentSoft: "#FFE7D5",
-    deep: "#3C1C0C",
-    pageLight: ["#FFE7D5", "#FFF9F4", "#F6EDE7"],
-    pageDark: ["#3C1D0D", "#160E0A", "#070814"],
+    accent: "#E9903F",
+    accentSoft: "#FFE8D1",
+    deep: "#151B35",
+    pageLight: ["#E7ECFF", "#FAFAFF", "#E8EEF8"],
+    pageDark: ["#171E3D", "#090D1D", "#070814"],
   },
   Sports: {
-    accent: "#24B982",
-    accentSoft: "#D8F7EA",
-    deep: "#0C3529",
-    pageLight: ["#D8F7EA", "#F5FCF9", "#E6F2ED"],
-    pageDark: ["#0D382B", "#091612", "#070814"],
+    accent: "#2AA37B",
+    accentSoft: "#D8F3E9",
+    deep: "#101C36",
+    pageLight: ["#E3EDFF", "#F8FAFF", "#E8EEF8"],
+    pageDark: ["#121F40", "#090E1E", "#070814"],
   },
   Business: DEFAULT_PALETTE,
   Tech: {
-    accent: "#13A9D2",
-    accentSoft: "#D6F5FC",
-    deep: "#0A3040",
-    pageLight: ["#D6F5FC", "#F4FCFE", "#E5F1F4"],
-    pageDark: ["#0B3342", "#081419", "#070814"],
+    accent: "#278DFF",
+    accentSoft: "#D9EAFF",
+    deep: "#0A2142",
+    pageLight: ["#D9EAFF", "#F6FAFF", "#E8EEF8"],
+    pageDark: ["#0D2850", "#081020", "#070814"],
   },
   Art: {
-    accent: "#E960A9",
-    accentSoft: "#FBE0F0",
-    deep: "#3A1430",
-    pageLight: ["#FBE0F0", "#FFF7FC", "#F3E8EF"],
-    pageDark: ["#3C1732", "#170C15", "#070814"],
+    accent: "#C7619E",
+    accentSoft: "#F5DEEC",
+    deep: "#171936",
+    pageLight: ["#E8E9FF", "#FAF9FF", "#E8EEF8"],
+    pageDark: ["#1A1C40", "#0A0D1D", "#070814"],
   },
   Community: {
-    accent: "#D99712",
-    accentSoft: "#FFF0C9",
-    deep: "#382707",
-    pageLight: ["#FFF0C9", "#FFFBF1", "#F4EEE0"],
-    pageDark: ["#392809", "#171206", "#070814"],
+    accent: "#C88E2F",
+    accentSoft: "#F8E9C9",
+    deep: "#151B35",
+    pageLight: ["#E6ECFF", "#FAFAFF", "#E8EEF8"],
+    pageDark: ["#171E3D", "#090D1D", "#070814"],
   },
 };
 
@@ -77,6 +77,32 @@ export type EventTiming = {
   kind: "live" | "today" | "upcoming" | "ended";
   label: string;
 };
+
+export type EventGroup = "today" | "tomorrow" | "weekend" | "upcoming";
+
+export const EVENT_GROUP_LABELS: Record<EventGroup, { title: string; subtitle: string }> = {
+  today: { title: "Today", subtitle: "Plans you can still make today" },
+  tomorrow: { title: "Tomorrow", subtitle: "One day ahead, already sorted" },
+  weekend: { title: "This weekend", subtitle: "A short list for your weekend" },
+  upcoming: { title: "Coming up", subtitle: "Worth planning ahead for" },
+};
+
+export function getEventGroup(event: Pick<Event, "date" | "time" | "endTime">, now = new Date()): EventGroup {
+  const start = parseEventDate(event.date, event.time);
+  if (!start || isSameDay(start, now)) return "today";
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (isSameDay(start, tomorrow)) return "tomorrow";
+
+  const endOfWeekend = new Date(now);
+  const daysUntilSunday = (7 - now.getDay()) % 7;
+  endOfWeekend.setDate(endOfWeekend.getDate() + daysUntilSunday);
+  endOfWeekend.setHours(23, 59, 59, 999);
+  if ((start.getDay() === 0 || start.getDay() === 6) && start <= endOfWeekend) return "weekend";
+
+  return "upcoming";
+}
 
 export function getEventTiming(event: Pick<Event, "date" | "time" | "endTime">, now = new Date()): EventTiming {
   const start = parseEventDate(event.date, event.time);

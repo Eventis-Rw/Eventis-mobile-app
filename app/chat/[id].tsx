@@ -1141,8 +1141,9 @@ export default function ConversationScreen() {
               style={[
                 styles.recordingComposer,
                 {
-                  paddingBottom: bottomInset + 7,
+                  paddingBottom: bottomInset + 8,
                   backgroundColor: colors.background,
+                  borderTopColor: colors.border,
                 },
               ]}
             >
@@ -1217,8 +1218,9 @@ export default function ConversationScreen() {
               style={[
                 styles.composer,
                 {
-                  paddingBottom: bottomInset + 6,
+                  paddingBottom: bottomInset + 8,
                   backgroundColor: colors.background,
+                  borderTopColor: colors.border,
                 },
               ]}
             >
@@ -1237,9 +1239,7 @@ export default function ConversationScreen() {
                   />
                 </Pressable>
               )}
-              <View
-                style={[styles.inputPill, { backgroundColor: colors.card }]}
-              >
+              <View style={[styles.inputPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 {Platform.OS === "android" ? (
                   <Pressable
                     onPress={toggleEmojiPicker}
@@ -1618,9 +1618,10 @@ const styles = StyleSheet.create({
   composer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 7,
-    paddingHorizontal: 7,
-    gap: 4,
+    paddingTop: 8,
+    paddingHorizontal: 10,
+    gap: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   recordingComposer: {
     minHeight: 62,
@@ -1629,6 +1630,7 @@ const styles = StyleSheet.create({
     paddingTop: 7,
     paddingHorizontal: 9,
     gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   recordingAction: {
     width: 42,
@@ -1661,9 +1663,11 @@ const styles = StyleSheet.create({
   recordingBar: { width: 3, borderRadius: 2 },
   inputPill: {
     flex: 1,
+    minHeight: 50,
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 27,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 3,
   },
   input: {
@@ -1679,9 +1683,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   send: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1692,7 +1696,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inputAction: {
-    width: 39,
+    width: 36,
     height: 46,
     alignItems: "center",
     justifyContent: "center",
