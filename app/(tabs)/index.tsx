@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Image,
   FlatList,
@@ -14,7 +14,12 @@ import {
   Text,
   View,
 } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
@@ -43,6 +48,36 @@ export default function HomeScreen() {
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const location = useLocationPermission();
+  const measuredHeaderHeight = useSharedValue(0);
+  const headerProgress = useSharedValue(1);
+  const lastScrollY = useRef(0);
+  const headerHidden = useRef(false);
+
+  const animatedHeaderStyle = useAnimatedStyle(() => {
+    const measured = measuredHeaderHeight.value;
+    return {
+      height: measured > 0 ? measured * headerProgress.value : undefined,
+      opacity: headerProgress.value,
+      transform: [{ translateY: -12 * (1 - headerProgress.value) }],
+    };
+  });
+
+  const setHeaderVisible = useCallback((visible: boolean) => {
+    if (headerHidden.current === !visible) return;
+    headerHidden.current = !visible;
+    headerProgress.value = withTiming(visible ? 1 : 0, { duration: visible ? 170 : 210 });
+  }, [headerProgress]);
+
+  const handleFeedScroll = useCallback((event: any) => {
+    const nextY = Math.max(event.nativeEvent.contentOffset.y, 0);
+    const delta = nextY - lastScrollY.current;
+
+    if (nextY <= 8) setHeaderVisible(true);
+    else if (nextY > 28 && delta > 2) setHeaderVisible(false);
+    else if (delta < -2) setHeaderVisible(true);
+
+    lastScrollY.current = nextY;
+  }, [setHeaderVisible]);
 
   // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
   const showSkeletons = isLoading && !refreshing;
@@ -158,9 +193,14 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View
+      <Animated.View
+        onLayout={(event) => {
+          const height = event.nativeEvent.layout.height;
+          if (height > 0 && measuredHeaderHeight.value === 0) measuredHeaderHeight.value = height;
+        }}
         style={[
           styles.header,
+          animatedHeaderStyle,
           {
             paddingTop: insets.top + 8,
             backgroundColor: colors.background,
@@ -236,7 +276,7 @@ export default function HomeScreen() {
             <Ionicons name="options-outline" size={14} color="#fff" />
           </View>
         </Pressable>
-      </View>
+      </Animated.View>
 
       <FlatList
         key={selectedCategory}
@@ -253,6 +293,8 @@ export default function HomeScreen() {
         ) : null}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
+        onScroll={handleFeedScroll}
+        scrollEventThrottle={16}
         initialNumToRender={FEED_PAGE_SIZE}
         maxToRenderPerBatch={FEED_PAGE_SIZE}
         windowSize={5}
@@ -481,6 +523,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: PAGE_PADDING,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
   },
   headerRow: {
     flexDirection: "row",

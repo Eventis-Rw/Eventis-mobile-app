@@ -12,16 +12,25 @@ import { useColors } from "@/hooks/useColors";
 export default function PortalOrganisationScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { user, deleteOrganiserAccount } = useAuth();
+  const { user, switchOrganisation, deleteOrganisation } = useAuth();
   const org = user?.organisation;
+  const organisations = user?.organisations?.length
+    ? user.organisations
+    : org
+      ? [org]
+      : [];
   const subscription = user?.organiserSubscription;
   const [deleting, setDeleting] = useState(false);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const confirmDelete = () => {
+    if (!org) return;
     Alert.alert(
-      "Delete organiser account?",
-      "Your organisation, organiser subscription and organiser access will be removed. Your personal Eventis account, chats and saved events will remain.",
+      `Delete ${org.name}?`,
+      organisations.length > 1
+        ? "This organisation will be permanently removed. Your other organisations and personal Eventis account will remain available."
+        : "This organisation will be permanently removed. Your personal Eventis account, chats and saved events will remain available.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -30,10 +39,12 @@ export default function PortalOrganisationScreen() {
           onPress: () => {
             setDeleting(true);
             setDeleteError(null);
-            void deleteOrganiserAccount()
-              .then(() => router.replace("/(tabs)/settings" as any))
+            void deleteOrganisation(org.id)
+              .then(() => {
+                if (organisations.length === 1) router.replace("/(tabs)/settings" as any);
+              })
               .catch((error) => {
-                setDeleteError(error instanceof Error ? error.message : "Couldn't delete the organiser account.");
+                setDeleteError(error instanceof Error ? error.message : "Couldn't delete the organisation.");
               })
               .finally(() => setDeleting(false));
           },
@@ -46,6 +57,77 @@ export default function PortalOrganisationScreen() {
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <OrganiserPortalHeader title="Organisation" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.sectionHeadingRow}>
+          <View style={styles.flex}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your organisations</Text>
+            <Text style={[styles.muted, { color: colors.mutedForeground }]}>Choose which organisation you are managing.</Text>
+          </View>
+          <Pressable
+            onPress={() => router.push({ pathname: "/business/edit-organisation", params: { mode: "create" } } as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Create another organisation"
+            style={[styles.addButton, { backgroundColor: colors.primary }]}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.addButtonText}>Add</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.organisationList}>
+          {organisations.map((organisation) => {
+            const active = organisation.id === org?.id;
+            const switching = switchingId === organisation.id;
+            return (
+              <Pressable
+                key={organisation.id}
+                disabled={active || switchingId !== null}
+                onPress={() => {
+                  setSwitchingId(organisation.id);
+                  setDeleteError(null);
+                  void switchOrganisation(organisation.id)
+                    .catch((error) => {
+                      setDeleteError(error instanceof Error ? error.message : "Couldn't switch organisation.");
+                    })
+                    .finally(() => setSwitchingId(null));
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active, busy: switching }}
+                style={[
+                  styles.organisationOption,
+                  {
+                    backgroundColor: active ? colors.primary + "14" : colors.card,
+                    borderColor: active ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <View
+                  style={[styles.optionLogo, { backgroundColor: active ? colors.primary : colors.secondary }]}
+                >
+                  {organisation.logoUrl ? (
+                    <Image source={{ uri: organisation.logoUrl }} style={styles.logoImg} />
+                  ) : (
+                    <Text style={[styles.optionLetter, { color: active ? "#fff" : colors.foreground }]}>
+                      {organisation.name.charAt(0).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.flex}>
+                  <Text style={[styles.optionName, { color: colors.foreground }]} numberOfLines={1}>{organisation.name}</Text>
+                  <Text style={[styles.optionMeta, { color: colors.mutedForeground }]} numberOfLines={1}>
+                    {active ? "Active organisation" : organisation.location}
+                  </Text>
+                </View>
+                {switching ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name={active ? "checkmark-circle" : "swap-horizontal"} size={21} color={active ? colors.primary : colors.mutedForeground} />
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Active organisation</Text>
         {org ? (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.identity}>
@@ -99,26 +181,28 @@ export default function PortalOrganisationScreen() {
           </View>
         )}
 
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Manage</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Manage {org?.name ?? "organisation"}</Text>
         <PortalActionList actions={ORGANISATION_ACTIONS} />
 
-        <View style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: colors.destructive + "55" }]}>
+        {org ? <View
+          style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: colors.destructive + "55" }]}
+        >
           <View style={styles.dangerCopy}>
-            <Text style={[styles.dangerTitle, { color: colors.foreground }]}>Delete organiser account</Text>
-            <Text style={[styles.muted, { color: colors.mutedForeground }]}>Return this account to a regular Eventis user. Your personal profile and activity stay available.</Text>
+            <Text style={[styles.dangerTitle, { color: colors.foreground }]}>Delete organisation</Text>
+            <Text style={[styles.muted, { color: colors.mutedForeground }]}>Permanently remove {org.name}. Your personal account and other organisations stay available.</Text>
           </View>
           {deleteError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{deleteError}</Text> : null}
           <Pressable
             onPress={confirmDelete}
             disabled={deleting}
             accessibilityRole="button"
-            accessibilityLabel="Delete organiser account"
+            accessibilityLabel={`Delete ${org.name}`}
             style={({ pressed }) => [styles.deleteButton, { borderColor: colors.destructive }, pressed && styles.pressed, deleting && styles.disabled]}
           >
             {deleting ? <ActivityIndicator size="small" color={colors.destructive} /> : <Ionicons name="trash-outline" size={18} color={colors.destructive} />}
-            <Text style={[styles.deleteButtonText, { color: colors.destructive }]}>{deleting ? "Deleting..." : "Delete organiser account"}</Text>
+            <Text style={[styles.deleteButtonText, { color: colors.destructive }]}>{deleting ? "Deleting..." : "Delete organisation"}</Text>
           </Pressable>
-        </View>
+        </View> : null}
       </ScrollView>
     </View>
   );
@@ -149,6 +233,15 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { textAlign: "center" },
   content: { padding: 20, gap: 16, paddingBottom: 40 },
+  sectionHeadingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  addButton: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 13, paddingHorizontal: 14 },
+  addButtonText: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  organisationList: { gap: 9 },
+  organisationOption: { minHeight: 70, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, borderWidth: 1, padding: 11 },
+  optionLogo: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  optionLetter: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  optionName: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  optionMeta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   card: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },
   identity: { flexDirection: "row", alignItems: "center", gap: 14 },
   logo: {

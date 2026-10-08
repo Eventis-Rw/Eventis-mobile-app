@@ -21,7 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/events";
 import { shareEvent } from "@/utils/shareEvent";
-import { getEventImage, POSTER_RATIOS } from "@/constants/eventImages";
+import { getEventImage } from "@/constants/eventImages";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -350,11 +350,12 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
         </View>
 
         {/* Post Media: Full-width event image */}
-        <View style={[styles.instaMediaWrap, POSTER_RATIOS[event.image] ? { aspectRatio: POSTER_RATIOS[event.image] } : null]}>
+        <View style={styles.instaMediaWrap}>
           <ImageBackground
             source={getEventImage(event.image)}
             style={styles.instaMediaImage}
             imageStyle={styles.instaMediaInnerImage}
+            resizeMode="contain"
           />
         </View>
 
@@ -683,7 +684,7 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   instaMediaInnerImage: {
-    resizeMode: "cover",
+    resizeMode: "contain",
   },
   instaActionBar: {
     flexDirection: "row",

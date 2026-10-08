@@ -10,7 +10,7 @@ import React, {
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import {
   createOrganisation,
-  deleteOrganiserAccount as removeOrganiserAccount,
+  deleteOrganisation as removeOrganisation,
   startSubscription,
   updateOrganisation as saveOrganisation,
   type DemoOutcome,
@@ -37,9 +37,13 @@ export interface User {
   savedEvents: string[];
   joinedDate: string;
   isDemo?: boolean;
-  /** Paid organiser plan. Active but without `organisation` means setup is still pending. */
+  /** Paid organiser plan. Active but without an organisation means setup is still pending. */
   organiserSubscription?: OrganiserSubscription;
-  /** The user's organisation. It belongs to this account; there is no separate organisation login. */
+  /** Organisations owned by this account. */
+  organisations?: Organisation[];
+  /** The organisation currently used throughout the organiser portal. */
+  activeOrganisationId?: string;
+  /** Active organisation alias retained for existing screens and API compatibility. */
   organisation?: Organisation;
 }
 
@@ -72,12 +76,36 @@ interface AuthContextType {
   ) => Promise<SubscriptionResult>;
   setupOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
   updateOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
-  deleteOrganiserAccount: () => Promise<void>;
+  switchOrganisation: (organisationId: string) => Promise<void>;
+  deleteOrganisation: (organisationId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 const USER_CACHE_KEY = "@eventis_user_cache";
 const ONBOARDING_KEY = "@eventis_onboarding_complete";
+
+function getOrganisations(user: User): Organisation[] {
+  if (user.organisations?.length) return user.organisations;
+  return user.organisation ? [user.organisation] : [];
+}
+
+function normaliseOrganisationState(user: User): User {
+  const organisations = getOrganisations(user);
+  const activeOrganisation =
+    organisations.find((organisation) => organisation.id === user.activeOrganisationId)
+    ?? organisations.find((organisation) => organisation.id === user.organisation?.id)
+    ?? organisations[0];
+
+  return {
+    ...user,
+    organisations,
+    activeOrganisationId: activeOrganisation?.id,
+    organisation: activeOrganisation,
+    isBusinessAccount: organisations.length > 0 || user.isBusinessAccount,
+    businessName: activeOrganisation?.name ?? user.businessName,
+    businessWebsite: activeOrganisation?.website ?? user.businessWebsite,
+  };
+}
 
 const DEFAULT_USER: User = {
   id: "usr_eventis_01",
@@ -107,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setHasCompletedOnboarding(onboardingState === 'true');
         const cached = await AsyncStorage.getItem(USER_CACHE_KEY);
         if (cached) {
-          setUser(JSON.parse(cached));
+          setUser(normaliseOrganisationState(JSON.parse(cached) as User));
         } else {
           setUser(null);
         }
@@ -117,12 +145,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const persistUser = useCallback(async (u: User) => {
+    const normalisedUser = normaliseOrganisationState(u);
     await AsyncStorage.removeItem("@eventis_logged_out");
-    await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(u));
+    await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(normalisedUser));
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setHasCompletedOnboarding(true);
-    setUser(u);
+    setUser(normalisedUser);
   }, []);
 
   const login = useCallback(
@@ -295,14 +324,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, persistUser]
   );
 
-  // Organiser access is granted on the user's own account: existing screens read
-  // isBusinessAccount/businessName/businessWebsite, so keep them in sync.
+  // The active organisation alias keeps existing organiser screens compatible
+  // while the collection supports owning and switching between organisations.
   const setupOrganisation = useCallback(
     async (input: OrganisationInput, demoShouldFail?: boolean) => {
       if (!user) throw new Error("Sign in to set up an organisation.");
       const organisation = await createOrganisation(input, demoShouldFail);
+      const organisations = [...getOrganisations(user), organisation];
       await persistUser({
         ...user,
+        organisations,
+        activeOrganisationId: organisation.id,
         organisation,
         isBusinessAccount: true,
         businessName: organisation.name,
@@ -316,8 +348,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (input: OrganisationInput, demoShouldFail?: boolean) => {
       if (!user?.isBusinessAccount) throw new Error("Only organisers can edit an organisation.");
       const organisation = await saveOrganisation(user.organisation, input, demoShouldFail);
+      const organisations = getOrganisations(user).map((candidate) =>
+        candidate.id === organisation.id ? organisation : candidate
+      );
       await persistUser({
         ...user,
+        organisations,
+        activeOrganisationId: organisation.id,
         organisation,
         businessName: organisation.name,
         businessWebsite: organisation.website,
@@ -326,17 +363,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, persistUser]
   );
 
-  const deleteOrganiserAccount = useCallback(async () => {
+  const switchOrganisation = useCallback(async (organisationId: string) => {
     if (!user) return;
-    await removeOrganiserAccount();
+    const organisation = getOrganisations(user).find((candidate) => candidate.id === organisationId);
+    if (!organisation) throw new Error("That organisation is no longer available.");
     await persistUser({
       ...user,
-      isBusinessAccount: false,
-      businessName: undefined,
-      businessType: undefined,
-      businessWebsite: undefined,
-      organiserSubscription: undefined,
-      organisation: undefined,
+      activeOrganisationId: organisation.id,
+      organisation,
+      businessName: organisation.name,
+      businessWebsite: organisation.website,
+    });
+  }, [user, persistUser]);
+
+  const deleteOrganisation = useCallback(async (organisationId: string) => {
+    if (!user) return;
+    await removeOrganisation(organisationId);
+    const organisations = getOrganisations(user).filter((candidate) => candidate.id !== organisationId);
+    const activeOrganisation =
+      organisations.find((candidate) => candidate.id === user.activeOrganisationId)
+      ?? organisations[0];
+    await persistUser({
+      ...user,
+      organisations,
+      activeOrganisationId: activeOrganisation?.id,
+      organisation: activeOrganisation,
+      isBusinessAccount: organisations.length > 0,
+      businessName: activeOrganisation?.name,
+      businessType: activeOrganisation ? user.businessType : undefined,
+      businessWebsite: activeOrganisation?.website,
     });
   }, [user, persistUser]);
 
@@ -363,7 +418,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         subscribeAsOrganiser,
         setupOrganisation,
         updateOrganisation,
-        deleteOrganiserAccount,
+        switchOrganisation,
+        deleteOrganisation,
       }}
     >
       {children}

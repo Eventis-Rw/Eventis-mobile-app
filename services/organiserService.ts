@@ -130,7 +130,7 @@ export async function startSubscription(
 
 // INTEGRATION POINT: logo upload. The contracts expect files to go through a
 // presigned upload endpoint and only object keys/URLs to be sent afterwards.
-// POST /api/v1/organisers/me/organisation -> { organisation: Organisation }
+// POST /api/v1/organisations -> { organisation: Organisation }
 export async function createOrganisation(
   input: OrganisationInput,
   demoShouldFail = false,
@@ -144,11 +144,11 @@ export async function createOrganisation(
   // TODO: upload `input.logoUri` via the presigned upload endpoint once it exists,
   // then send the returned key instead of the local URI.
   const { logoUri: _localLogo, ...body } = input;
-  const resp = await api.post<{ organisation: Organisation }>("/api/v1/organisers/me/organisation", body);
+  const resp = await api.post<{ organisation: Organisation }>("/api/v1/organisations", body);
   return resp.organisation;
 }
 
-// INTEGRATION POINT: PATCH /api/v1/organisers/me/organisation -> { organisation: Organisation }
+// INTEGRATION POINT: PATCH /api/v1/organisations/:id -> { organisation: Organisation }
 // Same logo caveat as createOrganisation. Organisers set up before the
 // organisation record existed have no id yet, so the demo creates one.
 export async function updateOrganisation(
@@ -163,18 +163,19 @@ export async function updateOrganisation(
     return { id: current?.id ?? "org_" + Date.now().toString(36), ...rest, logoUrl: logoUri };
   }
   const { logoUri: _localLogo, ...body } = input;
-  const resp = await api.patch<{ organisation: Organisation }>("/api/v1/organisers/me/organisation", body);
+  if (!current?.id) throw new Error("Choose an organisation before saving changes.");
+  const resp = await api.patch<{ organisation: Organisation }>(`/api/v1/organisations/${current.id}`, body);
   return resp.organisation;
 }
 
-// INTEGRATION POINT: DELETE /api/v1/organisers/me removes the organisation and
-// cancels its organiser subscription without deleting the user's Eventis account.
-export async function deleteOrganiserAccount(): Promise<void> {
+// INTEGRATION POINT: DELETE /api/v1/organisations/:id removes one organisation.
+// The user's personal account and any other organisations remain available.
+export async function deleteOrganisation(id: string): Promise<void> {
   if (!USE_ORGANISER_API) {
     await wait(600);
     return;
   }
-  await api.delete("/api/v1/organisers/me");
+  await api.delete(`/api/v1/organisations/${id}`);
 }
 
 export function describeError(error: unknown, fallback: string): string {
