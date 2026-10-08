@@ -16,6 +16,7 @@ export const FEATURED_DEMO_POSTS: Event[] = [
     location: "The Rush Bar, Remera Kisimenti (Kwa Manzi)",
     date: "2026-10-02", time: "18:00", organizer: "The Rush Bar",
     image: "friday-fiesta", tags: ["Demo", "DJs", "Friday Fiesta"],
+    isFeatured: true,
   },
   {
     ...defaults,

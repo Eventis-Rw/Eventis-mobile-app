@@ -1,3 +1,4 @@
+import { BlurView } from "expo-blur";
 import { Tabs, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
@@ -5,6 +6,7 @@ import {
   Animated,
   ColorValue,
   Easing,
+  Platform,
   StyleSheet,
   View,
 } from "react-native";
@@ -85,6 +87,9 @@ function TabLayout() {
   const colors = useColors();
   const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
+  const isDark = scheme === "dark";
+  const isIOS = Platform.OS === "ios";
+  const isWeb = Platform.OS === "web";
   return (
     <Tabs
       safeAreaInsets={insets}
@@ -97,22 +102,19 @@ function TabLayout() {
         tabBarItemStyle: styles.item,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: scheme === "dark" ? "#11162A" : "#FFFFFF",
-          borderTopWidth: 0,
-          borderWidth: 1,
-          borderColor: scheme === "dark" ? "rgba(255,255,255,0.13)" : "rgba(20,35,70,0.10)",
-          elevation: 18,
-          marginHorizontal: 12,
-          bottom: Math.max(insets.bottom, 8),
-          height: 70,
-          borderRadius: 24,
-          paddingBottom: 0,
-          overflow: "hidden",
-          shadowColor: "#000000",
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: scheme === "dark" ? 0.5 : 0.2,
-          shadowRadius: 20,
+          backgroundColor: isIOS ? "transparent" : colors.background,
+          borderTopWidth: isWeb ? 1 : 0,
+          borderTopColor: colors.border,
+          elevation: 0,
+          height: isWeb ? 84 : (isIOS ? 58 : 62) + insets.bottom,
+          paddingBottom: isWeb ? 0 : insets.bottom,
         },
+        tabBarBackground: () =>
+          isIOS ? (
+            <BlurView intensity={100} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+          ) : isWeb ? (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
+          ) : null,
       }}
     >
       <Tabs.Screen
@@ -167,20 +169,11 @@ function TabLayout() {
       />
       <Tabs.Screen name="tickets" options={{ href: null }} />
       <Tabs.Screen
-        name="share"
+        name="settings"
         options={{
-          title: "Share",
+          title: "Settings",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="share-2" color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="user" color={color} focused={focused} />
+            <TabIcon name="settings" color={color} focused={focused} />
           ),
         }}
       />
@@ -190,27 +183,27 @@ function TabLayout() {
 
 const styles = StyleSheet.create({
   activePill: {
-    borderRadius: 14,
-    height: 34,
+    borderRadius: 16,
+    height: 32,
     position: "absolute",
-    width: 52,
+    width: 48,
   },
   iconSlot: {
     alignItems: "center",
-    height: 34,
+    height: 32,
     justifyContent: "center",
-    width: 52,
+    width: 48,
   },
   item: {
-    paddingTop: 7,
+    paddingTop: 6,
   },
   disabledItem: {
     opacity: 0.5,
   },
   label: {
-    fontSize: 10,
-    fontWeight: "700",
-    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 3,
   },
 });
 

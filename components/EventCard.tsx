@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
@@ -19,11 +18,11 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/events";
-import { getEventPalette, getEventTiming } from "@/constants/eventPresentation";
 import { shareEvent } from "@/utils/shareEvent";
-import { getEventImage, POSTER_RATIOS } from "@/constants/eventImages";
+import { getEventImage } from "@/constants/eventImages";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -36,10 +35,12 @@ interface EventCardProps {
 
 export function EventCard({ event, variant = "standard", inset = 20 }: EventCardProps) {
   const colors = useColors();
+  const { scheme } = useTheme();
   const router = useRouter();
   const { user, toggleSaveEvent } = useAuth();
   const scale = useSharedValue(1);
   const isSaved = user?.savedEvents.includes(event.id) ?? false;
+  const postSurface = scheme === "dark" ? "#0D1020" : "#FFFFFF";
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -67,6 +68,8 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
   );
 
   const [showShareModal, setShowShareModal] = useState(false);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
+  const captionCanExpand = event.description.trim().length > 110;
 
   const handleShare = useCallback((e?: any) => {
     e?.stopPropagation?.();
@@ -87,7 +90,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
     } as any);
   }, [router, event]);
 
-  const viewsCount = event.viewCount ?? (event.attendees * 4 + 180);
+  const viewsCount = event.viewCount ?? 180;
 
   const shareModal = (
     <Modal
@@ -133,7 +136,9 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               style={[styles.shareOption, { backgroundColor: colors.secondary, borderColor: colors.border }]}
               onPress={handleNativeShare}
             >
-              <View style={[styles.shareIconWrap, { backgroundColor: colors.accent }]}>
+              <View
+                style={[styles.shareIconWrap, { backgroundColor: colors.primary }]}
+              >
                 <Ionicons name="share-outline" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.shareOptionInfo}>
@@ -224,12 +229,6 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               <View style={styles.featuredBottom}>
                 <View style={styles.featuredStats}>
                   <View style={styles.attendeeRow}>
-                    <Ionicons name="people-outline" size={13} color="rgba(255,255,255,0.85)" />
-                    <Text style={styles.attendeeText}>
-                      {formatCount(event.attendees)} attending
-                    </Text>
-                  </View>
-                  <View style={styles.attendeeRow}>
                     <Ionicons name="eye-outline" size={13} color="rgba(255,255,255,0.85)" />
                     <Text style={styles.attendeeText}>{formatCount(viewsCount)} views</Text>
                   </View>
@@ -311,82 +310,13 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
     );
   }
 
-  if (variant === "feed") {
-    const priceLabel = !event.isPaid || event.price <= 0
-      ? "Free entry"
-      : `${event.currency} ${event.price.toLocaleString()}`;
-    const palette = getEventPalette(event.category);
-    const timing = getEventTiming(event);
-    return (
-      <Animated.View style={[styles.posterCard, animatedStyle]}>
-        <Pressable
-          onPress={handlePress}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          accessibilityRole="button"
-          accessibilityLabel={`View ${event.title}`}
-        >
-          <ImageBackground
-            source={getEventImage(event.image)}
-            style={[styles.posterMedia, { backgroundColor: palette.deep }]}
-            resizeMode="cover"
-          >
-            <LinearGradient
-              colors={["rgba(3,5,14,0.02)", "rgba(3,5,14,0.22)", palette.deep]}
-              locations={[0, 0.42, 1]}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.posterTopRow}>
-              <View style={[styles.posterStatus, { backgroundColor: timing.kind === "live" ? "#E5484D" : "rgba(8,10,20,0.72)" }]}>
-                {timing.kind === "live" ? <View style={styles.posterLiveDot} /> : null}
-                <Text style={styles.posterStatusText}>{timing.label}</Text>
-              </View>
-              <View style={[styles.posterArrow, { backgroundColor: palette.accent }]}>
-                <Ionicons name="arrow-up-outline" size={18} color="#FFFFFF" style={styles.posterArrowIcon} />
-              </View>
-            </View>
-            <View style={styles.posterFooter}>
-              <Text style={[styles.posterCategory, { color: palette.accentSoft }]}>{event.category}</Text>
-              <Text style={styles.posterTitle} numberOfLines={2}>
-                {event.title}
-              </Text>
-              <View style={styles.posterLocationRow}>
-                <Ionicons name="location" size={14} color={palette.accentSoft} />
-                <Text style={styles.posterLocation} numberOfLines={1}>{event.location}</Text>
-              </View>
-              <View style={styles.posterMeta}>
-                <Text style={styles.posterPrice}>{priceLabel}</Text>
-                <View style={styles.posterCta}>
-                  <Text style={styles.posterCtaText}>View details</Text>
-                  <Ionicons name="arrow-forward" size={14} color="#0A1022" />
-                </View>
-              </View>
-            </View>
-          </ImageBackground>
-        </Pressable>
-        <Pressable
-          onPress={handleSave}
-          accessibilityRole="button"
-          accessibilityLabel={isSaved ? "Unsave event" : "Save event"}
-          style={styles.posterHeart}
-        >
-          <Ionicons
-            name={isSaved ? "heart" : "heart-outline"}
-            size={22}
-            color="#FFFFFF"
-          />
-        </Pressable>
-      </Animated.View>
-    );
-  }
-
-  // Instagram-style event post used outside the home feed
+  // Instagram-style event post (standard and feed)
   return (
     <>
       <AnimatedPressable
         style={[
           styles.instaCard,
-          { backgroundColor: colors.card, borderColor: colors.border },
+          { backgroundColor: postSurface },
           animatedStyle,
         ]}
         onPress={handlePress}
@@ -425,15 +355,16 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
         </View>
 
         {/* Post Media: Full-width event image */}
-        <View style={[styles.instaMediaWrap, POSTER_RATIOS[event.image] ? { aspectRatio: POSTER_RATIOS[event.image] } : null]}>
+        <View style={styles.instaMediaWrap}>
           <ImageBackground
             source={getEventImage(event.image)}
             style={styles.instaMediaImage}
             imageStyle={styles.instaMediaInnerImage}
+            resizeMode="cover"
           />
         </View>
 
-        {/* Action Bar: ONLY Insight numbers, Share, and Saved for Later. NO RATING */}
+        {/* Action bar: views, sharing, and saved events. */}
         <View style={styles.instaActionBar}>
           {/* Left: Insight numbers */}
           <View style={styles.instaInsightsWrap}>
@@ -444,12 +375,6 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               </Text>
               <Text style={[styles.instaInsightLabel, { color: colors.mutedForeground }]}>
                 views
-              </Text>
-            </View>
-            <View style={styles.instaInsightItem}>
-              <Ionicons name="people-outline" size={16} color={colors.mutedForeground} />
-              <Text style={[styles.instaAttendeesCount, { color: colors.mutedForeground }]}>
-                {event.attendees} attending
               </Text>
             </View>
           </View>
@@ -490,9 +415,28 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               {formatDate(event.date)} · {event.time}
             </Text>
           </View>
-          <Text style={[styles.instaCaption, { color: colors.mutedForeground }]} numberOfLines={2}>
+          <Text
+            style={[styles.instaCaption, { color: colors.mutedForeground }]}
+            numberOfLines={captionExpanded ? undefined : 2}
+          >
+            <Text style={[styles.instaCaptionOwner, { color: colors.foreground }]}>{event.organizer} </Text>
             {event.description}
           </Text>
+          {captionCanExpand ? (
+            <Pressable
+              onPress={(pressEvent) => {
+                pressEvent.stopPropagation();
+                setCaptionExpanded((expanded) => !expanded);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`${captionExpanded ? "Collapse" : "Expand"} caption for ${event.title}`}
+              accessibilityState={{ expanded: captionExpanded }}
+              hitSlop={8}
+              style={styles.captionToggle}
+            >
+              <Text style={[styles.captionToggleText, { color: colors.mutedForeground }]}>{captionExpanded ? "less" : "more"}</Text>
+            </Pressable>
+          ) : null}
         </View>
       </AnimatedPressable>
       {shareModal}
@@ -669,147 +613,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   instaCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    overflow: "hidden",
-    marginBottom: 22,
-    shadowColor: "#6E96FF",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    elevation: 6,
-  },
-  posterCard: {
-    marginHorizontal: 16,
-    marginBottom: 18,
-    borderRadius: 28,
-    overflow: "hidden",
-    backgroundColor: "#11152A",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  posterMedia: {
-    width: "100%",
-    height: 360,
-    justifyContent: "space-between",
-  },
-  posterTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-  },
-  posterStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    maxWidth: "75%",
-    borderRadius: 999,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  posterLiveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#FFFFFF",
-  },
-  posterStatusText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
-  },
-  posterArrow: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  posterArrowIcon: {
-    transform: [{ rotate: "45deg" }],
-  },
-  posterHeart: {
-    position: "absolute",
-    top: 14,
-    right: 62,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(20, 20, 28, 0.35)",
-  },
-  posterFooter: {
-    paddingHorizontal: 16,
-    paddingBottom: 17,
-    paddingTop: 34,
-    gap: 7,
-  },
-  posterCategory: {
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 0.75,
-    textTransform: "uppercase",
-  },
-  posterTitle: {
-    color: "#FFFFFF",
-    fontSize: 26,
-    lineHeight: 30,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.4,
-  },
-  posterMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    marginTop: 7,
-  },
-  posterLocationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  posterLocation: {
-    flex: 1,
-    color: "rgba(255,255,255,0.76)",
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  posterPrice: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  posterCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  posterCtaText: {
-    color: "#0A1022",
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-  },
-  feedBleed: {
-    width: "100%",
-    alignSelf: "stretch",
     borderRadius: 0,
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
+    borderWidth: 0,
+    overflow: "hidden",
     marginBottom: 10,
-    shadowOpacity: 0,
-    elevation: 0,
   },
   instaHeader: {
     flexDirection: "row",
@@ -846,7 +653,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   instaOrganizerName: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
   },
   instaSponsoredBadge: {
@@ -860,7 +667,7 @@ const styles = StyleSheet.create({
   },
   instaLocationText: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
   },
   instaCategoryBadge: {
     paddingHorizontal: 10,
@@ -873,7 +680,7 @@ const styles = StyleSheet.create({
   },
   instaMediaWrap: {
     width: "100%",
-    aspectRatio: 4 / 3,
+    aspectRatio: 1,
     backgroundColor: "#000000",
   },
   instaMediaImage: {
@@ -888,7 +695,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   instaInsightsWrap: {
     flexDirection: "row",
@@ -908,27 +715,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
-  instaAttendeesCount: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
   instaRightActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
   instaActionBtn: {
-    padding: 4,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   instaDetails: {
     paddingHorizontal: 14,
-    paddingBottom: 14,
+    paddingBottom: 16,
     gap: 6,
   },
   instaTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    lineHeight: 20,
+    fontSize: 17,
+    fontFamily: "Inter_800ExtraBold",
+    lineHeight: 22,
+    letterSpacing: -0.25,
   },
   instaMetaRow: {
     flexDirection: "row",
@@ -936,13 +744,24 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   instaMetaText: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
   instaCaption: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
-    lineHeight: 18,
+    lineHeight: 21,
+  },
+  instaCaptionOwner: {
+    fontFamily: "Inter_700Bold",
+  },
+  captionToggle: {
+    alignSelf: "flex-start",
+    paddingVertical: 2,
+  },
+  captionToggleText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
   standard: {
     borderRadius: 16,

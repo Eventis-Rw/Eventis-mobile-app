@@ -9,64 +9,22 @@ export type EventPalette = {
 };
 
 const DEFAULT_PALETTE: EventPalette = {
-  accent: "#4C78FF",
-  accentSoft: "#DDE7FF",
-  deep: "#101A3D",
-  pageLight: ["#DDE7FF", "#F4F7FF", "#E8EEF8"],
-  pageDark: ["#131D42", "#080B18", "#070814"],
+  accent: "#2F6BFF",
+  accentSoft: "#D9E6FF",
+  deep: "#0D1838",
+  pageLight: ["#D9E6FF", "#F4F7FF", "#E8EEF8"],
+  pageDark: ["#172149", "#070814", "#070814"],
 };
 
 const EVENT_PALETTES: Record<string, EventPalette> = {
-  Music: {
-    accent: "#7667F2",
-    accentSoft: "#E3E0FF",
-    deep: "#151A3D",
-    pageLight: ["#E2E7FF", "#F8F9FF", "#E8EEF8"],
-    pageDark: ["#171D45", "#090D1D", "#070814"],
-  },
-  Nightlife: {
-    accent: "#8B5CF6",
-    accentSoft: "#E9DFFF",
-    deep: "#17183D",
-    pageLight: ["#E5E7FF", "#F8F9FF", "#E8EEF8"],
-    pageDark: ["#191D45", "#090D1D", "#070814"],
-  },
-  Food: {
-    accent: "#E9903F",
-    accentSoft: "#FFE8D1",
-    deep: "#151B35",
-    pageLight: ["#E7ECFF", "#FAFAFF", "#E8EEF8"],
-    pageDark: ["#171E3D", "#090D1D", "#070814"],
-  },
-  Sports: {
-    accent: "#2AA37B",
-    accentSoft: "#D8F3E9",
-    deep: "#101C36",
-    pageLight: ["#E3EDFF", "#F8FAFF", "#E8EEF8"],
-    pageDark: ["#121F40", "#090E1E", "#070814"],
-  },
+  Music: DEFAULT_PALETTE,
+  Nightlife: DEFAULT_PALETTE,
+  Food: DEFAULT_PALETTE,
+  Sports: DEFAULT_PALETTE,
   Business: DEFAULT_PALETTE,
-  Tech: {
-    accent: "#278DFF",
-    accentSoft: "#D9EAFF",
-    deep: "#0A2142",
-    pageLight: ["#D9EAFF", "#F6FAFF", "#E8EEF8"],
-    pageDark: ["#0D2850", "#081020", "#070814"],
-  },
-  Art: {
-    accent: "#C7619E",
-    accentSoft: "#F5DEEC",
-    deep: "#171936",
-    pageLight: ["#E8E9FF", "#FAF9FF", "#E8EEF8"],
-    pageDark: ["#1A1C40", "#0A0D1D", "#070814"],
-  },
-  Community: {
-    accent: "#C88E2F",
-    accentSoft: "#F8E9C9",
-    deep: "#151B35",
-    pageLight: ["#E6ECFF", "#FAFAFF", "#E8EEF8"],
-    pageDark: ["#171E3D", "#090D1D", "#070814"],
-  },
+  Tech: DEFAULT_PALETTE,
+  Art: DEFAULT_PALETTE,
+  Community: DEFAULT_PALETTE,
 };
 
 export function getEventPalette(category: string) {

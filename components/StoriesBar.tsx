@@ -431,15 +431,15 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: StoriesBarProps) {
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 18,
-    paddingBottom: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
     alignSelf: "stretch",
   },
   scroller: {
     width: "100%",
   },
   scrollContent: {
-    paddingLeft: 16,
+    paddingLeft: 20,
     paddingRight: 20,
     gap: 18,
   },
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
   },
   storyLabel: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_600SemiBold",
     textAlign: "center",
   },
   storyViewerRoot: {

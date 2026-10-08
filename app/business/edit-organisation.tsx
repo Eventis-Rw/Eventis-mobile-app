@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -33,12 +33,16 @@ export default function EditOrganisationScreen() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
-  const { user, updateOrganisation } = useAuth();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const creating = mode === "create";
+  const { user, setupOrganisation, updateOrganisation } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
-  const org = user?.organisation;
+  const org = creating ? undefined : user?.organisation;
 
   const [values, setValues] = useState<OrganisationFormValues>(() =>
-    organisationFormValues(org ?? { name: user?.businessName, website: user?.businessWebsite }),
+    organisationFormValues(
+      creating ? {} : org ?? { name: user?.businessName, website: user?.businessWebsite },
+    ),
   );
   const [logoUri, setLogoUri] = useState<string | undefined>(org?.logoUrl);
   const [touched, setTouched] = useState<Partial<Record<keyof OrganisationFormValues, boolean>>>({});
@@ -60,7 +64,9 @@ export default function EditOrganisationScreen() {
     setSaving(true);
     setSaveError(null);
     try {
-      await updateOrganisation(toOrganisationInput(values, logoUri), demoFail);
+      const input = toOrganisationInput(values, logoUri);
+      if (creating) await setupOrganisation(input, demoFail);
+      else await updateOrganisation(input, demoFail);
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (error) {
@@ -76,7 +82,7 @@ export default function EditOrganisationScreen() {
       style={[styles.root, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <PortalScreenHeader title={org ? "Edit organisation" : "Organisation details"} disabled={saving} />
+      <PortalScreenHeader title={creating ? "New organisation" : "Edit organisation"} disabled={saving} />
 
       <ScrollView
         ref={scrollRef}
@@ -145,7 +151,7 @@ export default function EditOrganisationScreen() {
             <Ionicons name={saveError ? "refresh" : "checkmark-circle-outline"} size={20} color="#fff" />
           )}
           <Text style={styles.primaryBtnText}>
-            {saving ? "Saving…" : saveError ? "Try again" : "Save changes"}
+            {saving ? "Saving…" : saveError ? "Try again" : creating ? "Create organisation" : "Save changes"}
           </Text>
         </Pressable>
       </ScrollView>

@@ -20,15 +20,15 @@ type DashTab = "overview" | "events";
 
 const STATS = [
   { label: "Total Views", value: "4,320", icon: "eye-outline" as const, colorKey: "primary" as const },
-  { label: "Attendees", value: "890", icon: "people-outline" as const, colorKey: "success" as const },
-  { label: "Link Clicks", value: "312", icon: "trending-up-outline" as const, colorKey: "accent" as const },
-  { label: "Revenue", value: "RWF 15.2M", icon: "cash-outline" as const, colorKey: "info" as const },
+  { label: "Published", value: "24", icon: "calendar-outline" as const, colorKey: "primary" as const },
+  { label: "Link Clicks", value: "312", icon: "trending-up-outline" as const, colorKey: "primary" as const },
+  { label: "Revenue", value: "RWF 15.2M", icon: "cash-outline" as const, colorKey: "primary" as const },
 ];
 
 const ACTIVITY = [
   { icon: "ticket-outline" as const, text: "12 new ticket sales", time: "2 hours ago", colorKey: "primary" as const },
-  { icon: "eye-outline" as const, text: "284 profile views today", time: "Today", colorKey: "info" as const },
-  { icon: "star-outline" as const, text: "New 5-star review received", time: "Yesterday", colorKey: "accent" as const },
+  { icon: "eye-outline" as const, text: "284 profile views today", time: "Today", colorKey: "primary" as const },
+  { icon: "star-outline" as const, text: "New 5-star review received", time: "Yesterday", colorKey: "primary" as const },
 ];
 
 export default function OrganiserDashboard() {
@@ -236,7 +236,6 @@ export default function OrganiserDashboard() {
                     </View>
                   </View>
                   <Text style={[styles.eventMeta, { color: colors.mutedForeground }]}>
-                    {event.attendees} attendees ·{" "}
                     {new Date(event.date).toLocaleDateString("en-GB", {
                       month: "short",
                       day: "numeric",
@@ -251,9 +250,9 @@ export default function OrganiserDashboard() {
                       </Text>
                     </Pressable>
                     <Pressable
-                      style={[styles.eventAction, { backgroundColor: colors.info + "22" }]}
+                      style={[styles.eventAction, { backgroundColor: colors.primary + "22" }]}
                     >
-                      <Text style={[styles.eventActionText, { color: colors.info }]}>
+                      <Text style={[styles.eventActionText, { color: colors.primary }]}>
                         Analytics
                       </Text>
                     </Pressable>
