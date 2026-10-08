@@ -564,7 +564,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: PAGE_PADDING,
     paddingTop: 20,
   },
   section: {
@@ -652,9 +651,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_400Regular",
   },
-  // Horizontal rows scroll edge to edge but start aligned with the page padding.
   bleed: {
-    marginHorizontal: -PAGE_PADDING,
+    marginHorizontal: 0,
   },
   bleedContent: {
     paddingHorizontal: PAGE_PADDING,

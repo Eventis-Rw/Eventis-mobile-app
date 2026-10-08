@@ -65,6 +65,8 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
   );
 
   const [showShareModal, setShowShareModal] = useState(false);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
+  const captionCanExpand = event.description.trim().length > 110;
 
   const handleShare = useCallback((e?: any) => {
     e?.stopPropagation?.();
@@ -419,9 +421,28 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               {formatDate(event.date)} · {event.time}
             </Text>
           </View>
-          <Text style={[styles.instaCaption, { color: colors.mutedForeground }]} numberOfLines={2}>
+          <Text
+            style={[styles.instaCaption, { color: colors.mutedForeground }]}
+            numberOfLines={captionExpanded ? undefined : 2}
+          >
+            <Text style={[styles.instaCaptionOwner, { color: colors.foreground }]}>{event.organizer} </Text>
             {event.description}
           </Text>
+          {captionCanExpand ? (
+            <Pressable
+              onPress={(pressEvent) => {
+                pressEvent.stopPropagation();
+                setCaptionExpanded((expanded) => !expanded);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`${captionExpanded ? "Collapse" : "Expand"} caption for ${event.title}`}
+              accessibilityState={{ expanded: captionExpanded }}
+              hitSlop={8}
+              style={styles.captionToggle}
+            >
+              <Text style={[styles.captionToggleText, { color: colors.mutedForeground }]}>{captionExpanded ? "less" : "more"}</Text>
+            </Pressable>
+          ) : null}
         </View>
       </AnimatedPressable>
       {shareModal}
@@ -598,10 +619,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   instaCard: {
-    borderRadius: 20,
-    borderWidth: 1,
+    borderRadius: 0,
+    borderWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
-    marginBottom: 20,
+    marginBottom: 12,
   },
   instaHeader: {
     flexDirection: "row",
@@ -735,6 +757,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     lineHeight: 18,
+  },
+  instaCaptionOwner: {
+    fontFamily: "Inter_700Bold",
+  },
+  captionToggle: {
+    alignSelf: "flex-start",
+    paddingVertical: 2,
+  },
+  captionToggleText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
   standard: {
     borderRadius: 16,
