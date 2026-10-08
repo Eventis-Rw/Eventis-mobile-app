@@ -51,16 +51,18 @@ export default function HomeScreen() {
   const location = useLocationPermission();
   const measuredHeaderHeight = useSharedValue(0);
   const headerProgress = useSharedValue(1);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const lastScrollY = useRef(0);
   const scrollDirectionDistance = useRef(0);
+  const scrollDirection = useRef<"up" | "down" | null>(null);
   const headerHidden = useRef(false);
 
   const animatedHeaderStyle = useAnimatedStyle(() => {
     const measured = measuredHeaderHeight.value;
     return {
-      height: measured > 0 ? measured * headerProgress.value : undefined,
-      opacity: headerProgress.value,
-      transform: [{ translateY: -14 * (1 - headerProgress.value) }],
+      transform: [
+        { translateY: -(measured + 4) * (1 - headerProgress.value) },
+      ],
     };
   });
 
@@ -68,8 +70,8 @@ export default function HomeScreen() {
     if (headerHidden.current === !visible) return;
     headerHidden.current = !visible;
     headerProgress.value = withTiming(visible ? 1 : 0, {
-      duration: visible ? 220 : 260,
-      easing: Easing.out(Easing.cubic),
+      duration: visible ? 240 : 210,
+      easing: Easing.bezier(0.22, 1, 0.36, 1),
     });
   }, [headerProgress]);
 
@@ -79,16 +81,30 @@ export default function HomeScreen() {
 
     if (nextY <= 8) {
       scrollDirectionDistance.current = 0;
+      scrollDirection.current = null;
       setHeaderVisible(true);
-    } else if (delta > 0) {
-      scrollDirectionDistance.current = Math.max(0, scrollDirectionDistance.current) + delta;
-      if (nextY > 28 && scrollDirectionDistance.current > 16) {
-        setHeaderVisible(false);
+    } else if (Math.abs(delta) >= 1.5) {
+      const nextDirection = delta > 0 ? "down" : "up";
+
+      if (scrollDirection.current !== nextDirection) {
+        scrollDirection.current = nextDirection;
         scrollDirectionDistance.current = 0;
       }
-    } else if (delta < 0) {
-      scrollDirectionDistance.current = Math.min(0, scrollDirectionDistance.current) + delta;
-      if (scrollDirectionDistance.current < -10) {
+
+      scrollDirectionDistance.current += Math.abs(delta);
+
+      if (
+        nextDirection === "down" &&
+        nextY > 56 &&
+        scrollDirectionDistance.current >= 44
+      ) {
+        setHeaderVisible(false);
+        scrollDirectionDistance.current = 0;
+      } else if (
+        nextDirection === "up" &&
+        headerHidden.current &&
+        scrollDirectionDistance.current >= 64
+      ) {
         setHeaderVisible(true);
         scrollDirectionDistance.current = 0;
       }
@@ -214,7 +230,10 @@ export default function HomeScreen() {
       <Animated.View
         onLayout={(event) => {
           const height = event.nativeEvent.layout.height;
-          if (height > 0 && measuredHeaderHeight.value === 0) measuredHeaderHeight.value = height;
+          if (height > 0 && Math.abs(height - measuredHeaderHeight.value) > 1) {
+            measuredHeaderHeight.value = height;
+            setHeaderHeight(height);
+          }
         }}
         style={[
           styles.header,
@@ -315,6 +334,7 @@ export default function HomeScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
+            paddingTop: headerHeight || insets.top + 124,
             paddingBottom: Platform.OS === "web" ? 84 + 20 : 100,
           },
         ]}
@@ -562,6 +582,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    elevation: 8,
     paddingHorizontal: PAGE_PADDING,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
