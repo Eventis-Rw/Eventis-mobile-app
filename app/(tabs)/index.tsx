@@ -288,9 +288,6 @@ export default function HomeScreen() {
         >
           <Ionicons name="search-outline" size={17} color={colors.mutedForeground} />
           <Text style={[styles.searchPlaceholder, { color: colors.mutedForeground }]}>Search events near you...</Text>
-          <View style={[styles.filterBtn, { backgroundColor: colors.primary }]}>
-            <Ionicons name="options-outline" size={14} color="#fff" />
-          </View>
         </Pressable>
       </Animated.View>
 
@@ -630,23 +627,17 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
+    minHeight: 48,
+    borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    gap: 12,
   },
   searchPlaceholder: {
     flex: 1,
     fontSize: 14,
     fontFamily: "Inter_400Regular",
-  },
-  filterBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
   },
   scroll: {
     flex: 1,

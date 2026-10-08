@@ -316,7 +316,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
       <AnimatedPressable
         style={[
           styles.instaCard,
-          { backgroundColor: postSurface, borderColor: colors.border },
+          { backgroundColor: postSurface },
           animatedStyle,
         ]}
         onPress={handlePress}
@@ -615,9 +615,8 @@ const styles = StyleSheet.create({
   instaCard: {
     borderRadius: 0,
     borderWidth: 0,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
-    marginBottom: 12,
+    marginBottom: 10,
   },
   instaHeader: {
     flexDirection: "row",
