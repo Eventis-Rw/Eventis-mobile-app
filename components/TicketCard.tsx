@@ -46,7 +46,7 @@ export function TicketCard({ booking, index }: TicketCardProps) {
           <Text style={styles.priceValue}>
             {booking.totalPrice === 0
               ? "Free"
-              : `£${booking.totalPrice}`}
+              : `${booking.currency} ${booking.totalPrice.toLocaleString()}`}
           </Text>
         </View>
       </View>

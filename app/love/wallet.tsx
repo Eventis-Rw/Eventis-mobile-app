@@ -9,9 +9,9 @@ import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useColors } from "@/hooks/useColors";
 
 const TOKEN_PACKAGES = [
-  { amount: 50, price: "$1.99", note: "A few thoughtful gifts" },
-  { amount: 120, price: "$3.99", note: "Most popular", popular: true },
-  { amount: 300, price: "$7.99", note: "Best value" },
+  { amount: 50, price: "RWF 2,000", note: "A few thoughtful gifts" },
+  { amount: 120, price: "RWF 5,000", note: "Most popular", popular: true },
+  { amount: 300, price: "RWF 10,000", note: "Best value" },
 ];
 
 const PAYMENT_METHODS = [

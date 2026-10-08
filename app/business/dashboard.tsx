@@ -21,7 +21,7 @@ const STATS = [
   { label: "Total Views", value: "4,320", icon: "eye-outline" as const, colorKey: "primary" as const },
   { label: "Attendees", value: "890", icon: "people-outline" as const, colorKey: "success" as const },
   { label: "Link Clicks", value: "312", icon: "trending-up-outline" as const, colorKey: "accent" as const },
-  { label: "Revenue", value: "£15,240", icon: "cash-outline" as const, colorKey: "info" as const },
+  { label: "Revenue", value: "RWF 15.2M", icon: "cash-outline" as const, colorKey: "info" as const },
 ];
 
 const ACTIVITY = [

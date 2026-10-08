@@ -7,7 +7,7 @@ import { FlatList, Image, Modal, Platform, Pressable, RefreshControl, ScrollView
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
 import { HomeDiscovery, SectionHeading } from "@/components/HomeDiscovery";
-import { EventCardSkeleton } from "@/components/SkeletonLoader";
+import { HomeScreenSkeleton } from "@/components/SkeletonLoader";
 import { StoriesBar } from "@/components/StoriesBar";
 import { EVENT_GROUP_LABELS, getEventGroup, type EventGroup } from "@/constants/eventPresentation";
 import { useAuth } from "@/context/AuthContext";
@@ -72,7 +72,7 @@ export default function HomeScreen() {
       {error && !events.length ? (
         <StateMessage icon="cloud-offline-outline" title="Couldn't load events" text="Check your connection and try again." actionLabel="Try again" onAction={refreshEvents} />
       ) : showSkeletons ? (
-        <View style={styles.loadingWrap}><EventCardSkeleton inset={16} /><EventCardSkeleton inset={16} /></View>
+        <HomeScreenSkeleton />
       ) : events.length ? (
         <HomeDiscovery
           events={orderedEvents}
@@ -256,7 +256,6 @@ const styles = StyleSheet.create({
   searchFilter: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   listContent: { flexGrow: 1 },
   storiesSection: { paddingTop: 30 },
-  loadingWrap: { paddingTop: 18 },
   exploreSection: { paddingTop: 34 },
   categoryContent: { paddingHorizontal: 16, paddingBottom: 18 },
   feedHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 14, gap: 12 },
