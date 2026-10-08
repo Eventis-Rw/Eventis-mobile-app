@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   imageSkeleton: {
-    aspectRatio: 4 / 3,
+    aspectRatio: 1,
     overflow: "hidden",
   },
   content: {

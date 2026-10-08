@@ -355,7 +355,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
             source={getEventImage(event.image)}
             style={styles.instaMediaImage}
             imageStyle={styles.instaMediaInnerImage}
-            resizeMode="contain"
+            resizeMode="cover"
           />
         </View>
 
@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
   },
   instaMediaWrap: {
     width: "100%",
-    aspectRatio: 4 / 3,
+    aspectRatio: 1,
     backgroundColor: "#000000",
   },
   instaMediaImage: {
@@ -684,7 +684,7 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   instaMediaInnerImage: {
-    resizeMode: "contain",
+    resizeMode: "cover",
   },
   instaActionBar: {
     flexDirection: "row",

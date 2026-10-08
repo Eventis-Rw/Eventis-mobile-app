@@ -48,36 +48,36 @@ export default function HomeScreen() {
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const location = useLocationPermission();
-  const measuredHeaderHeight = useSharedValue(0);
-  const headerProgress = useSharedValue(1);
+  const measuredSearchHeight = useSharedValue(0);
+  const searchProgress = useSharedValue(1);
   const lastScrollY = useRef(0);
-  const headerHidden = useRef(false);
+  const searchHidden = useRef(false);
 
-  const animatedHeaderStyle = useAnimatedStyle(() => {
-    const measured = measuredHeaderHeight.value;
+  const animatedSearchStyle = useAnimatedStyle(() => {
+    const measured = measuredSearchHeight.value;
     return {
-      height: measured > 0 ? measured * headerProgress.value : undefined,
-      opacity: headerProgress.value,
-      transform: [{ translateY: -12 * (1 - headerProgress.value) }],
+      height: measured > 0 ? measured * searchProgress.value : undefined,
+      opacity: searchProgress.value,
+      transform: [{ translateY: -8 * (1 - searchProgress.value) }],
     };
   });
 
-  const setHeaderVisible = useCallback((visible: boolean) => {
-    if (headerHidden.current === !visible) return;
-    headerHidden.current = !visible;
-    headerProgress.value = withTiming(visible ? 1 : 0, { duration: visible ? 170 : 210 });
-  }, [headerProgress]);
+  const setSearchVisible = useCallback((visible: boolean) => {
+    if (searchHidden.current === !visible) return;
+    searchHidden.current = !visible;
+    searchProgress.value = withTiming(visible ? 1 : 0, { duration: visible ? 170 : 210 });
+  }, [searchProgress]);
 
   const handleFeedScroll = useCallback((event: any) => {
     const nextY = Math.max(event.nativeEvent.contentOffset.y, 0);
     const delta = nextY - lastScrollY.current;
 
-    if (nextY <= 8) setHeaderVisible(true);
-    else if (nextY > 28 && delta > 2) setHeaderVisible(false);
-    else if (delta < -2) setHeaderVisible(true);
+    if (nextY <= 8) setSearchVisible(true);
+    else if (nextY > 28 && delta > 2) setSearchVisible(false);
+    else if (delta < -2) setSearchVisible(true);
 
     lastScrollY.current = nextY;
-  }, [setHeaderVisible]);
+  }, [setSearchVisible]);
 
   // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
   const showSkeletons = isLoading && !refreshing;
@@ -193,14 +193,9 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <Animated.View
-        onLayout={(event) => {
-          const height = event.nativeEvent.layout.height;
-          if (height > 0 && measuredHeaderHeight.value === 0) measuredHeaderHeight.value = height;
-        }}
+      <View
         style={[
           styles.header,
-          animatedHeaderStyle,
           {
             paddingTop: insets.top + 8,
             backgroundColor: colors.background,
@@ -262,21 +257,33 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <Pressable
-          style={[styles.searchBar, { backgroundColor: colors.input, borderColor: colors.border }]}
-          onPress={openSearch}
-          accessibilityRole="search"
-          accessibilityLabel="Search events"
+        <Animated.View
+          onLayout={(event) => {
+            const height = event.nativeEvent.layout.height;
+            if (height > 0 && measuredSearchHeight.value === 0) measuredSearchHeight.value = height;
+          }}
+          style={[styles.searchReveal, animatedSearchStyle]}
         >
-          <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
-          <Text style={[styles.searchPlaceholder, { color: colors.mutedForeground }]}>
-            Search events near you...
-          </Text>
-          <View style={[styles.filterBtn, { backgroundColor: colors.primary }]}>
-            <Ionicons name="options-outline" size={14} color="#fff" />
-          </View>
-        </Pressable>
-      </Animated.View>
+          <Pressable
+            style={[styles.searchBar, { backgroundColor: colors.input, borderColor: colors.border }]}
+            onPress={openSearch}
+            accessibilityRole="search"
+            accessibilityLabel="Search events"
+          >
+            <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
+            <Text
+              style={[styles.searchPlaceholder, { color: colors.mutedForeground }]}
+            >
+              Search events near you...
+            </Text>
+            <View
+              style={[styles.filterBtn, { backgroundColor: colors.primary }]}
+            >
+              <Ionicons name="options-outline" size={14} color="#fff" />
+            </View>
+          </Pressable>
+        </Animated.View>
+      </View>
 
       <FlatList
         key={selectedCategory}
@@ -530,8 +537,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    marginBottom: 12,
   },
+  searchReveal: { paddingTop: 12, overflow: "hidden" },
   brandRow: {
     flex: 1,
     flexDirection: "row",
@@ -607,7 +614,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 20,
+    paddingTop: 0,
   },
   section: {
     marginTop: 32,
