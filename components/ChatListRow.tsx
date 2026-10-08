@@ -35,7 +35,15 @@ export function ChatListRow({
       ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : date?.toLocaleDateString([], { month: "short", day: "numeric" });
   return (
-    <View style={[styles.row, { backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.row,
+        {
+          backgroundColor: unreadCount > 0 ? colors.glass : colors.card,
+          borderColor: colors.border,
+        },
+      ]}
+    >
       <Pressable
         onPress={onPress}
         onLongPress={onLongPress}
@@ -136,6 +144,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     minHeight: 82,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
   },
   main: {
     flex: 1,
@@ -146,7 +159,7 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
     gap: 14,
   },
-  avatar: { width: 53, height: 53, borderRadius: 27 },
+  avatar: { width: 52, height: 52, borderRadius: 26 },
   copy: {
     flex: 1,
     minWidth: 0,
@@ -154,7 +167,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
     paddingRight: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
   },
   line: { flexDirection: "row", alignItems: "center", gap: 8 },
   name: { flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 16 },

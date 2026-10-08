@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
@@ -20,6 +21,7 @@ import Animated, {
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/events";
+import { getEventPalette, getEventTiming } from "@/constants/eventPresentation";
 import { shareEvent } from "@/utils/shareEvent";
 import { getEventImage, POSTER_RATIOS } from "@/constants/eventImages";
 
@@ -309,7 +311,76 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
     );
   }
 
-  // Instagram-style event post (standard and feed)
+  if (variant === "feed") {
+    const priceLabel = !event.isPaid || event.price <= 0
+      ? "Free entry"
+      : `${event.currency} ${event.price.toLocaleString()}`;
+    const palette = getEventPalette(event.category);
+    const timing = getEventTiming(event);
+    return (
+      <Animated.View style={[styles.posterCard, animatedStyle]}>
+        <Pressable
+          onPress={handlePress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${event.title}`}
+        >
+          <ImageBackground
+            source={getEventImage(event.image)}
+            style={[styles.posterMedia, { backgroundColor: palette.deep }]}
+            resizeMode="cover"
+          >
+            <LinearGradient
+              colors={["rgba(3,5,14,0.02)", "rgba(3,5,14,0.22)", palette.deep]}
+              locations={[0, 0.42, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.posterTopRow}>
+              <View style={[styles.posterStatus, { backgroundColor: timing.kind === "live" ? "#E5484D" : "rgba(8,10,20,0.72)" }]}>
+                {timing.kind === "live" ? <View style={styles.posterLiveDot} /> : null}
+                <Text style={styles.posterStatusText}>{timing.label}</Text>
+              </View>
+              <View style={[styles.posterArrow, { backgroundColor: palette.accent }]}>
+                <Ionicons name="arrow-up-outline" size={18} color="#FFFFFF" style={styles.posterArrowIcon} />
+              </View>
+            </View>
+            <View style={styles.posterFooter}>
+              <Text style={[styles.posterCategory, { color: palette.accentSoft }]}>{event.category}</Text>
+              <Text style={styles.posterTitle} numberOfLines={2}>
+                {event.title}
+              </Text>
+              <View style={styles.posterLocationRow}>
+                <Ionicons name="location" size={14} color={palette.accentSoft} />
+                <Text style={styles.posterLocation} numberOfLines={1}>{event.location}</Text>
+              </View>
+              <View style={styles.posterMeta}>
+                <Text style={styles.posterPrice}>{priceLabel}</Text>
+                <View style={styles.posterCta}>
+                  <Text style={styles.posterCtaText}>View details</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#0A1022" />
+                </View>
+              </View>
+            </View>
+          </ImageBackground>
+        </Pressable>
+        <Pressable
+          onPress={handleSave}
+          accessibilityRole="button"
+          accessibilityLabel={isSaved ? "Unsave event" : "Save event"}
+          style={styles.posterHeart}
+        >
+          <Ionicons
+            name={isSaved ? "heart" : "heart-outline"}
+            size={22}
+            color="#FFFFFF"
+          />
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  // Instagram-style event post used outside the home feed
   return (
     <>
       <AnimatedPressable
@@ -598,10 +669,147 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   instaCard: {
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     overflow: "hidden",
-    marginBottom: 20,
+    marginBottom: 22,
+    shadowColor: "#6E96FF",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  posterCard: {
+    marginHorizontal: 16,
+    marginBottom: 18,
+    borderRadius: 28,
+    overflow: "hidden",
+    backgroundColor: "#11152A",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  posterMedia: {
+    width: "100%",
+    height: 360,
+    justifyContent: "space-between",
+  },
+  posterTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+  },
+  posterStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: "75%",
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  posterLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#FFFFFF",
+  },
+  posterStatusText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+  },
+  posterArrow: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  posterArrowIcon: {
+    transform: [{ rotate: "45deg" }],
+  },
+  posterHeart: {
+    position: "absolute",
+    top: 14,
+    right: 62,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(20, 20, 28, 0.35)",
+  },
+  posterFooter: {
+    paddingHorizontal: 16,
+    paddingBottom: 17,
+    paddingTop: 34,
+    gap: 7,
+  },
+  posterCategory: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.75,
+    textTransform: "uppercase",
+  },
+  posterTitle: {
+    color: "#FFFFFF",
+    fontSize: 26,
+    lineHeight: 30,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.4,
+  },
+  posterMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 7,
+  },
+  posterLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  posterLocation: {
+    flex: 1,
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  posterPrice: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  posterCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  posterCtaText: {
+    color: "#0A1022",
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+  },
+  feedBleed: {
+    width: "100%",
+    alignSelf: "stretch",
+    borderRadius: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    marginBottom: 10,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   instaHeader: {
     flexDirection: "row",

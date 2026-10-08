@@ -274,12 +274,12 @@ export default function CreateEventScreen() {
 
             {form.isPaid && (
               <>
-                <Field label="Ticket Price (GBP)" colors={colors}>
+                <Field label="Ticket Price (RWF)" colors={colors}>
                   <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
-                    <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>£</Text>
+                    <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>RWF</Text>
                     <TextInput
                       style={[styles.iconInputText, { color: colors.foreground }]}
-                      placeholder="0.00"
+                      placeholder="0"
                       placeholderTextColor={colors.mutedForeground}
                       value={form.price}
                       onChangeText={(v) => set("price", v)}

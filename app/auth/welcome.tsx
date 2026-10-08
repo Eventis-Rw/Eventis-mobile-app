@@ -68,7 +68,7 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.root}>
       <ImageBackground
-        source={require("../../assets/images/banner-concert.png")}
+        source={require("../../assets/images/onboarding-city.jpg")}
         style={styles.bg}
         resizeMode="cover"
       >
@@ -88,7 +88,7 @@ export default function WelcomeScreen() {
             <Logo style={styles.logoImage} />
           </Animated.View>
           <Text style={styles.appName}>eventis</Text>
-          <Text style={styles.tagline}>Where moments happen</Text>
+          <Text style={styles.tagline}>The night, before it sells out.</Text>
         </Animated.View>
 
         {/* Features */}

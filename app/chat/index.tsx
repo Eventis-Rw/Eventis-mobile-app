@@ -66,7 +66,16 @@ export default function ChatScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={styles.workspace}>
-        <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
+        <View
+          style={[
+            styles.header,
+            {
+              paddingTop: insets.top + 4,
+              backgroundColor: colors.background,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
           {appleHeader ? (
             <>
               <View style={styles.appleActions}>
@@ -111,9 +120,14 @@ export default function ChatScreen() {
                     color={colors.foreground}
                   />
                 </Pressable>
-                <Text style={[styles.appleTitle, { color: colors.foreground }]}>
-                  Chats
-                </Text>
+                <View style={styles.titleBlock}>
+                  <Text numberOfLines={1} style={[styles.appleTitle, { color: colors.foreground }]}>
+                    Chats
+                  </Text>
+                  <Text numberOfLines={1} style={[styles.appleSubtitle, { color: colors.mutedForeground }]}>
+                    Plans, people, and the group after the show.
+                  </Text>
+                </View>
               </View>
             </>
           ) : (
@@ -130,9 +144,14 @@ export default function ChatScreen() {
                   color={colors.foreground}
                 />
               </Pressable>
-              <Text style={[styles.title, { color: colors.foreground }]}>
-                Chats
-              </Text>
+              <View style={styles.titleBlock}>
+                <Text numberOfLines={1} style={[styles.title, { color: colors.foreground }]}>
+                  Chats
+                </Text>
+                <Text numberOfLines={1} style={[styles.appleSubtitle, { color: colors.mutedForeground }]}>
+                  Plans, people, and the group after the show.
+                </Text>
+              </View>
               <Pressable
                 ref={menuButton}
                 accessibilityRole="button"
@@ -229,6 +248,7 @@ export default function ChatScreen() {
             data={conversations}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{
+              paddingTop: 8,
               paddingBottom: insets.bottom + 92,
               flexGrow: 1,
             }}
@@ -358,12 +378,15 @@ const styles = StyleSheet.create({
   root: { flex: 1, alignItems: "center" },
   workspace: { flex: 1, width: "100%", maxWidth: 820 },
   header: {
-    paddingBottom: 6,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 6,
+    minHeight: 62,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
   appleActions: {
     flexDirection: "row",
@@ -392,10 +415,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  titleBlock: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
   appleTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 38,
     lineHeight: 44,
+  },
+  appleSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    lineHeight: 18,
+    marginTop: 2,
   },
   icon: {
     width: 46,
@@ -404,15 +438,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: {
-    flex: 1,
     fontFamily: "Inter_700Bold",
     fontSize: 24,
-    marginLeft: 4,
+    lineHeight: 30,
   },
   search: {
     height: 48,
     marginHorizontal: 18,
-    marginTop: 2,
+    marginTop: 4,
     paddingHorizontal: 16,
     borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,

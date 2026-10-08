@@ -38,7 +38,7 @@ export function CategoryPill({ category, isSelected, onPress }: CategoryPillProp
         styles.pill,
         animatedStyle,
         {
-          backgroundColor: isSelected ? colors.primary : colors.card,
+          backgroundColor: isSelected ? colors.primary : colors.glass,
           borderColor: isSelected ? colors.primary : colors.border,
         },
       ]}

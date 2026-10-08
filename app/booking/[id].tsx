@@ -49,7 +49,7 @@ export default function BookingScreen() {
   }
 
   const total = event.price * quantity;
-  const priceSymbol = event.currency === "GBP" ? "£" : "$";
+  const formatPrice = (amount: number) => `${event.currency} ${amount.toLocaleString()}`;
 
   const handleConfirm = useCallback(async () => {
     if (!user) return;
@@ -155,7 +155,7 @@ export default function BookingScreen() {
               </View>
             </View>
             <Text style={[styles.ticketTypePriceText, { color: colors.foreground }]}>
-              {event.price === 0 ? "Free" : `${priceSymbol}${event.price}`}
+              {event.price === 0 ? "Free" : formatPrice(event.price)}
             </Text>
           </View>
         </Animated.View>
@@ -219,7 +219,7 @@ export default function BookingScreen() {
               {event.isPaid ? "General Admission" : "Free Reservation"} × {quantity}
             </Text>
             <Text style={[styles.summaryValue, { color: colors.foreground }]}>
-              {event.price === 0 ? "Free" : `${priceSymbol}${event.price * quantity}`}
+              {event.price === 0 ? "Free" : formatPrice(event.price * quantity)}
             </Text>
           </View>
           <View style={styles.summaryRow}>
@@ -233,7 +233,7 @@ export default function BookingScreen() {
           <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
             <Text style={[styles.totalLabel, { color: colors.foreground }]}>Total</Text>
             <Text style={[styles.totalValue, { color: event.isPaid ? colors.foreground : colors.success }]}>
-              {event.price === 0 ? "Free" : `${priceSymbol}${total}`}
+              {event.price === 0 ? "Free" : formatPrice(total)}
             </Text>
           </View>
         </Animated.View>

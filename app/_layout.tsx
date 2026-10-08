@@ -65,7 +65,7 @@ function RootLayoutNav() {
     if (isAuthenticated && inAuthGroup) {
       router.replace("/(tabs)" as any);
     } else if (!isAuthenticated && !inAuthGroup && !inSplash) {
-      router.replace("/onboarding" as any);
+      router.replace("/auth/login" as any);
     }
   }, [isAuthenticated, isLoading, segments, router]);
 

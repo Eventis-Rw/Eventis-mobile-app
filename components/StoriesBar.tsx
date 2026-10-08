@@ -164,6 +164,7 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: StoriesBarProps) {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.scroller}
           contentContainerStyle={styles.scrollContent}
         >
           {/* User Story Circle */}
@@ -430,11 +431,17 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: StoriesBarProps) {
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 12,
+    paddingTop: 18,
+    paddingBottom: 16,
+    alignSelf: "stretch",
+  },
+  scroller: {
+    width: "100%",
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    gap: 14,
+    paddingLeft: 16,
+    paddingRight: 20,
+    gap: 18,
   },
   storyItem: {
     alignItems: "center",
