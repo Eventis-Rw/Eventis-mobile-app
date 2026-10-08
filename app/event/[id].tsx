@@ -104,10 +104,8 @@ export default function EventDetailScreen() {
     );
   }
 
-  const viewsCount = event.viewCount ?? (event.attendees * 4 + 180);
+  const viewsCount = event.viewCount ?? 180;
   const instructions = (event.instructions ?? []).map((item) => item.trim()).filter(Boolean);
-  const hasCapacity = event.capacity > 0;
-  const remainingSpots = Math.max(event.capacity - event.attendees, 0);
   const price = !event.isPaid || event.price <= 0 ? "Free entry" : `${event.currency} ${event.price.toLocaleString()}`;
   const pageGradient = scheme === "dark" ? palette.pageDark : palette.pageLight;
   const sheetColor = scheme === "dark" ? "rgba(8,10,22,0.97)" : "rgba(248,250,255,0.97)";
@@ -185,23 +183,6 @@ export default function EventDetailScreen() {
             ) : null}
           </View>
 
-          <View style={[styles.crowdCard, { backgroundColor: palette.deep }]}>
-            <LinearGradient colors={[`${palette.accent}44`, "transparent"]} style={StyleSheet.absoluteFill} />
-            <View style={styles.crowdTopRow}>
-              <View style={styles.flexCopy}>
-                <Text style={styles.crowdEyebrow}>THE CROWD</Text>
-                <Text style={styles.crowdTitle}>{event.attendees.toLocaleString()} people are going</Text>
-                <Text style={styles.crowdCaption}>{hasCapacity ? `${remainingSpots.toLocaleString()} spots still available` : "Attendance updates come from the organizer"}</Text>
-              </View>
-              <View style={styles.avatarStack}>
-                {[palette.accent, "#FFB020", "#FFFFFF"].map((color, index) => (
-                  <View key={color} style={[styles.miniAvatar, { backgroundColor: color, marginLeft: index ? -10 : 0 }]}><Ionicons name="person" size={12} color={index === 2 ? palette.deep : "#FFFFFF"} /></View>
-                ))}
-              </View>
-            </View>
-            {hasCapacity ? <View style={styles.capacityTrack}><View style={[styles.capacityFill, { backgroundColor: palette.accent, width: `${Math.min((event.attendees / event.capacity) * 100, 100)}%` }]} /></View> : null}
-          </View>
-
           <View style={styles.copySection}>
             <SectionHeader eyebrow="THE STORY" title="About this event" accent={palette.accent} foreground={colors.foreground} />
             <Text style={[styles.description, { color: colors.mutedForeground }]}>{event.description}</Text>
@@ -228,7 +209,7 @@ export default function EventDetailScreen() {
       </ScrollView>
 
       <Animated.View entering={Platform.OS !== "web" ? FadeInUp.delay(200).springify() : undefined} style={[styles.bottomBar, { paddingBottom: insets.bottom + 10, backgroundColor: scheme === "dark" ? "rgba(7,8,20,0.97)" : "rgba(255,255,255,0.97)", borderTopColor: `${palette.accent}24` }]}>
-        <View style={styles.insightSection}><Text style={[styles.bottomPrice, { color: colors.foreground }]}>{price}</Text><Text style={[styles.insightText, { color: colors.mutedForeground }]}>{formatCount(viewsCount)} views · {event.attendees} going</Text></View>
+        <View style={styles.insightSection}><Text style={[styles.bottomPrice, { color: colors.foreground }]}>{price}</Text><Text style={[styles.insightText, { color: colors.mutedForeground }]}>{formatCount(viewsCount)} views</Text></View>
         <Pressable onPress={isBooked || timing.kind === "ended" ? undefined : handleBook} disabled={bookingLoading || timing.kind === "ended"} accessibilityRole="button" style={[styles.ctaButton, { backgroundColor: isBooked ? colors.success : timing.kind === "ended" ? colors.disabled : palette.accent, opacity: bookingLoading ? 0.7 : 1 }]}>
           {bookingLoading ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Ionicons name={isBooked ? "checkmark-circle" : timing.kind === "ended" ? "time-outline" : event.isPaid ? "ticket" : "add-circle"} size={20} color="#FFFFFF" />}
           <Text style={styles.ctaText}>{isBooked ? "Booked" : timing.kind === "ended" ? "Event ended" : event.isPaid ? "Get tickets" : "Reserve spot"}</Text>
@@ -299,7 +280,6 @@ const styles = StyleSheet.create({
   blockSpacing: { marginTop: 22 }, locationCard: { minHeight: 104, flexDirection: "row", alignItems: "center", borderRadius: 23, borderWidth: 1, padding: 14, gap: 12, overflow: "hidden" }, locationIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" }, flexCopy: { flex: 1, minWidth: 0 },
   cardEyebrow: { fontSize: 9, letterSpacing: 0.8, fontFamily: "Inter_700Bold", marginBottom: 3 }, cardTitle: { fontSize: 15, lineHeight: 20, fontFamily: "Inter_700Bold" }, cardCaption: { fontSize: 11, marginTop: 2, fontFamily: "Inter_400Regular" }, cardArrow: { width: 36, height: 36, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   organizerCard: { flexDirection: "row", alignItems: "center", borderRadius: 23, borderWidth: 1, padding: 14, gap: 12, marginTop: 12 }, organizerAvatar: { width: 47, height: 47, borderRadius: 17, alignItems: "center", justifyContent: "center" }, organizerLetter: { color: "#FFFFFF", fontSize: 19, fontFamily: "Inter_800ExtraBold" }, visitButton: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8 }, visitText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  crowdCard: { borderRadius: 25, padding: 17, marginTop: 22, overflow: "hidden" }, crowdTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }, crowdEyebrow: { color: "rgba(255,255,255,0.55)", fontSize: 9, letterSpacing: 1.1, fontFamily: "Inter_700Bold" }, crowdTitle: { color: "#FFFFFF", fontSize: 18, marginTop: 4, fontFamily: "Inter_700Bold" }, crowdCaption: { color: "rgba(255,255,255,0.64)", fontSize: 11, marginTop: 3, fontFamily: "Inter_400Regular" }, avatarStack: { flexDirection: "row", alignItems: "center" }, miniAvatar: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: "rgba(255,255,255,0.8)", alignItems: "center", justifyContent: "center" }, capacityTrack: { height: 5, borderRadius: 3, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.14)", marginTop: 16 }, capacityFill: { height: "100%", borderRadius: 3 },
   copySection: { marginTop: 28 }, description: { fontSize: 15, lineHeight: 24, fontFamily: "Inter_400Regular" }, instructionsCard: { borderRadius: 21, borderWidth: 1, padding: 14, gap: 12 }, instructionRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 }, checkIcon: { width: 26, height: 26, borderRadius: 9, alignItems: "center", justifyContent: "center" }, instructionText: { flex: 1, fontSize: 13, lineHeight: 20, fontFamily: "Inter_500Medium" },
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 25 }, tag: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 11, paddingVertical: 7 }, tagText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   bottomBar: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth }, insightSection: { flex: 1, minWidth: 0 }, bottomPrice: { fontSize: 16, fontFamily: "Inter_800ExtraBold" }, insightText: { fontSize: 10, marginTop: 2, fontFamily: "Inter_500Medium" }, ctaButton: { minWidth: 160, minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 17, paddingHorizontal: 17 }, ctaText: { color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_700Bold" },

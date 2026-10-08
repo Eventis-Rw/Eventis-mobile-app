@@ -171,7 +171,7 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View style={styles.brandRow}>
             <Pressable
-              onPress={() => router.push("/(tabs)/profile" as any)}
+              onPress={() => router.push("/(tabs)/settings" as any)}
               style={[
                 styles.avatarBtn,
                 {
@@ -180,7 +180,7 @@ export default function HomeScreen() {
                 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="View profile"
+              accessibilityLabel="Open settings"
             >
               {user?.avatarUrl ? (
                 <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />

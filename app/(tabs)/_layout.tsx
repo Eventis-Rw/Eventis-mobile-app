@@ -169,20 +169,11 @@ function TabLayout() {
       />
       <Tabs.Screen name="tickets" options={{ href: null }} />
       <Tabs.Screen
-        name="share"
+        name="settings"
         options={{
-          title: "Share",
+          title: "Settings",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="share-2" color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="user" color={color} focused={focused} />
+            <TabIcon name="settings" color={color} focused={focused} />
           ),
         }}
       />

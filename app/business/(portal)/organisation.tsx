@@ -31,7 +31,7 @@ export default function PortalOrganisationScreen() {
             setDeleting(true);
             setDeleteError(null);
             void deleteOrganiserAccount()
-              .then(() => router.replace("/(tabs)/profile" as any))
+              .then(() => router.replace("/(tabs)/settings" as any))
               .catch((error) => {
                 setDeleteError(error instanceof Error ? error.message : "Couldn't delete the organiser account.");
               })

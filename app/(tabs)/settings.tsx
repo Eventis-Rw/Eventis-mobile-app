@@ -25,7 +25,7 @@ import { useColors } from "@/hooks/useColors";
 import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { EventCard } from "@/components/EventCard";
 
-export default function ProfileScreen() {
+export default function SettingsScreen() {
   const colors = useColors();
   const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
@@ -33,7 +33,7 @@ export default function ProfileScreen() {
   const { user, logout, deleteAccount, isAuthenticated } = useAuth();
   const { bookings } = useBookings();
   const { events } = useEvents();
-  const [activeSection, setActiveSection] = useState<"saved" | "settings">("saved");
+  const [activeSection, setActiveSection] = useState<"saved" | "settings">("settings");
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const { openOrganiserFlow } = useOrganiserAccess();
 
@@ -90,7 +90,7 @@ export default function ProfileScreen() {
     return (
       <View style={[styles.root, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: headerTop + 8, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Profile</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
         </View>
         <View style={styles.guestContainer}>
           <View style={[styles.guestAvatar, { backgroundColor: colors.secondary }]}>
@@ -138,7 +138,7 @@ export default function ProfileScreen() {
         ]}
       >
         <View style={styles.headerRow}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Profile</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
           <Pressable
             onPress={() =>
               user?.isBusinessAccount
@@ -209,12 +209,6 @@ export default function ProfileScreen() {
               )}
             </View>
           </View>
-          <Pressable
-            style={[styles.editBtn, { borderColor: colors.border }]}
-            onPress={() => router.push("/profile/edit" as any)}
-          >
-            <Ionicons name="pencil-outline" size={16} color={colors.foreground} />
-          </Pressable>
         </Animated.View>
 
         {/* Stats */}
@@ -287,7 +281,7 @@ export default function ProfileScreen() {
 
         {/* Section tabs */}
         <View style={[styles.sectionTabs, { backgroundColor: colors.secondary }]}>
-          {(["saved", "settings"] as const).map((s) => (
+          {(["settings", "saved"] as const).map((s) => (
             <Pressable
               key={s}
               style={[
@@ -618,14 +612,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   verifiedText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  editBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   statsRow: { flexDirection: "row", gap: 10 },
   statCard: {
     flex: 1,

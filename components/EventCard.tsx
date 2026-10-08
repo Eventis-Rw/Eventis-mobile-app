@@ -87,7 +87,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
     } as any);
   }, [router, event]);
 
-  const viewsCount = event.viewCount ?? (event.attendees * 4 + 180);
+  const viewsCount = event.viewCount ?? 180;
 
   const shareModal = (
     <Modal
@@ -224,12 +224,6 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               <View style={styles.featuredBottom}>
                 <View style={styles.featuredStats}>
                   <View style={styles.attendeeRow}>
-                    <Ionicons name="people-outline" size={13} color="rgba(255,255,255,0.85)" />
-                    <Text style={styles.attendeeText}>
-                      {formatCount(event.attendees)} attending
-                    </Text>
-                  </View>
-                  <View style={styles.attendeeRow}>
                     <Ionicons name="eye-outline" size={13} color="rgba(255,255,255,0.85)" />
                     <Text style={styles.attendeeText}>{formatCount(viewsCount)} views</Text>
                   </View>
@@ -364,7 +358,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
           />
         </View>
 
-        {/* Action Bar: ONLY Insight numbers, Share, and Saved for Later. NO RATING */}
+        {/* Action bar: views, sharing, and saved events. */}
         <View style={styles.instaActionBar}>
           {/* Left: Insight numbers */}
           <View style={styles.instaInsightsWrap}>
@@ -375,12 +369,6 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               </Text>
               <Text style={[styles.instaInsightLabel, { color: colors.mutedForeground }]}>
                 views
-              </Text>
-            </View>
-            <View style={styles.instaInsightItem}>
-              <Ionicons name="people-outline" size={16} color={colors.mutedForeground} />
-              <Text style={[styles.instaAttendeesCount, { color: colors.mutedForeground }]}>
-                {event.attendees} attending
               </Text>
             </View>
           </View>
@@ -719,10 +707,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
   instaInsightLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  instaAttendeesCount: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
