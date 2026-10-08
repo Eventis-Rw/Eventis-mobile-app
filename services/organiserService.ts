@@ -167,6 +167,16 @@ export async function updateOrganisation(
   return resp.organisation;
 }
 
+// INTEGRATION POINT: DELETE /api/v1/organisers/me removes the organisation and
+// cancels its organiser subscription without deleting the user's Eventis account.
+export async function deleteOrganiserAccount(): Promise<void> {
+  if (!USE_ORGANISER_API) {
+    await wait(600);
+    return;
+  }
+  await api.delete("/api/v1/organisers/me");
+}
+
 export function describeError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) return error.message || fallback;
   if (error instanceof Error && error.message) return error.message;

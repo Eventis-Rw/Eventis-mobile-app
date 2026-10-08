@@ -10,6 +10,7 @@ import React, {
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import {
   createOrganisation,
+  deleteOrganiserAccount as removeOrganiserAccount,
   startSubscription,
   updateOrganisation as saveOrganisation,
   type DemoOutcome,
@@ -71,6 +72,7 @@ interface AuthContextType {
   ) => Promise<SubscriptionResult>;
   setupOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
   updateOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
+  deleteOrganiserAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -324,6 +326,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, persistUser]
   );
 
+  const deleteOrganiserAccount = useCallback(async () => {
+    if (!user) return;
+    await removeOrganiserAccount();
+    await persistUser({
+      ...user,
+      isBusinessAccount: false,
+      businessName: undefined,
+      businessType: undefined,
+      businessWebsite: undefined,
+      organiserSubscription: undefined,
+      organisation: undefined,
+    });
+  }, [user, persistUser]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -347,6 +363,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         subscribeAsOrganiser,
         setupOrganisation,
         updateOrganisation,
+        deleteOrganiserAccount,
       }}
     >
       {children}

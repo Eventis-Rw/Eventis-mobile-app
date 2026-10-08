@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
-import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import { ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { OrganiserPortalHeader } from "@/components/OrganiserPortalHeader";
 import { PortalActionList } from "@/components/PortalActionList";
@@ -12,9 +12,35 @@ import { useColors } from "@/hooks/useColors";
 export default function PortalOrganisationScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, deleteOrganiserAccount } = useAuth();
   const org = user?.organisation;
   const subscription = user?.organiserSubscription;
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const confirmDelete = () => {
+    Alert.alert(
+      "Delete organiser account?",
+      "Your organisation, organiser subscription and organiser access will be removed. Your personal Eventis account, chats and saved events will remain.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            setDeleting(true);
+            setDeleteError(null);
+            void deleteOrganiserAccount()
+              .then(() => router.replace("/(tabs)/profile" as any))
+              .catch((error) => {
+                setDeleteError(error instanceof Error ? error.message : "Couldn't delete the organiser account.");
+              })
+              .finally(() => setDeleting(false));
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -75,6 +101,24 @@ export default function PortalOrganisationScreen() {
 
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Manage</Text>
         <PortalActionList actions={ORGANISATION_ACTIONS} />
+
+        <View style={[styles.dangerCard, { backgroundColor: colors.card, borderColor: colors.destructive + "55" }]}>
+          <View style={styles.dangerCopy}>
+            <Text style={[styles.dangerTitle, { color: colors.foreground }]}>Delete organiser account</Text>
+            <Text style={[styles.muted, { color: colors.mutedForeground }]}>Return this account to a regular Eventis user. Your personal profile and activity stay available.</Text>
+          </View>
+          {deleteError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{deleteError}</Text> : null}
+          <Pressable
+            onPress={confirmDelete}
+            disabled={deleting}
+            accessibilityRole="button"
+            accessibilityLabel="Delete organiser account"
+            style={({ pressed }) => [styles.deleteButton, { borderColor: colors.destructive }, pressed && styles.pressed, deleting && styles.disabled]}
+          >
+            {deleting ? <ActivityIndicator size="small" color={colors.destructive} /> : <Ionicons name="trash-outline" size={18} color={colors.destructive} />}
+            <Text style={[styles.deleteButtonText, { color: colors.destructive }]}>{deleting ? "Deleting..." : "Delete organiser account"}</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -128,4 +172,12 @@ const styles = StyleSheet.create({
   subRow: { flexDirection: "row", alignItems: "center" },
   subTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginTop: 4 },
+  dangerCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 13, marginTop: 4 },
+  dangerCopy: { gap: 4 },
+  dangerTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  deleteButton: { minHeight: 48, borderRadius: 14, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  deleteButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  errorText: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium" },
+  pressed: { opacity: 0.72 },
+  disabled: { opacity: 0.6 },
 });
