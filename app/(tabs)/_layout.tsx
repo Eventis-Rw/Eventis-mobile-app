@@ -85,7 +85,6 @@ function TabLayout() {
   const colors = useColors();
   const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
-
   return (
     <Tabs
       safeAreaInsets={insets}
