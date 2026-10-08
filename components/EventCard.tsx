@@ -18,6 +18,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/events";
 import { shareEvent } from "@/utils/shareEvent";
@@ -34,10 +35,12 @@ interface EventCardProps {
 
 export function EventCard({ event, variant = "standard", inset = 20 }: EventCardProps) {
   const colors = useColors();
+  const { scheme } = useTheme();
   const router = useRouter();
   const { user, toggleSaveEvent } = useAuth();
   const scale = useSharedValue(1);
   const isSaved = user?.savedEvents.includes(event.id) ?? false;
+  const postSurface = scheme === "dark" ? "#0D1020" : "#FFFFFF";
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -133,7 +136,9 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               style={[styles.shareOption, { backgroundColor: colors.secondary, borderColor: colors.border }]}
               onPress={handleNativeShare}
             >
-              <View style={[styles.shareIconWrap, { backgroundColor: colors.accent }]}>
+              <View
+                style={[styles.shareIconWrap, { backgroundColor: colors.primary }]}
+              >
                 <Ionicons name="share-outline" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.shareOptionInfo}>
@@ -311,7 +316,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
       <AnimatedPressable
         style={[
           styles.instaCard,
-          { backgroundColor: colors.card, borderColor: colors.border },
+          { backgroundColor: postSurface, borderColor: colors.border },
           animatedStyle,
         ]}
         onPress={handlePress}
@@ -649,7 +654,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   instaOrganizerName: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
   },
   instaSponsoredBadge: {
@@ -663,7 +668,7 @@ const styles = StyleSheet.create({
   },
   instaLocationText: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
   },
   instaCategoryBadge: {
     paddingHorizontal: 10,
@@ -691,7 +696,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   instaInsightsWrap: {
     flexDirection: "row",
@@ -717,17 +722,22 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   instaActionBtn: {
-    padding: 4,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   instaDetails: {
     paddingHorizontal: 14,
-    paddingBottom: 14,
+    paddingBottom: 16,
     gap: 6,
   },
   instaTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    lineHeight: 20,
+    fontSize: 17,
+    fontFamily: "Inter_800ExtraBold",
+    lineHeight: 22,
+    letterSpacing: -0.25,
   },
   instaMetaRow: {
     flexDirection: "row",
@@ -735,13 +745,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   instaMetaText: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
   instaCaption: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
-    lineHeight: 18,
+    lineHeight: 21,
   },
   instaCaptionOwner: {
     fontFamily: "Inter_700Bold",

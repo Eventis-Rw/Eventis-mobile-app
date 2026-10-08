@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
   },
   storyLabel: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_600SemiBold",
     textAlign: "center",
   },
   storyViewerRoot: {

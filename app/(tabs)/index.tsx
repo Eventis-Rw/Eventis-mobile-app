@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  Easing,
   FadeInDown,
   useAnimatedStyle,
   useSharedValue,
@@ -48,36 +49,53 @@ export default function HomeScreen() {
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const location = useLocationPermission();
-  const measuredSearchHeight = useSharedValue(0);
-  const searchProgress = useSharedValue(1);
+  const measuredHeaderHeight = useSharedValue(0);
+  const headerProgress = useSharedValue(1);
   const lastScrollY = useRef(0);
-  const searchHidden = useRef(false);
+  const scrollDirectionDistance = useRef(0);
+  const headerHidden = useRef(false);
 
-  const animatedSearchStyle = useAnimatedStyle(() => {
-    const measured = measuredSearchHeight.value;
+  const animatedHeaderStyle = useAnimatedStyle(() => {
+    const measured = measuredHeaderHeight.value;
     return {
-      height: measured > 0 ? measured * searchProgress.value : undefined,
-      opacity: searchProgress.value,
-      transform: [{ translateY: -8 * (1 - searchProgress.value) }],
+      height: measured > 0 ? measured * headerProgress.value : undefined,
+      opacity: headerProgress.value,
+      transform: [{ translateY: -14 * (1 - headerProgress.value) }],
     };
   });
 
-  const setSearchVisible = useCallback((visible: boolean) => {
-    if (searchHidden.current === !visible) return;
-    searchHidden.current = !visible;
-    searchProgress.value = withTiming(visible ? 1 : 0, { duration: visible ? 170 : 210 });
-  }, [searchProgress]);
+  const setHeaderVisible = useCallback((visible: boolean) => {
+    if (headerHidden.current === !visible) return;
+    headerHidden.current = !visible;
+    headerProgress.value = withTiming(visible ? 1 : 0, {
+      duration: visible ? 220 : 260,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [headerProgress]);
 
   const handleFeedScroll = useCallback((event: any) => {
     const nextY = Math.max(event.nativeEvent.contentOffset.y, 0);
     const delta = nextY - lastScrollY.current;
 
-    if (nextY <= 8) setSearchVisible(true);
-    else if (nextY > 28 && delta > 2) setSearchVisible(false);
-    else if (delta < -2) setSearchVisible(true);
+    if (nextY <= 8) {
+      scrollDirectionDistance.current = 0;
+      setHeaderVisible(true);
+    } else if (delta > 0) {
+      scrollDirectionDistance.current = Math.max(0, scrollDirectionDistance.current) + delta;
+      if (nextY > 28 && scrollDirectionDistance.current > 16) {
+        setHeaderVisible(false);
+        scrollDirectionDistance.current = 0;
+      }
+    } else if (delta < 0) {
+      scrollDirectionDistance.current = Math.min(0, scrollDirectionDistance.current) + delta;
+      if (scrollDirectionDistance.current < -10) {
+        setHeaderVisible(true);
+        scrollDirectionDistance.current = 0;
+      }
+    }
 
     lastScrollY.current = nextY;
-  }, [setSearchVisible]);
+  }, [setHeaderVisible]);
 
   // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
   const showSkeletons = isLoading && !refreshing;
@@ -193,9 +211,14 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View
+      <Animated.View
+        onLayout={(event) => {
+          const height = event.nativeEvent.layout.height;
+          if (height > 0 && measuredHeaderHeight.value === 0) measuredHeaderHeight.value = height;
+        }}
         style={[
           styles.header,
+          animatedHeaderStyle,
           {
             paddingTop: insets.top + 8,
             backgroundColor: colors.background,
@@ -257,33 +280,19 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <Animated.View
-          onLayout={(event) => {
-            const height = event.nativeEvent.layout.height;
-            if (height > 0 && measuredSearchHeight.value === 0) measuredSearchHeight.value = height;
-          }}
-          style={[styles.searchReveal, animatedSearchStyle]}
+        <Pressable
+          style={[styles.searchBar, { backgroundColor: colors.input, borderColor: colors.border }]}
+          onPress={openSearch}
+          accessibilityRole="search"
+          accessibilityLabel="Search events"
         >
-          <Pressable
-            style={[styles.searchBar, { backgroundColor: colors.input, borderColor: colors.border }]}
-            onPress={openSearch}
-            accessibilityRole="search"
-            accessibilityLabel="Search events"
-          >
-            <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
-            <Text
-              style={[styles.searchPlaceholder, { color: colors.mutedForeground }]}
-            >
-              Search events near you...
-            </Text>
-            <View
-              style={[styles.filterBtn, { backgroundColor: colors.primary }]}
-            >
-              <Ionicons name="options-outline" size={14} color="#fff" />
-            </View>
-          </Pressable>
-        </Animated.View>
-      </View>
+          <Ionicons name="search-outline" size={17} color={colors.mutedForeground} />
+          <Text style={[styles.searchPlaceholder, { color: colors.mutedForeground }]}>Search events near you...</Text>
+          <View style={[styles.filterBtn, { backgroundColor: colors.primary }]}>
+            <Ionicons name="options-outline" size={14} color="#fff" />
+          </View>
+        </Pressable>
+      </Animated.View>
 
       <FlatList
         key={selectedCategory}
@@ -334,23 +343,46 @@ export default function HomeScreen() {
           onPress={() => setShowOrganizerModal(false)}
         >
           <Pressable
-            style={[styles.modalSheet, { backgroundColor: colors.card }]}
+            style={[
+              styles.modalSheet,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.primary + "55",
+                paddingBottom: Math.max(insets.bottom, 16) + 16,
+              },
+            ]}
             onPress={(e) => e.stopPropagation()}
           >
-            <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
-            <View style={[styles.modalIconWrap, { backgroundColor: colors.primary }]}>
-              <Ionicons name="megaphone" size={32} color="#fff" />
+            <View style={[styles.modalHandle, { backgroundColor: colors.primary + "80" }]} />
+            <View
+              style={[
+                styles.modalIconWrap,
+                { backgroundColor: colors.primary, borderColor: colors.primary + "66" },
+              ]}
+            >
+              <Ionicons name="megaphone" size={30} color="#fff" />
             </View>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-              Become an organizer
-            </Text>
-            <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>
-              List your events, post live stories, manage bookings, and reach thousands of people near you. It is free to get started.
+            <Text style={[styles.modalEyebrow, { color: colors.primary }]}>CREATE ON EVENTIS</Text>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Become an organizer</Text>
+            <Text
+              style={[styles.modalBody, { color: colors.mutedForeground }]}
+            >
+              Publish events, share live moments, and manage bookings from one focused workspace.
             </Text>
             <View style={styles.modalFeatures}>
-              {["Create and manage events", "Post live stories for your audience", "View attendee insights"].map((f) => (
-                <View key={f} style={styles.modalFeatureRow}>
-                  <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+              {["Publish and manage events", "Share live event stories", "Track reach and bookings"].map((f) => (
+                <View
+                  key={f}
+                  style={[
+                    styles.modalFeatureRow,
+                    { backgroundColor: colors.secondary, borderColor: colors.border },
+                  ]}
+                >
+                  <View
+                    style={[styles.modalCheck, { backgroundColor: colors.primary + "24" }]}
+                  >
+                    <Ionicons name="checkmark" size={15} color={colors.primary} />
+                  </View>
                   <Text style={[styles.modalFeatureText, { color: colors.foreground }]}>{f}</Text>
                 </View>
               ))}
@@ -361,11 +393,17 @@ export default function HomeScreen() {
                 setShowOrganizerModal(false);
                 router.push("/business/register" as any);
               }}
+              accessibilityRole="button"
             >
               <Text style={styles.modalCtaText}>Get Started as Organizer</Text>
+              <Ionicons name="arrow-forward" size={19} color="#fff" />
             </Pressable>
-            <Pressable onPress={() => setShowOrganizerModal(false)}>
-              <Text style={[styles.modalDismiss, { color: colors.mutedForeground }]}>Maybe later</Text>
+            <Pressable
+              onPress={() => setShowOrganizerModal(false)}
+              accessibilityRole="button"
+              style={styles.modalDismissButton}
+            >
+              <Text style={[styles.modalDismiss, { color: colors.foreground }]}>Maybe later</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -537,8 +575,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
+    marginBottom: 12,
   },
-  searchReveal: { paddingTop: 12, overflow: "hidden" },
   brandRow: {
     flex: 1,
     flexDirection: "row",
@@ -745,68 +783,107 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.78)",
     justifyContent: "flex-end",
   },
   modalSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingHorizontal: 22,
+    paddingTop: 12,
     alignItems: "center",
-    gap: 12,
+    gap: 10,
+    elevation: 24,
+    shadowColor: "#000000",
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -8 },
   },
   modalHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   modalIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  modalTitle: {
-    fontSize: 22,
+  modalEyebrow: {
+    marginTop: 2,
+    fontSize: 10,
+    letterSpacing: 1.4,
     fontFamily: "Inter_700Bold",
+  },
+  modalTitle: {
+    fontSize: 25,
+    lineHeight: 31,
+    letterSpacing: -0.6,
+    fontFamily: "Inter_800ExtraBold",
     textAlign: "center",
   },
   modalBody: {
+    maxWidth: 430,
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 21,
   },
   modalFeatures: {
     alignSelf: "stretch",
-    gap: 10,
-    marginVertical: 4,
+    gap: 8,
+    marginVertical: 6,
   },
   modalFeatureRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 11,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+  },
+  modalCheck: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalFeatureText: {
+    flex: 1,
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_600SemiBold",
   },
   modalCta: {
     alignSelf: "stretch",
+    minHeight: 54,
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 18,
     borderRadius: 999,
   },
   modalCtaText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
+  },
+  modalDismissButton: {
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
   },
   modalDismiss: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    paddingVertical: 8,
+    fontFamily: "Inter_600SemiBold",
   },
 });

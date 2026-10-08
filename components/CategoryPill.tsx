@@ -64,12 +64,13 @@ export function CategoryPill({ category, isSelected, onPress }: CategoryPillProp
 const styles = StyleSheet.create({
   pill: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 20,
     borderWidth: 1,
     marginRight: 8,
   },
   text: {
-    fontSize: 13,
+    fontSize: 12,
+    letterSpacing: 0.15,
   },
 });
