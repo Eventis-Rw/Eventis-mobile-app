@@ -6,6 +6,7 @@ import {
   FlatList,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -24,6 +25,17 @@ import { useColors } from "@/hooks/useColors";
 type SortOption = "relevance" | "date" | "distance" | "price";
 type PriceFilter = "all" | "free" | "paid";
 
+const POPULAR_SEARCHES = [
+  "Music",
+  "Festival",
+  "Sports",
+  "Tech",
+  "Food",
+  "Nightlife",
+  "Art",
+  "Workshop",
+];
+
 export default function SearchScreen() {
   const colors = useColors();
   const { scheme } = useTheme();
@@ -34,10 +46,26 @@ export default function SearchScreen() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [sort, setSort] = useState<SortOption>("relevance");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
-  const [showFilters, setShowFilters] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const categoryScrollRef = useRef<ScrollView>(null);
+  const categoryLayouts = useRef<Record<string, { x: number; width: number }>>({});
+
+  const handleSelectCategory = useCallback(
+    (category: string) => {
+      setSelectedCategory(category);
+      const index = categories.indexOf(category);
+      const layout = categoryLayouts.current[category];
+      const fallbackX = index <= 0 ? 0 : Math.max(0, index * 85 - 20);
+      const targetX = layout ? (index <= 0 ? 0 : Math.max(0, layout.x - 20)) : fallbackX;
+      categoryScrollRef.current?.scrollTo({ x: targetX, animated: true });
+    },
+    [categories]
+  );
+
+  const hasActiveSearch = query.trim().length > 0 || selectedCategory !== "All";
 
   const results = useMemo(() => {
+    if (!hasActiveSearch) return [];
     let evts = [...events];
     if (query.trim()) {
       const q = query.trim().toLowerCase();
@@ -60,7 +88,7 @@ export default function SearchScreen() {
     if (sort === "distance") evts.sort((a, b) => a.distance - b.distance);
     if (sort === "price") evts.sort((a, b) => a.price - b.price);
     return evts;
-  }, [events, query, selectedCategory, priceFilter, sort]);
+  }, [events, query, selectedCategory, priceFilter, sort, hasActiveSearch]);
 
   const SORT_OPTIONS: { label: string; value: SortOption }[] = [
     { label: "Relevance", value: "relevance" },
@@ -94,12 +122,13 @@ export default function SearchScreen() {
             paddingTop: insets.top + 8,
             borderWidth: 0,
             borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
             borderRadius: 0,
           },
         ]}
       >
         <View style={styles.titleRow}>
-          {/* Search is no longer a tab; it opens from the Events page. */}
+          {/* Search opens from the Events page. */}
           <Pressable
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
             style={[styles.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -108,7 +137,25 @@ export default function SearchScreen() {
           >
             <Ionicons name="chevron-back" size={20} color={colors.foreground} />
           </Pressable>
-          <Text style={[styles.title, { color: colors.foreground }]}>Explore</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Search</Text>
+          {hasActiveSearch && (
+            <View
+              style={[
+                styles.titleBadge,
+                { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}35` },
+              ]}
+            >
+              <View
+                style={[
+                  styles.titleBadgeDot,
+                  { backgroundColor: results.length > 0 ? "#10B981" : colors.mutedForeground },
+                ]}
+              />
+              <Text style={[styles.titleBadgeText, { color: colors.primary }]}>
+                {results.length} {results.length === 1 ? "match" : "matches"}
+              </Text>
+            </View>
+          )}
         </View>
         <View
           style={[
@@ -120,150 +167,216 @@ export default function SearchScreen() {
           <TextInput
             ref={inputRef}
             style={[styles.input, { color: colors.foreground }]}
-            placeholder="Search events, organizers, cities..."
+            placeholder="Search events, artists, venues, cities..."
             placeholderTextColor={colors.mutedForeground}
             value={query}
             onChangeText={setQuery}
             returnKeyType="search"
             autoCapitalize="none"
+            autoFocus
           />
           {query.length > 0 && (
-            <Pressable onPress={() => setQuery("")}>
-              <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
-            </Pressable>
+            <View style={styles.inputRightCluster}>
+              <View
+                style={[
+                  styles.inputCountPill,
+                  { backgroundColor: `${colors.primary}20` },
+                ]}
+              >
+                <Text style={[styles.inputCountText, { color: colors.primary }]}>
+                  {results.length}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setQuery("")}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
           )}
-          <Pressable
-            style={[
-              styles.filterToggle,
-              { backgroundColor: showFilters ? colors.primary : colors.secondary },
-            ]}
-            onPress={() => setShowFilters((p) => !p)}
-          >
-            <Ionicons
-              name="options-outline"
-              size={16}
-              color={showFilters ? "#fff" : colors.foreground}
-            />
-          </Pressable>
         </View>
 
         {/* Category scroll */}
-        <FlatList
-          data={categories}
-          keyExtractor={(item) => item}
+        <ScrollView
+          ref={categoryScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.categoryScroll}
           contentContainerStyle={styles.categoryRow}
-          renderItem={({ item }) => (
-            <CategoryPill
-              category={item}
-              isSelected={selectedCategory === item}
-              onPress={setSelectedCategory}
-            />
-          )}
-        />
-
-        {/* Filters row */}
-        {showFilters && (
-          <Animated.View
-            entering={Platform.OS !== "web" ? FadeIn.duration(200) : undefined}
-            style={styles.filtersPanel}
-          >
-            <View style={styles.filterGroup}>
-              <Text style={[styles.filterLabel, { color: colors.mutedForeground }]}>Sort</Text>
-              <View style={styles.filterOptions}>
-                {SORT_OPTIONS.map((o) => (
-                  <Pressable
-                    key={o.value}
-                    style={[
-                      styles.filterOption,
-                      {
-                        backgroundColor: sort === o.value ? colors.primary : colors.secondary,
-                        borderColor: sort === o.value ? colors.primary : colors.border,
-                      },
-                    ]}
-                    onPress={() => setSort(o.value)}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        { color: sort === o.value ? "#fff" : colors.foreground },
-                      ]}
-                    >
-                      {o.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
+        >
+          {categories.map((cat) => (
+            <View
+              key={cat}
+              onLayout={(e) => {
+                categoryLayouts.current[cat] = {
+                  x: e.nativeEvent.layout.x,
+                  width: e.nativeEvent.layout.width,
+                };
+              }}
+            >
+              <CategoryPill
+                category={cat}
+                isSelected={selectedCategory === cat}
+                onPress={handleSelectCategory}
+              />
             </View>
-            <View style={styles.filterGroup}>
-              <Text style={[styles.filterLabel, { color: colors.mutedForeground }]}>Price</Text>
-              <View style={styles.filterOptions}>
-                {PRICE_OPTIONS.map((o) => (
-                  <Pressable
-                    key={o.value}
-                    style={[
-                      styles.filterOption,
-                      {
-                        backgroundColor:
-                          priceFilter === o.value ? colors.primary : colors.secondary,
-                        borderColor:
-                          priceFilter === o.value ? colors.primary : colors.border,
-                      },
-                    ]}
-                    onPress={() => setPriceFilter(o.value)}
-                  >
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        { color: priceFilter === o.value ? "#fff" : colors.foreground },
-                      ]}
-                    >
-                      {o.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          </Animated.View>
-        )}
+          ))}
+        </ScrollView>
       </GlassSurface>
 
-      {/* Results */}
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.list,
-          { paddingBottom: insets.bottom + 20 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <Text style={[styles.resultsCount, { color: colors.mutedForeground }]}>
-            {results.length} {results.length === 1 ? "event" : "events"} found
-          </Text>
-        }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="search-outline" size={40} color={colors.border} />
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-              No events found
-            </Text>
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-              Try different keywords or adjust your filters
-            </Text>
-          </View>
-        }
-        renderItem={({ item, index }) => (
-          <Animated.View
-            entering={Platform.OS !== "web" ? FadeInDown.delay(index * 60).springify() : undefined}
+      {/* Search Body: Initial Blank Page OR Live Results */}
+      {!hasActiveSearch ? (
+        <ScrollView
+          style={styles.blankScroll}
+          contentContainerStyle={[
+            styles.blankContent,
+            { paddingBottom: insets.bottom + 32 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View
+            style={[
+              styles.blankIconWrap,
+              { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}28` },
+            ]}
           >
-            <EventCard event={item} variant="feed" inset={20} />
-          </Animated.View>
-        )}
-        scrollEnabled={!!results.length}
-      />
+            <Ionicons name="search" size={32} color={colors.primary} />
+          </View>
+          <Text style={[styles.blankTitle, { color: colors.foreground }]}>
+            Search Events
+          </Text>
+          <Text style={[styles.blankSubtitle, { color: colors.mutedForeground }]}>
+            Start typing above to see live matching events and counts in real time.
+          </Text>
+
+          <View style={styles.suggestionsCard}>
+            <View style={styles.suggestionsHeader}>
+              <Ionicons name="sparkles" size={14} color={colors.primary} />
+              <Text style={[styles.suggestionsTitle, { color: colors.foreground }]}>
+                Popular Searches
+              </Text>
+            </View>
+            <View style={styles.suggestionsGrid}>
+              {POPULAR_SEARCHES.map((term) => (
+                <Pressable
+                  key={term}
+                  style={[
+                    styles.suggestionPill,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}
+                  onPress={() => {
+                    setQuery(term);
+                    inputRef.current?.focus();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Search for ${term}`}
+                >
+                  <Ionicons name="trending-up" size={12} color={colors.primary} />
+                  <Text style={[styles.suggestionPillText, { color: colors.foreground }]}>
+                    {term}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={results}
+          keyExtractor={(item) => item.id}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: insets.bottom + 20 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <View style={styles.resultsHeader}>
+              <View
+                style={[
+                  styles.liveCountingTag,
+                  {
+                    backgroundColor:
+                      results.length > 0
+                        ? "rgba(16, 185, 129, 0.12)"
+                        : `${colors.mutedForeground}14`,
+                    borderColor:
+                      results.length > 0
+                        ? "rgba(16, 185, 129, 0.28)"
+                        : colors.border,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.liveCountingDot,
+                    { backgroundColor: results.length > 0 ? "#10B981" : colors.mutedForeground },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.liveCountingText,
+                    { color: results.length > 0 ? "#10B981" : colors.mutedForeground },
+                  ]}
+                >
+                  {results.length > 0 ? "Live match" : "No match"}
+                </Text>
+              </View>
+              <Text style={[styles.resultsCountText, { color: colors.mutedForeground }]}>
+                <Text style={{ color: colors.foreground, fontFamily: "Inter_700Bold" }}>
+                  {results.length}
+                </Text>{" "}
+                {results.length === 1 ? "event" : "events"} matching{" "}
+                <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>
+                  "{query.trim() || selectedCategory}"
+                </Text>
+              </Text>
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="search-outline" size={44} color={colors.border} />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                No events found
+              </Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                No events match "{query.trim()}". Try checking your spelling or adjusting your filters.
+              </Text>
+              <Pressable
+                style={[
+                  styles.clearSearchBtn,
+                  { backgroundColor: colors.secondary, borderColor: colors.border },
+                ]}
+                onPress={() => {
+                  setQuery("");
+                  setSelectedCategory("All");
+                  inputRef.current?.focus();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <Ionicons name="arrow-back" size={14} color={colors.foreground} />
+                <Text style={[styles.clearSearchBtnText, { color: colors.foreground }]}>
+                  Reset search
+                </Text>
+              </Pressable>
+            </View>
+          }
+          renderItem={({ item, index }) => (
+            <Animated.View
+              entering={Platform.OS !== "web" ? FadeInDown.delay(index * 40).springify() : undefined}
+            >
+              <EventCard event={item} variant="feed" inset={0} />
+            </Animated.View>
+          )}
+          scrollEnabled={!!results.length}
+        />
+      )}
     </View>
   );
 }
@@ -281,6 +394,24 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 14,
   },
+  titleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  titleBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  titleBadgeText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
   backBtn: {
     width: 40,
     height: 40,
@@ -296,10 +427,11 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
+    borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    minHeight: 48,
     gap: 10,
     marginBottom: 12,
   },
@@ -308,49 +440,126 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_400Regular",
   },
-  filterToggle: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+  inputRightCluster: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 8,
+  },
+  inputCountPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  inputCountText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
   },
   // Scrolls edge to edge while the first pill lines up with the header padding.
   categoryScroll: { marginHorizontal: -20 },
   categoryRow: { paddingHorizontal: 20 },
-  filtersPanel: {
-    marginTop: 12,
-    gap: 10,
-  },
-  filterGroup: { gap: 6 },
-  filterLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  filterOptions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  filterOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  filterOptionText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-  },
   // Feed cards run edge to edge, so only the header text gets side padding.
   list: { paddingTop: 16 },
-  resultsCount: {
+  resultsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  liveCountingTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  liveCountingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  liveCountingText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  resultsCountText: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    marginBottom: 12,
-    paddingHorizontal: 20,
+    flex: 1,
+    textAlign: "right",
+  },
+  blankScroll: {
+    flex: 1,
+  },
+  blankContent: {
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingTop: 48,
+  },
+  blankIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  blankTitle: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  blankSubtitle: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 20,
+    maxWidth: 290,
+    marginBottom: 32,
+  },
+  suggestionsCard: {
+    width: "100%",
+    maxWidth: 360,
+    gap: 12,
+  },
+  suggestionsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  suggestionsTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.2,
+  },
+  suggestionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  suggestionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  suggestionPillText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
   },
   empty: {
     alignItems: "center",
     paddingTop: 60,
+    paddingHorizontal: 32,
     gap: 12,
   },
   emptyTitle: {
@@ -361,6 +570,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
-    paddingHorizontal: 40,
+    lineHeight: 20,
+  },
+  clearSearchBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  clearSearchBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
 });

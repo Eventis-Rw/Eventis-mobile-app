@@ -7,6 +7,7 @@ import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { GlassSurface } from "@/components/GlassSurface";
 
 /**
  * Header for every organiser portal tab. Shows whose organisation is active,
@@ -36,10 +37,16 @@ export function OrganiserPortalHeader({
   };
 
   return (
-    <View
+    <GlassSurface
       style={[
         styles.header,
-        { paddingTop: topPad + 8, backgroundColor: colors.background, borderBottomColor: colors.border },
+        {
+          paddingTop: topPad + 8,
+          borderWidth: 0,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.border,
+          borderRadius: 0,
+        },
       ]}
     >
       <View style={styles.identityRow}>
@@ -79,7 +86,7 @@ export function OrganiserPortalHeader({
         {title}
       </Text>
       {children}
-    </View>
+    </GlassSurface>
   );
 }
 

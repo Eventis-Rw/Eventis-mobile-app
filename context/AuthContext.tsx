@@ -131,8 +131,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const onboardingState = await AsyncStorage.getItem(ONBOARDING_KEY);
-        setHasCompletedOnboarding(onboardingState === 'true');
+        const onboardingState =
+          (await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY)) ??
+          (await AsyncStorage.getItem(ONBOARDING_KEY));
+        setHasCompletedOnboarding(onboardingState === "true");
         const cached = await AsyncStorage.getItem(USER_CACHE_KEY);
         if (cached) {
           setUser(normaliseOrganisationState(JSON.parse(cached) as User));
@@ -194,8 +196,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const logout = useCallback(async () => {
     setUser(null);
+    setHasCompletedOnboarding(false);
     await clearToken();
     await AsyncStorage.removeItem(USER_CACHE_KEY);
+    await AsyncStorage.removeItem(ONBOARDING_KEY);
+    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
     void Promise.race([
       api.post("/auth/logout").catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, 1500)),
@@ -204,8 +209,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const deleteAccount = useCallback(async () => {
     setUser(null);
+    setHasCompletedOnboarding(false);
     await clearToken();
     await AsyncStorage.removeItem(USER_CACHE_KEY);
+    await AsyncStorage.removeItem(ONBOARDING_KEY);
+    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
     void Promise.race([
       api.delete("/users/me").catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, 1500)),

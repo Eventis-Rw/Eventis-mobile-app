@@ -100,7 +100,7 @@ export function ChatListRow({
               />
             ) : null}
             {unreadCount > 0 ? (
-              <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+              <View style={[styles.badge, { backgroundColor: colors.accent }]}>
                 <Text style={styles.count}>
                   {unreadCount > 99 ? "99+" : unreadCount}
                 </Text>

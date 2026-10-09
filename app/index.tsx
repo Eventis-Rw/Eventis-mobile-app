@@ -13,7 +13,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import { useTheme } from "@/context/ThemeContext";
 
 export default function AppEntryScreen() {
@@ -32,12 +31,9 @@ export default function AppEntryScreen() {
     hasNavigated.current = true;
 
     try {
-      const completed = await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY);
       const userCache = await AsyncStorage.getItem("@eventis_user_cache");
-      if (completed === "true" && userCache) {
+      if (userCache) {
         router.replace("/(tabs)");
-      } else if (completed === "true") {
-        router.replace("/auth/login" as any);
       } else {
         router.replace("/onboarding" as any);
       }

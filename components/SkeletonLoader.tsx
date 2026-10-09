@@ -53,7 +53,7 @@ export function Skeleton({ width = "100%", height = 16, borderRadius = 8, style 
 }
 
 // Matches the full-width "feed" EventCard on the home screen.
-export function EventCardSkeleton({ inset = 20 }: { inset?: number }) {
+export function EventCardSkeleton({ inset = 14 }: { inset?: number }) {
   return (
     <View style={styles.post}>
       <View style={styles.imageSkeleton}>
@@ -75,7 +75,7 @@ export function FeaturedCardSkeleton({ width = 300 }: { width?: number }) {
 
 const styles = StyleSheet.create({
   post: {
-    marginBottom: 28,
+    marginBottom: 0,
   },
   imageSkeleton: {
     aspectRatio: 1,

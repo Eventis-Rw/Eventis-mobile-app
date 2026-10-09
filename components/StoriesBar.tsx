@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -104,6 +104,72 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: StoriesBarProps) {
 
   const progress = useSharedValue(0);
 
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollOffsetRef = useRef(0);
+  const contentWidthRef = useRef(DEFAULT_STORIES.length * 90 + 100);
+  const containerWidthRef = useRef(SCREEN_WIDTH);
+  const isInteractingRef = useRef(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const STEP_SIZE = 90;
+
+  const handleScrollBeginDrag = useCallback(() => {
+    isInteractingRef.current = true;
+    if (resumeTimerRef.current) {
+      clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+    }
+  }, []);
+
+  const handleScrollEnd = useCallback((currentX: number) => {
+    scrollOffsetRef.current = currentX;
+    if (resumeTimerRef.current) {
+      clearTimeout(resumeTimerRef.current);
+    }
+    resumeTimerRef.current = setTimeout(() => {
+      isInteractingRef.current = false;
+    }, 4000);
+  }, []);
+
+  useEffect(() => {
+    if (activeStoryIndex !== null || showOrganizerGateModal) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      if (isInteractingRef.current) {
+        return;
+      }
+
+      const maxScroll = Math.max(
+        0,
+        contentWidthRef.current - containerWidthRef.current
+      );
+
+      if (maxScroll <= 0) return;
+
+      let nextX: number;
+      if (scrollOffsetRef.current >= maxScroll - 5) {
+        nextX = 0;
+      } else {
+        nextX = Math.min(scrollOffsetRef.current + STEP_SIZE, maxScroll);
+      }
+
+      scrollOffsetRef.current = nextX;
+      scrollViewRef.current?.scrollTo({
+        x: nextX,
+        animated: true,
+      });
+    }, 3200);
+
+    return () => {
+      clearInterval(interval);
+      if (resumeTimerRef.current) {
+        clearTimeout(resumeTimerRef.current);
+      }
+    };
+  }, [activeStoryIndex, showOrganizerGateModal]);
+
   useEffect(() => {
     if (activeStoryIndex !== null) {
       progress.value = 0;
@@ -162,10 +228,28 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: StoriesBarProps) {
     <>
       <View style={styles.container}>
         <ScrollView
+          ref={scrollViewRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.scroller}
           contentContainerStyle={styles.scrollContent}
+          onLayout={(e) => {
+            containerWidthRef.current = e.nativeEvent.layout.width;
+          }}
+          onContentSizeChange={(w) => {
+            contentWidthRef.current = w;
+          }}
+          scrollEventThrottle={16}
+          onScroll={(e) => {
+            scrollOffsetRef.current = e.nativeEvent.contentOffset.x;
+          }}
+          onScrollBeginDrag={handleScrollBeginDrag}
+          onScrollEndDrag={(e) => {
+            handleScrollEnd(e.nativeEvent.contentOffset.x);
+          }}
+          onMomentumScrollEnd={(e) => {
+            handleScrollEnd(e.nativeEvent.contentOffset.x);
+          }}
         >
           {/* User Story Circle */}
           <Pressable

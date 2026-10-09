@@ -50,12 +50,25 @@ export default function TicketsScreen() {
       <View
         style={[
           styles.header,
-          { paddingTop: headerTop + 8, backgroundColor: colors.background },
+          {
+            paddingTop: headerTop + 8,
+            backgroundColor: colors.card,
+            borderBottomColor: colors.border,
+          },
         ]}
       >
         <Text style={[styles.title, { color: colors.foreground }]}>My Tickets</Text>
 
-        <View style={[styles.tabBar, { backgroundColor: colors.secondary }]}>
+        <View
+          style={[
+            styles.tabBar,
+            {
+              backgroundColor: colors.glass,
+              borderColor: colors.border,
+              borderWidth: 1,
+            },
+          ]}
+        >
           {TABS.map((tab) => (
             <Pressable
               key={tab.value}

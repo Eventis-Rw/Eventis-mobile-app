@@ -220,6 +220,18 @@ export default function OnboardingScreen() {
                       {item.primaryActionLabel}
                     </Text>
                   </Pressable>
+
+                  {/* Secondary Sign In link */}
+                  <Pressable
+                    style={styles.signInLink}
+                    onPress={() => void finish()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sign in to existing account"
+                  >
+                    <Text style={styles.signInLinkText}>
+                      Already have an account? <Text style={[styles.signInHighlight, { color: colors.primary }]}>Sign In</Text>
+                    </Text>
+                  </Pressable>
                 </View>
               </View>
             </ScrollView>
@@ -331,5 +343,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_700Bold",
     letterSpacing: 0.2,
+  },
+  signInLink: {
+    paddingVertical: 6,
+    alignItems: "center",
+  },
+  signInLinkText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "rgba(255, 255, 255, 0.75)",
+  },
+  signInHighlight: {
+    fontFamily: "Inter_700Bold",
   },
 });

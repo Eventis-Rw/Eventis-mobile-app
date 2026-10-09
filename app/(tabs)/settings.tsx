@@ -24,6 +24,7 @@ import { useTheme, type ThemePreference } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { EventCard } from "@/components/EventCard";
+import { GlassSurface } from "@/components/GlassSurface";
 
 export default function SettingsScreen() {
   const colors = useColors();
@@ -46,7 +47,7 @@ export default function SettingsScreen() {
   const handleLogout = () => {
     const doLogout = async () => {
       await logout();
-      router.replace("/auth/login" as any);
+      router.replace("/onboarding" as any);
     };
 
     if (Platform.OS === "web") {
@@ -62,7 +63,7 @@ export default function SettingsScreen() {
   const handleDeleteAccount = () => {
     const doDelete = async () => {
       await deleteAccount();
-      router.replace("/auth/login" as any);
+      router.replace("/onboarding" as any);
     };
 
     if (Platform.OS === "web") {
@@ -89,9 +90,20 @@ export default function SettingsScreen() {
   if (!isAuthenticated) {
     return (
       <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: headerTop + 8, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+        <GlassSurface
+          style={[
+            styles.header,
+            {
+              paddingTop: headerTop + 8,
+              borderWidth: 0,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: colors.border,
+              borderRadius: 0,
+            },
+          ]}
+        >
           <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
-        </View>
+        </GlassSurface>
         <View style={styles.guestContainer}>
           <View style={[styles.guestAvatar, { backgroundColor: colors.secondary }]}>
             <Ionicons name="person-outline" size={40} color={colors.mutedForeground} />
@@ -127,13 +139,15 @@ export default function SettingsScreen() {
         }
         style={StyleSheet.absoluteFill}
       />
-      <View
+      <GlassSurface
         style={[
           styles.header,
           {
             paddingTop: headerTop + 8,
-            backgroundColor: "transparent",
-            borderBottomColor: "transparent",
+            borderWidth: 0,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+            borderRadius: 0,
           },
         ]}
       >
@@ -153,7 +167,7 @@ export default function SettingsScreen() {
             </Text>
           </Pressable>
         </View>
-      </View>
+      </GlassSurface>
 
       <ScrollView
         style={styles.scroll}
@@ -415,7 +429,18 @@ export default function SettingsScreen() {
       {/* Organiser Modal */}
       <Modal visible={showOrganizerModal} transparent animationType="slide" onRequestClose={() => setShowOrganizerModal(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowOrganizerModal(false)}>
-          <Pressable style={[styles.modalSheet, { backgroundColor: colors.card }]} onPress={() => {}}>
+          <Pressable
+            style={[
+              styles.modalSheet,
+              {
+                backgroundColor: colors.card,
+                borderColor: `${colors.primary}44`,
+                borderWidth: 1,
+                borderBottomWidth: 0,
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
             <View style={[styles.modalIconWrap, { backgroundColor: colors.primary }]}>
               <Ionicons name="megaphone" size={32} color="#fff" />
@@ -571,7 +596,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 999,
   },
-  bannerCtaPillText: { color: "#007AFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  bannerCtaPillText: { color: "#0284C7", fontSize: 12, fontFamily: "Inter_600SemiBold" },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, gap: 16 },
   profileCard: {
