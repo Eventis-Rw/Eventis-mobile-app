@@ -13,18 +13,13 @@ import {
   StyleSheet,
   Text,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
-import Animated, {
-  Easing,
-  FadeInDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
+import { GlassSurface } from "@/components/GlassSurface";
 import { EventCardSkeleton } from "@/components/SkeletonLoader";
 import { StoriesBar } from "@/components/StoriesBar";
 import { useAuth } from "@/context/AuthContext";
@@ -49,69 +44,7 @@ export default function HomeScreen() {
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const location = useLocationPermission();
-  const measuredHeaderHeight = useSharedValue(0);
-  const headerProgress = useSharedValue(1);
   const [headerHeight, setHeaderHeight] = useState(0);
-  const lastScrollY = useRef(0);
-  const scrollDirectionDistance = useRef(0);
-  const scrollDirection = useRef<"up" | "down" | null>(null);
-  const headerHidden = useRef(false);
-
-  const animatedHeaderStyle = useAnimatedStyle(() => {
-    const measured = measuredHeaderHeight.value;
-    return {
-      transform: [
-        { translateY: -(measured + 4) * (1 - headerProgress.value) },
-      ],
-    };
-  });
-
-  const setHeaderVisible = useCallback((visible: boolean) => {
-    if (headerHidden.current === !visible) return;
-    headerHidden.current = !visible;
-    headerProgress.value = withTiming(visible ? 1 : 0, {
-      duration: visible ? 240 : 210,
-      easing: Easing.bezier(0.22, 1, 0.36, 1),
-    });
-  }, [headerProgress]);
-
-  const handleFeedScroll = useCallback((event: any) => {
-    const nextY = Math.max(event.nativeEvent.contentOffset.y, 0);
-    const delta = nextY - lastScrollY.current;
-
-    if (nextY <= 8) {
-      scrollDirectionDistance.current = 0;
-      scrollDirection.current = null;
-      setHeaderVisible(true);
-    } else if (Math.abs(delta) >= 1.5) {
-      const nextDirection = delta > 0 ? "down" : "up";
-
-      if (scrollDirection.current !== nextDirection) {
-        scrollDirection.current = nextDirection;
-        scrollDirectionDistance.current = 0;
-      }
-
-      scrollDirectionDistance.current += Math.abs(delta);
-
-      if (
-        nextDirection === "down" &&
-        nextY > 56 &&
-        scrollDirectionDistance.current >= 44
-      ) {
-        setHeaderVisible(false);
-        scrollDirectionDistance.current = 0;
-      } else if (
-        nextDirection === "up" &&
-        headerHidden.current &&
-        scrollDirectionDistance.current >= 64
-      ) {
-        setHeaderVisible(true);
-        scrollDirectionDistance.current = 0;
-      }
-    }
-
-    lastScrollY.current = nextY;
-  }, [setHeaderVisible]);
 
   // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
   const showSkeletons = isLoading && !refreshing;
@@ -133,14 +66,28 @@ export default function HomeScreen() {
   const onRefresh = useCallback(async () => {
     setVisibleCount(FEED_PAGE_SIZE);
     setRefreshing(true);
-    await refreshEvents();
-    setRefreshing(false);
+    try {
+      await refreshEvents();
+    } finally {
+      setRefreshing(false);
+    }
   }, [refreshEvents]);
 
-  const selectCategory = useCallback((category: string) => {
-    setVisibleCount(FEED_PAGE_SIZE);
-    setSelectedCategory(category);
-  }, []);
+  const categoryScrollRef = useRef<ScrollView>(null);
+  const categoryLayouts = useRef<Record<string, { x: number; width: number }>>({});
+
+  const selectCategory = useCallback(
+    (category: string) => {
+      setVisibleCount(FEED_PAGE_SIZE);
+      setSelectedCategory(category);
+      const index = categories.indexOf(category);
+      const layout = categoryLayouts.current[category];
+      const fallbackX = index <= 0 ? 0 : Math.max(0, index * 85 - 20);
+      const targetX = layout ? (index <= 0 ? 0 : Math.max(0, layout.x - 20)) : fallbackX;
+      categoryScrollRef.current?.scrollTo({ x: targetX, animated: true });
+    },
+    [categories]
+  );
   const visibleEvents = useMemo(
     () => showSkeletons ? [] : filtered.slice(0, visibleCount),
     [filtered, visibleCount, showSkeletons],
@@ -181,7 +128,7 @@ export default function HomeScreen() {
 
     return (
       <>
-        {/* Instagram-style Stories Bar replacing Featured and Nearby */}
+        {/* Instagram-style Stories Bar */}
         <StoriesBar
           user={user}
           onOpenBecomeOrganizer={() => setShowOrganizerModal(true)}
@@ -189,27 +136,36 @@ export default function HomeScreen() {
 
         {/* Category filters */}
         <ScrollView
+          ref={categoryScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           style={[styles.bleed, styles.categoryScroll]}
           contentContainerStyle={styles.bleedContent}
         >
           {categories.map((cat) => (
-            <CategoryPill
+            <View
               key={cat}
-              category={cat}
-              isSelected={selectedCategory === cat}
-              onPress={selectCategory}
-            />
+              onLayout={(e) => {
+                categoryLayouts.current[cat] = {
+                  x: e.nativeEvent.layout.x,
+                  width: e.nativeEvent.layout.width,
+                };
+              }}
+            >
+              <CategoryPill
+                category={cat}
+                isSelected={selectedCategory === cat}
+                onPress={selectCategory}
+              />
+            </View>
           ))}
         </ScrollView>
 
-
-        {/* Instagram-style Posts Feed */}
+        {/* Skeletons or empty state */}
         {showSkeletons ? (
           <View style={styles.feedContainer}>
-            <EventCardSkeleton inset={PAGE_PADDING} />
-            <EventCardSkeleton inset={PAGE_PADDING} />
+            <EventCardSkeleton inset={14} />
+            <EventCardSkeleton inset={14} />
           </View>
         ) : !filtered.length ? (
           <StateMessage
@@ -227,21 +183,21 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <Animated.View
-        onLayout={(event) => {
+      <GlassSurface
+        onLayout={(event: LayoutChangeEvent) => {
           const height = event.nativeEvent.layout.height;
-          if (height > 0 && Math.abs(height - measuredHeaderHeight.value) > 1) {
-            measuredHeaderHeight.value = height;
+          if (height > 0 && Math.abs(height - headerHeight) > 1) {
             setHeaderHeight(height);
           }
         }}
         style={[
           styles.header,
-          animatedHeaderStyle,
           {
             paddingTop: insets.top + 8,
-            backgroundColor: colors.background,
+            borderWidth: 0,
+            borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.border,
+            borderRadius: 0,
           },
         ]}
       >
@@ -290,32 +246,32 @@ export default function HomeScreen() {
           </View>
           <View style={styles.headerActions}>
             <Pressable
+              onPress={openSearch}
+              style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Search events"
+            >
+              <Ionicons name="search-outline" size={20} color={colors.foreground} />
+            </Pressable>
+            <Pressable
+              onPress={() => router.push("/notifications" as any)}
               style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
               accessibilityRole="button"
               accessibilityLabel="Notifications"
             >
               <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
+              <View style={[styles.notifBadgeDot, { backgroundColor: colors.primary }]} />
             </Pressable>
           </View>
         </View>
-
-        <Pressable
-          style={[styles.searchBar, { backgroundColor: colors.input, borderColor: colors.border }]}
-          onPress={openSearch}
-          accessibilityRole="search"
-          accessibilityLabel="Search events"
-        >
-          <Ionicons name="search-outline" size={17} color={colors.mutedForeground} />
-          <Text style={[styles.searchPlaceholder, { color: colors.mutedForeground }]}>Search events near you...</Text>
-        </Pressable>
-      </Animated.View>
+      </GlassSurface>
 
       <FlatList
         key={selectedCategory}
         data={visibleEvents}
         keyExtractor={(event) => event.id}
         renderItem={({ item }) => (
-          <EventCard event={item} variant="feed" inset={PAGE_PADDING} />
+          <EventCard event={item} variant="feed" inset={0} />
         )}
         ListHeaderComponent={renderBody()}
         ListFooterComponent={visibleEvents.length ? (
@@ -325,7 +281,6 @@ export default function HomeScreen() {
         ) : null}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
-        onScroll={handleFeedScroll}
         scrollEventThrottle={16}
         initialNumToRender={FEED_PAGE_SIZE}
         maxToRenderPerBatch={FEED_PAGE_SIZE}
@@ -334,7 +289,7 @@ export default function HomeScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: headerHeight || insets.top + 124,
+            paddingTop: headerHeight || insets.top + 64,
             paddingBottom: Platform.OS === "web" ? 84 + 20 : 100,
           },
         ]}
@@ -598,7 +553,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    marginBottom: 12,
   },
   brandRow: {
     flex: 1,
@@ -650,20 +604,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
   },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 48,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    gap: 12,
-  },
-  searchPlaceholder: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
+  notifBadgeDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   scroll: {
     flex: 1,
@@ -796,7 +743,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   feedContainer: {
-    marginTop: 8,
+    marginTop: 0,
   },
   modalOverlay: {
     flex: 1,

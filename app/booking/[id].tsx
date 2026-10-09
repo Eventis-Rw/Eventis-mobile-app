@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
+import { GlassSurface } from "@/components/GlassSurface";
 
 const EVENT_IMAGES: Record<string, number> = {
   concert: require("../../assets/images/banner-concert.png"),
@@ -78,10 +79,16 @@ export default function BookingScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View
+      <GlassSurface
         style={[
           styles.header,
-          { paddingTop: insets.top + 8, backgroundColor: colors.background, borderBottomColor: colors.border },
+          {
+            paddingTop: insets.top + 8,
+            borderWidth: 0,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+            borderRadius: 0,
+          },
         ]}
       >
         <Pressable onPress={() => router.back()}>
@@ -89,7 +96,7 @@ export default function BookingScreen() {
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Booking</Text>
         <View style={{ width: 24 }} />
-      </View>
+      </GlassSurface>
 
       <ScrollView
         style={styles.scroll}
@@ -240,14 +247,15 @@ export default function BookingScreen() {
       </ScrollView>
 
       {/* CTA */}
-      <Animated.View
-        entering={Platform.OS !== "web" ? FadeInUp.delay(400).springify() : undefined}
+      <GlassSurface
         style={[
           styles.bottomBar,
           {
-            backgroundColor: colors.background,
+            borderWidth: 0,
+            borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: colors.border,
             paddingBottom: insets.bottom + 12,
+            borderRadius: 0,
           },
         ]}
       >
@@ -279,7 +287,7 @@ export default function BookingScreen() {
               : "Reserve Spot"}
           </Text>
         </Pressable>
-      </Animated.View>
+      </GlassSurface>
     </View>
   );
 }

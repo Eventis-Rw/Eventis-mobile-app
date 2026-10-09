@@ -1,14 +1,20 @@
+import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
+  Image,
   ImageBackground,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import Animated, {
@@ -18,6 +24,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useAuth } from "@/context/AuthContext";
+import { useChat } from "@/context/ChatContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/events";
@@ -40,10 +47,18 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
   const { user, toggleSaveEvent } = useAuth();
   const scale = useSharedValue(1);
   const isSaved = user?.savedEvents.includes(event.id) ?? false;
-  const postSurface = scheme === "dark" ? "#0D1020" : "#FFFFFF";
+  const postSurface =
+    scheme === "dark" ? "rgba(16, 22, 44, 0.72)" : "rgba(255, 255, 255, 0.78)";
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [
+      {
+        scale:
+          variant === "feed" || variant === "standard"
+            ? 1
+            : scale.value,
+      },
+    ],
   }));
 
   const handlePressIn = useCallback(() => {
@@ -67,18 +82,124 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
     [toggleSaveEvent, event.id]
   );
 
+  const { conversations, getContact, sendMessage } = useChat();
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [showInsightsModal, setShowInsightsModal] = useState(false);
+  const [reportState, setReportState] = useState<"idle" | "reported">("idle");
+  const [hidden, setHidden] = useState(false);
+  const [chatSearch, setChatSearch] = useState("");
+  const [sentChatIds, setSentChatIds] = useState<Record<string, boolean>>({});
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  const [sendingAll, setSendingAll] = useState(false);
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const captionCanExpand = event.description.trim().length > 110;
+
+  const viewsCount = useMemo(() => {
+    if (event.viewCount && event.viewCount > 0) return event.viewCount;
+    const seed = event.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return 1200 + (seed % 4800);
+  }, [event.id, event.viewCount]);
+
+  const initialShares = useMemo(() => {
+    return Math.max(14, Math.floor(viewsCount * 0.082));
+  }, [viewsCount]);
+
+  const [shareCount, setShareCount] = useState(initialShares);
+
+  const initialSaves = useMemo(() => {
+    return Math.max(9, Math.floor(viewsCount * 0.064));
+  }, [viewsCount]);
+
+  const savesCount = initialSaves + (isSaved ? 1 : 0);
 
   const handleShare = useCallback((e?: any) => {
     e?.stopPropagation?.();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setChatSearch("");
     setShowShareModal(true);
   }, []);
 
+  const handleReport = useCallback(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    setReportState("reported");
+    setTimeout(() => {
+      setShowOptionsModal(false);
+      setReportState("idle");
+    }, 1600);
+  }, []);
+
+  const handleGoToPost = useCallback(() => {
+    setShowOptionsModal(false);
+    handlePress();
+  }, [handlePress]);
+
+  const handleOptionsSave = useCallback(
+    (e: any) => {
+      handleSave(e);
+    },
+    [handleSave]
+  );
+
+  const handleOptionsShare = useCallback(() => {
+    setShowOptionsModal(false);
+    setTimeout(() => {
+      setShowShareModal(true);
+    }, 200);
+  }, []);
+
+  const handleCopyLink = useCallback(async () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await Clipboard.setStringAsync(`https://eventis.app/event/${event.id}`);
+    setShareCount((prev) => prev + 1);
+    setCopyFeedback(true);
+    setTimeout(() => setCopyFeedback(false), 2000);
+  }, [event.id]);
+
+  const handleOptionsCopyLink = useCallback(async () => {
+    await handleCopyLink();
+    setTimeout(() => {
+      setShowOptionsModal(false);
+    }, 900);
+  }, [handleCopyLink]);
+
+  const handleHidePost = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setShowOptionsModal(false);
+    setHidden(true);
+  }, []);
+
+  const handleSendToChat = useCallback(
+    async (convId: string) => {
+      if (sentChatIds[convId]) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setSentChatIds((prev) => ({ ...prev, [convId]: true }));
+      setShareCount((prev) => prev + 1);
+      const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+      await sendMessage(convId, shareText);
+    },
+    [event, sendMessage, sentChatIds]
+  );
+
+  const handleSendToAllChats = useCallback(async () => {
+    if (!conversations.length || sendingAll) return;
+    setSendingAll(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const addedCount = conversations.length;
+    setShareCount((prev) => prev + addedCount);
+    const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+    const newSent: Record<string, boolean> = { ...sentChatIds };
+    for (const conv of conversations) {
+      newSent[conv.id] = true;
+      await sendMessage(conv.id, shareText);
+    }
+    setSentChatIds(newSent);
+    setSendingAll(false);
+  }, [conversations, sendingAll, event, sendMessage, sentChatIds]);
+
   const handleNativeShare = useCallback(async () => {
     setShowShareModal(false);
+    setShareCount((prev) => prev + 1);
     await shareEvent(event);
   }, [event]);
 
@@ -90,13 +211,24 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
     } as any);
   }, [router, event]);
 
-  const viewsCount = event.viewCount ?? 180;
+  const filteredConversations = useMemo(() => {
+    if (!chatSearch.trim()) return conversations;
+    const q = chatSearch.toLowerCase();
+    return conversations.filter((c) => {
+      const contact = getContact(c.contactId);
+      return (
+        contact?.name.toLowerCase().includes(q) ||
+        contact?.headline.toLowerCase().includes(q) ||
+        c.lastMessage.toLowerCase().includes(q)
+      );
+    });
+  }, [conversations, chatSearch, getContact]);
 
   const shareModal = (
     <Modal
       visible={showShareModal}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={() => setShowShareModal(false)}
     >
       <Pressable
@@ -104,65 +236,778 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
         onPress={() => setShowShareModal(false)}
       >
         <Pressable
-          style={[styles.shareCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          style={[
+            styles.shareCard,
+            Platform.OS === "web"
+              ? ({
+                  backdropFilter: "blur(28px) saturate(1.5)",
+                  WebkitBackdropFilter: "blur(28px) saturate(1.5)",
+                } as any)
+              : null,
+            {
+              backgroundColor:
+                scheme === "dark"
+                  ? "rgba(10, 16, 36, 0.78)"
+                  : "rgba(255, 255, 255, 0.82)",
+              borderColor:
+                scheme === "dark"
+                  ? "rgba(255, 255, 255, 0.16)"
+                  : "rgba(255, 255, 255, 0.75)",
+            },
+          ]}
           onPress={(e) => e.stopPropagation()}
         >
-          <View style={[styles.shareHandle, { backgroundColor: colors.border }]} />
-          <Text style={[styles.shareTitle, { color: colors.foreground }]}>Share Event</Text>
-          <Text style={[styles.shareSub, { color: colors.mutedForeground }]} numberOfLines={1}>
-            {event.title}
-          </Text>
+          {Platform.OS !== "web" ? (
+            <BlurView
+              intensity={85}
+              tint={scheme === "dark" ? "dark" : "light"}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+          ) : null}
+          <View
+            style={[
+              styles.shareHandle,
+              {
+                backgroundColor:
+                  scheme === "dark"
+                    ? "rgba(255, 255, 255, 0.28)"
+                    : "rgba(0, 0, 0, 0.2)",
+              },
+            ]}
+          />
 
-          <View style={styles.shareOptions}>
+          {/* Header */}
+          <View style={styles.shareHeaderRow}>
+            <Text style={[styles.shareTitle, { color: colors.foreground }]}>Share Event</Text>
             <Pressable
-              style={[styles.shareOption, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-              onPress={handleShareToChat}
+              onPress={() => setShowShareModal(false)}
+              style={[styles.shareCloseBtn, { backgroundColor: colors.secondary }]}
+              hitSlop={8}
             >
-              <View style={[styles.shareIconWrap, { backgroundColor: colors.primary }]}>
-                <Ionicons name="chatbubbles" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.shareOptionInfo}>
-                <Text style={[styles.shareOptionTitle, { color: colors.foreground }]}>
-                  Share in Eventis Chat
-                </Text>
-                <Text style={[styles.shareOptionDesc, { color: colors.mutedForeground }]}>
-                  Send to attendees and event organizers
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-            </Pressable>
-
-            <Pressable
-              style={[styles.shareOption, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-              onPress={handleNativeShare}
-            >
-              <View
-                style={[styles.shareIconWrap, { backgroundColor: colors.primary }]}
-              >
-                <Ionicons name="share-outline" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.shareOptionInfo}>
-                <Text style={[styles.shareOptionTitle, { color: colors.foreground }]}>
-                  Share via Other Apps
-                </Text>
-                <Text style={[styles.shareOptionDesc, { color: colors.mutedForeground }]}>
-                  Copy link or send via WhatsApp, Messages
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              <Ionicons name="close" size={18} color={colors.foreground} />
             </Pressable>
           </View>
 
-          <Pressable
-            style={[styles.shareCancelBtn, { backgroundColor: colors.input }]}
-            onPress={() => setShowShareModal(false)}
+          {/* Search bar */}
+          <View
+            style={[
+              styles.shareSearchBox,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
           >
-            <Text style={[styles.shareCancelText, { color: colors.foreground }]}>Close</Text>
+            <Ionicons name="search" size={16} color={colors.mutedForeground} />
+            <TextInput
+              placeholder="Search chats..."
+              placeholderTextColor={colors.mutedForeground}
+              value={chatSearch}
+              onChangeText={setChatSearch}
+              style={[styles.shareSearchInput, { color: colors.foreground }]}
+            />
+            {chatSearch.length > 0 && (
+              <Pressable onPress={() => setChatSearch("")}>
+                <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
+              </Pressable>
+            )}
+          </View>
+
+          {/* Send to all chats button */}
+          {conversations.length > 0 && (
+            <Pressable
+              style={[
+                styles.shareSendAllBtn,
+                {
+                  backgroundColor: sendingAll ? colors.card : `${colors.primary}18`,
+                  borderColor: colors.primary,
+                },
+              ]}
+              onPress={handleSendToAllChats}
+              disabled={sendingAll}
+            >
+              <Ionicons
+                name={sendingAll ? "checkmark-circle" : "paper-plane"}
+                size={16}
+                color={colors.primary}
+              />
+              <Text style={[styles.shareSendAllText, { color: colors.primary }]}>
+                {sendingAll
+                  ? "Sent to all chats!"
+                  : `Send to all chats (${conversations.length})`}
+              </Text>
+            </Pressable>
+          )}
+
+          {/* Chats List */}
+          <ScrollView
+            style={styles.shareChatsList}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {filteredConversations.length > 0 ? (
+              filteredConversations.map((conv) => {
+                const contact = getContact(conv.contactId);
+                const isSent = sentChatIds[conv.id];
+                return (
+                  <View
+                    key={conv.id}
+                    style={[
+                      styles.shareChatItem,
+                      { borderBottomColor: colors.border },
+                    ]}
+                  >
+                    <View style={styles.shareChatLeft}>
+                      {contact?.avatarUrl ? (
+                        <Image source={{ uri: contact.avatarUrl }} style={styles.shareChatAvatar} />
+                      ) : (
+                        <View style={[styles.shareChatAvatarFallback, { backgroundColor: colors.primary }]}>
+                          <Text style={styles.shareChatAvatarLetter}>
+                            {(contact?.name || "U").charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.shareChatInfo}>
+                        <Text style={[styles.shareChatName, { color: colors.foreground }]} numberOfLines={1}>
+                          {contact?.name || "Attendee"}
+                        </Text>
+                        <Text style={[styles.shareChatDesc, { color: colors.mutedForeground }]} numberOfLines={1}>
+                          {contact?.headline || conv.lastMessage || "Active on Eventis"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      style={[
+                        styles.shareChatSendBtn,
+                        isSent
+                          ? { backgroundColor: colors.secondary, borderColor: colors.border }
+                          : { backgroundColor: colors.primary, borderColor: colors.primary },
+                      ]}
+                      onPress={() => handleSendToChat(conv.id)}
+                    >
+                      {isSent ? (
+                        <View style={styles.shareSentRow}>
+                          <Ionicons name="checkmark" size={13} color={colors.foreground} />
+                          <Text style={[styles.shareChatSendText, { color: colors.foreground }]}>
+                            Sent
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.shareChatSendText, { color: "#FFFFFF" }]}>
+                          Send
+                        </Text>
+                      )}
+                    </Pressable>
+                  </View>
+                );
+              })
+            ) : (
+              <View style={styles.shareEmptyChats}>
+                <Text style={[styles.shareEmptyChatsText, { color: colors.mutedForeground }]}>
+                  {chatSearch ? "No chats match your search." : "No chat history yet."}
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Quick Instagram-style circular action icons */}
+          <View style={[styles.shareQuickActionsRow, { borderTopColor: colors.border }]}>
+            {/* Share to external apps */}
+            <Pressable
+              style={styles.shareQuickAction}
+              onPress={handleNativeShare}
+            >
+              <View style={[styles.shareQuickActionCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Ionicons name="share-social" size={20} color={colors.foreground} />
+              </View>
+              <Text style={[styles.shareQuickActionLabel, { color: colors.mutedForeground }]}>
+                Share to Apps
+              </Text>
+            </Pressable>
+
+            {/* Copy Link */}
+            <Pressable
+              style={styles.shareQuickAction}
+              onPress={handleCopyLink}
+            >
+              <View
+                style={[
+                  styles.shareQuickActionCircle,
+                  {
+                    backgroundColor: copyFeedback ? `${colors.primary}22` : colors.card,
+                    borderColor: copyFeedback ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={copyFeedback ? "checkmark" : "link"}
+                  size={20}
+                  color={copyFeedback ? colors.primary : colors.foreground}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.shareQuickActionLabel,
+                  { color: copyFeedback ? colors.primary : colors.mutedForeground },
+                ]}
+              >
+                {copyFeedback ? "Copied!" : "Copy link"}
+              </Text>
+            </Pressable>
+
+            {/* Open in Chat */}
+            <Pressable
+              style={styles.shareQuickAction}
+              onPress={handleShareToChat}
+            >
+              <View style={[styles.shareQuickActionCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Ionicons name="chatbubbles-outline" size={20} color={colors.foreground} />
+              </View>
+              <Text style={[styles.shareQuickActionLabel, { color: colors.mutedForeground }]}>
+                Event Chat
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+
+  const optionsModal = (
+    <Modal
+      visible={showOptionsModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowOptionsModal(false)}
+    >
+      <Pressable
+        style={styles.optionsOverlay}
+        onPress={() => setShowOptionsModal(false)}
+      >
+        <Pressable
+          style={[
+            styles.optionsCard,
+            Platform.OS === "web"
+              ? ({
+                  backdropFilter: "blur(28px) saturate(1.5)",
+                  WebkitBackdropFilter: "blur(28px) saturate(1.5)",
+                } as any)
+              : null,
+            {
+              backgroundColor:
+                scheme === "dark"
+                  ? "rgba(10, 16, 36, 0.74)"
+                  : "rgba(255, 255, 255, 0.80)",
+              borderColor:
+                scheme === "dark"
+                  ? "rgba(255, 255, 255, 0.16)"
+                  : "rgba(255, 255, 255, 0.75)",
+            },
+          ]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          {Platform.OS !== "web" ? (
+            <BlurView
+              intensity={85}
+              tint={scheme === "dark" ? "dark" : "light"}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+          ) : null}
+          <View
+            style={[
+              styles.optionsHandle,
+              {
+                backgroundColor:
+                  scheme === "dark"
+                    ? "rgba(255, 255, 255, 0.28)"
+                    : "rgba(0, 0, 0, 0.2)",
+              },
+            ]}
+          />
+
+          {reportState === "reported" ? (
+            <View style={styles.reportFeedbackBox}>
+              <Ionicons name="checkmark-circle" size={44} color="#10B981" />
+              <Text style={[styles.reportFeedbackTitle, { color: colors.foreground }]}>
+                Report Submitted
+              </Text>
+              <Text style={[styles.reportFeedbackSub, { color: colors.mutedForeground }]}>
+                Thank you for letting us know. We will review this event within 24 hours.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.optionsHeader}>
+                <Text style={[styles.optionsEventTitle, { color: colors.foreground }]} numberOfLines={1}>
+                  {event.title}
+                </Text>
+                <Text style={[styles.optionsOrganizer, { color: colors.mutedForeground }]}>
+                  Organized by {event.organizer}
+                </Text>
+              </View>
+
+              {/* Group 1: Moderation */}
+              <View
+                style={[
+                  styles.optionsGroup,
+                  {
+                    backgroundColor:
+                      scheme === "dark"
+                        ? "rgba(255, 255, 255, 0.07)"
+                        : "rgba(255, 255, 255, 0.60)",
+                    borderColor:
+                      scheme === "dark"
+                        ? "rgba(255, 255, 255, 0.12)"
+                        : "rgba(255, 255, 255, 0.60)",
+                  },
+                ]}
+              >
+                {/* Report (Red) */}
+                <Pressable
+                  style={[
+                    styles.optionsItem,
+                    {
+                      borderBottomColor:
+                        scheme === "dark"
+                          ? "rgba(255, 255, 255, 0.08)"
+                          : "rgba(0, 0, 0, 0.06)",
+                    },
+                  ]}
+                  onPress={handleReport}
+                  accessibilityRole="button"
+                  accessibilityLabel="Report post"
+                >
+                  <View style={styles.optionsItemLeft}>
+                    <Ionicons name="alert-circle-outline" size={20} color="#EF4444" />
+                    <Text style={[styles.optionsItemText, { color: "#EF4444" }]}>Report</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#EF4444" />
+                </Pressable>
+
+                {/* Not interested / Hide */}
+                <Pressable
+                  style={[styles.optionsItem, { borderBottomWidth: 0 }]}
+                  onPress={handleHidePost}
+                  accessibilityRole="button"
+                  accessibilityLabel="Not interested in this post"
+                >
+                  <View style={styles.optionsItemLeft}>
+                    <Ionicons name="eye-off-outline" size={20} color={colors.foreground} />
+                    <Text style={[styles.optionsItemText, { color: colors.foreground }]}>
+                      Not interested
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+
+              {/* Group 2: Engagement & Navigation */}
+              <View
+                style={[
+                  styles.optionsGroup,
+                  {
+                    backgroundColor:
+                      scheme === "dark"
+                        ? "rgba(255, 255, 255, 0.07)"
+                        : "rgba(255, 255, 255, 0.60)",
+                    borderColor:
+                      scheme === "dark"
+                        ? "rgba(255, 255, 255, 0.12)"
+                        : "rgba(255, 255, 255, 0.60)",
+                  },
+                ]}
+              >
+                {/* Go to post */}
+                <Pressable
+                  style={[
+                    styles.optionsItem,
+                    {
+                      borderBottomColor:
+                        scheme === "dark"
+                          ? "rgba(255, 255, 255, 0.08)"
+                          : "rgba(0, 0, 0, 0.06)",
+                    },
+                  ]}
+                  onPress={handleGoToPost}
+                  accessibilityRole="button"
+                  accessibilityLabel="Go to event details"
+                >
+                  <View style={styles.optionsItemLeft}>
+                    <Ionicons name="open-outline" size={20} color={colors.foreground} />
+                    <Text style={[styles.optionsItemText, { color: colors.foreground }]}>
+                      Go to post
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+                </Pressable>
+
+                {/* Save / Saved */}
+                <Pressable
+                  style={[
+                    styles.optionsItem,
+                    {
+                      borderBottomColor:
+                        scheme === "dark"
+                          ? "rgba(255, 255, 255, 0.08)"
+                          : "rgba(0, 0, 0, 0.06)",
+                    },
+                  ]}
+                  onPress={handleOptionsSave}
+                  accessibilityRole="button"
+                  accessibilityLabel={isSaved ? "Saved post" : "Save post"}
+                >
+                  <View style={styles.optionsItemLeft}>
+                    <Ionicons
+                      name={isSaved ? "bookmark" : "bookmark-outline"}
+                      size={20}
+                      color={isSaved ? colors.primary : colors.foreground}
+                    />
+                    <Text
+                      style={[
+                        styles.optionsItemText,
+                        { color: isSaved ? colors.primary : colors.foreground },
+                      ]}
+                    >
+                      {isSaved ? "Saved" : "Save"}
+                    </Text>
+                  </View>
+                  {isSaved && (
+                    <Ionicons name="checkmark" size={16} color={colors.primary} />
+                  )}
+                </Pressable>
+
+                {/* Share */}
+                <Pressable
+                  style={[
+                    styles.optionsItem,
+                    {
+                      borderBottomColor:
+                        scheme === "dark"
+                          ? "rgba(255, 255, 255, 0.08)"
+                          : "rgba(0, 0, 0, 0.06)",
+                    },
+                  ]}
+                  onPress={handleOptionsShare}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share event"
+                >
+                  <View style={styles.optionsItemLeft}>
+                    <Ionicons name="paper-plane-outline" size={20} color={colors.foreground} />
+                    <Text style={[styles.optionsItemText, { color: colors.foreground }]}>
+                      Share to...
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+                </Pressable>
+
+                {/* Copy link */}
+                <Pressable
+                  style={[styles.optionsItem, { borderBottomWidth: 0 }]}
+                  onPress={handleOptionsCopyLink}
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy event link"
+                >
+                  <View style={styles.optionsItemLeft}>
+                    <Ionicons
+                      name={copyFeedback ? "checkmark" : "link-outline"}
+                      size={20}
+                      color={copyFeedback ? colors.primary : colors.foreground}
+                    />
+                    <Text
+                      style={[
+                        styles.optionsItemText,
+                        { color: copyFeedback ? colors.primary : colors.foreground },
+                      ]}
+                    >
+                      {copyFeedback ? "Link Copied!" : "Copy link"}
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+
+              {/* Cancel Button */}
+              <Pressable
+                style={[
+                  styles.optionsCancelBtn,
+                  {
+                    backgroundColor:
+                      scheme === "dark"
+                        ? "rgba(255, 255, 255, 0.09)"
+                        : "rgba(255, 255, 255, 0.70)",
+                    borderColor:
+                      scheme === "dark"
+                        ? "rgba(255, 255, 255, 0.14)"
+                        : "rgba(255, 255, 255, 0.70)",
+                  },
+                ]}
+                onPress={() => setShowOptionsModal(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+              >
+                <Text style={[styles.optionsCancelText, { color: colors.foreground }]}>
+                  Cancel
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+
+  const insightsModal = (
+    <Modal
+      visible={showInsightsModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowInsightsModal(false)}
+    >
+      <Pressable
+        style={styles.optionsOverlay}
+        onPress={() => setShowInsightsModal(false)}
+      >
+        <Pressable
+          style={[
+            styles.optionsCard,
+            Platform.OS === "web"
+              ? ({
+                  backdropFilter: "blur(28px) saturate(1.5)",
+                  WebkitBackdropFilter: "blur(28px) saturate(1.5)",
+                } as any)
+              : null,
+            {
+              backgroundColor:
+                scheme === "dark"
+                  ? "rgba(10, 16, 36, 0.74)"
+                  : "rgba(255, 255, 255, 0.80)",
+              borderColor:
+                scheme === "dark"
+                  ? "rgba(255, 255, 255, 0.16)"
+                  : "rgba(255, 255, 255, 0.75)",
+            },
+          ]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          {Platform.OS !== "web" ? (
+            <BlurView
+              intensity={85}
+              tint={scheme === "dark" ? "dark" : "light"}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+          ) : null}
+          <View
+            style={[
+              styles.optionsHandle,
+              {
+                backgroundColor:
+                  scheme === "dark"
+                    ? "rgba(255, 255, 255, 0.28)"
+                    : "rgba(0, 0, 0, 0.2)",
+              },
+            ]}
+          />
+
+          {/* Header */}
+          <View style={styles.optionsHeader}>
+            <View style={styles.insightsHeaderRow}>
+              <View style={[styles.insightsIconWrap, { backgroundColor: `${colors.primary}18` }]}>
+                <Ionicons name="stats-chart" size={18} color={colors.primary} />
+              </View>
+              <View style={styles.flexText}>
+                <Text style={[styles.optionsEventTitle, { color: colors.foreground }]} numberOfLines={1}>
+                  Event Insights
+                </Text>
+                <Text style={[styles.optionsOrganizer, { color: colors.mutedForeground }]} numberOfLines={1}>
+                  {event.title}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Metrics Grid (2x2) */}
+          <View style={styles.insightsGrid}>
+            {/* Views */}
+            <View
+              style={[
+                styles.insightsMetricCard,
+                {
+                  backgroundColor:
+                    scheme === "dark"
+                      ? "rgba(255, 255, 255, 0.07)"
+                      : "rgba(255, 255, 255, 0.60)",
+                  borderColor:
+                    scheme === "dark"
+                      ? "rgba(255, 255, 255, 0.12)"
+                      : "rgba(255, 255, 255, 0.60)",
+                },
+              ]}
+            >
+              <Ionicons name="eye-outline" size={20} color={colors.primary} />
+              <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
+                {formatCount(viewsCount)}
+              </Text>
+              <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
+                Total Views
+              </Text>
+            </View>
+
+            {/* Shares */}
+            <View
+              style={[
+                styles.insightsMetricCard,
+                {
+                  backgroundColor:
+                    scheme === "dark"
+                      ? "rgba(255, 255, 255, 0.07)"
+                      : "rgba(255, 255, 255, 0.60)",
+                  borderColor:
+                    scheme === "dark"
+                      ? "rgba(255, 255, 255, 0.12)"
+                      : "rgba(255, 255, 255, 0.60)",
+                },
+              ]}
+            >
+              <Ionicons name="paper-plane-outline" size={20} color="#10B981" />
+              <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
+                {formatCount(shareCount)}
+              </Text>
+              <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
+                Post Shares
+              </Text>
+            </View>
+
+            {/* Saves */}
+            <View
+              style={[
+                styles.insightsMetricCard,
+                {
+                  backgroundColor:
+                    scheme === "dark"
+                      ? "rgba(255, 255, 255, 0.07)"
+                      : "rgba(255, 255, 255, 0.60)",
+                  borderColor:
+                    scheme === "dark"
+                      ? "rgba(255, 255, 255, 0.12)"
+                      : "rgba(255, 255, 255, 0.60)",
+                },
+              ]}
+            >
+              <Ionicons name="bookmark-outline" size={20} color="#F59E0B" />
+              <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
+                {formatCount(savesCount)}
+              </Text>
+              <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
+                Saved / Bookmarked
+              </Text>
+            </View>
+
+            {/* Attendees / Capacity */}
+            <View
+              style={[
+                styles.insightsMetricCard,
+                {
+                  backgroundColor:
+                    scheme === "dark"
+                      ? "rgba(255, 255, 255, 0.07)"
+                      : "rgba(255, 255, 255, 0.60)",
+                  borderColor:
+                    scheme === "dark"
+                      ? "rgba(255, 255, 255, 0.12)"
+                      : "rgba(255, 255, 255, 0.60)",
+                },
+              ]}
+            >
+              <Ionicons name="people-outline" size={20} color="#8B5CF6" />
+              <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
+                {formatCount(event.attendees || 85)}
+              </Text>
+              <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
+                Attending
+              </Text>
+            </View>
+          </View>
+
+          {/* Engagement rate row */}
+          <View
+            style={[
+              styles.insightsEngagementRow,
+              {
+                backgroundColor:
+                  scheme === "dark"
+                    ? "rgba(255, 255, 255, 0.05)"
+                    : "rgba(255, 255, 255, 0.55)",
+                borderColor:
+                  scheme === "dark"
+                    ? "rgba(255, 255, 255, 0.10)"
+                    : "rgba(255, 255, 255, 0.60)",
+              },
+            ]}
+          >
+            <View style={styles.insightsEngagementLeft}>
+              <Ionicons name="trending-up" size={18} color={colors.primary} />
+              <Text style={[styles.insightsEngagementText, { color: colors.foreground }]}>
+                Engagement Rate
+              </Text>
+            </View>
+            <Text style={[styles.insightsEngagementValue, { color: colors.primary }]}>
+              {(((shareCount + savesCount) / Math.max(viewsCount, 1)) * 100).toFixed(1)}%
+            </Text>
+          </View>
+
+          {/* Dismiss button */}
+          <Pressable
+            style={[
+              styles.optionsCancelBtn,
+              {
+                backgroundColor:
+                  scheme === "dark"
+                    ? "rgba(255, 255, 255, 0.09)"
+                    : "rgba(255, 255, 255, 0.70)",
+                borderColor:
+                  scheme === "dark"
+                    ? "rgba(255, 255, 255, 0.14)"
+                    : "rgba(255, 255, 255, 0.70)",
+              },
+            ]}
+            onPress={() => setShowInsightsModal(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close insights"
+          >
+            <Text style={[styles.optionsCancelText, { color: colors.foreground }]}>
+              Close
+            </Text>
           </Pressable>
         </Pressable>
       </Pressable>
     </Modal>
   );
+
+  if (hidden) {
+    return (
+      <View
+        style={[
+          styles.hiddenPostCard,
+          {
+            backgroundColor: postSurface,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
+        <Ionicons name="eye-off-outline" size={20} color={colors.mutedForeground} />
+        <Text style={[styles.hiddenPostText, { color: colors.mutedForeground }]}>
+          Post hidden. You won't see this post again in your feed.
+        </Text>
+        <Pressable
+          onPress={() => setHidden(false)}
+          style={[styles.undoBtn, { borderColor: colors.border }]}
+          accessibilityRole="button"
+          accessibilityLabel="Undo hide post"
+        >
+          <Text style={[styles.undoBtnText, { color: colors.primary }]}>Undo</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   if (variant === "featured") {
     return (
@@ -229,7 +1074,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               <View style={styles.featuredBottom}>
                 <View style={styles.featuredStats}>
                   <View style={styles.attendeeRow}>
-                    <Ionicons name="eye-outline" size={13} color="rgba(255,255,255,0.85)" />
+                    <Ionicons name="bar-chart-outline" size={13} color="rgba(255,255,255,0.85)" />
                     <Text style={styles.attendeeText}>{formatCount(viewsCount)} views</Text>
                   </View>
                 </View>
@@ -239,7 +1084,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
                   accessibilityRole="button"
                   accessibilityLabel="Share event"
                 >
-                  <Ionicons name="share-social-outline" size={14} color={colors.foreground} />
+                  <Ionicons name="paper-plane-outline" size={14} color={colors.foreground} />
                   <Text style={[styles.sharePillText, { color: colors.foreground }]}>Share</Text>
                 </Pressable>
               </View>
@@ -247,6 +1092,8 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
           </ImageBackground>
         </AnimatedPressable>
         {shareModal}
+        {optionsModal}
+        {insightsModal}
       </>
     );
   }
@@ -289,7 +1136,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
             </Text>
             <View style={styles.compactFooter}>
               <View style={styles.ratingRow}>
-                <Ionicons name="eye-outline" size={12} color={colors.primary} />
+                <Ionicons name="bar-chart-outline" size={12} color={colors.primary} />
                 <Text style={[styles.ratingText, { color: colors.mutedForeground }]}>
                   {formatCount(viewsCount)} views
                 </Text>
@@ -300,12 +1147,14 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
                 accessibilityRole="button"
                 accessibilityLabel="Share event"
               >
-                <Ionicons name="share-social-outline" size={14} color={colors.mutedForeground} />
+                <Ionicons name="paper-plane-outline" size={14} color={colors.mutedForeground} />
               </Pressable>
             </View>
           </View>
         </AnimatedPressable>
         {shareModal}
+        {optionsModal}
+        {insightsModal}
       </>
     );
   }
@@ -316,7 +1165,10 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
       <AnimatedPressable
         style={[
           styles.instaCard,
-          { backgroundColor: postSurface },
+          {
+            backgroundColor: postSurface,
+            borderBottomColor: colors.border,
+          },
           animatedStyle,
         ]}
         onPress={handlePress}
@@ -347,11 +1199,18 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               </Text>
             </View>
           </View>
-          <View style={[styles.instaCategoryBadge, { backgroundColor: colors.secondary }]}>
-            <Text style={[styles.instaCategoryText, { color: colors.primary }]}>
-              {event.category}
-            </Text>
-          </View>
+          <Pressable
+            style={styles.instaMoreBtn}
+            hitSlop={8}
+            onPress={(e) => {
+              e.stopPropagation();
+              setShowOptionsModal(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="More options"
+          >
+            <Ionicons name="ellipsis-horizontal" size={18} color={colors.mutedForeground} />
+          </Pressable>
         </View>
 
         {/* Post Media: Full-width event image */}
@@ -364,44 +1223,58 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
           />
         </View>
 
-        {/* Action bar: views, sharing, and saved events. */}
+        {/* Action bar: shares, insights, and saves with live counts */}
         <View style={styles.instaActionBar}>
-          {/* Left: Insight numbers */}
-          <View style={styles.instaInsightsWrap}>
-            <View style={styles.instaInsightItem}>
-              <Ionicons name="eye-outline" size={17} color={colors.primary} />
-              <Text style={[styles.instaInsightCount, { color: colors.foreground }]}>
-                {formatCount(viewsCount)}
-              </Text>
-              <Text style={[styles.instaInsightLabel, { color: colors.mutedForeground }]}>
-                views
-              </Text>
-            </View>
-          </View>
-
-          {/* Right: Share icon and Saved for Later icon */}
-          <View style={styles.instaRightActions}>
+          {/* Left: Interactive Share with count & Insights with view count */}
+          <View style={styles.instaLeftActions}>
+            {/* Share action with count */}
             <Pressable
-              style={styles.instaActionBtn}
+              style={styles.instaActionPill}
               onPress={handleShare}
               accessibilityRole="button"
-              accessibilityLabel="Share event"
+              accessibilityLabel={`Share event, ${shareCount} shares`}
             >
-              <Ionicons name="share-social-outline" size={21} color={colors.foreground} />
+              <Ionicons name="paper-plane-outline" size={21} color={colors.foreground} />
+              <Text style={[styles.instaActionCount, { color: colors.foreground }]}>
+                {formatCount(shareCount)}
+              </Text>
             </Pressable>
+
+            {/* Post Insights action with count */}
             <Pressable
-              style={styles.instaActionBtn}
-              onPress={handleSave}
+              style={styles.instaActionPill}
+              onPress={() => setShowInsightsModal(true)}
               accessibilityRole="button"
-              accessibilityLabel="Save for later"
+              accessibilityLabel={`View post insights, ${formatCount(viewsCount)} views`}
             >
-              <Ionicons
-                name={isSaved ? "bookmark" : "bookmark-outline"}
-                size={21}
-                color={isSaved ? colors.primary : colors.foreground}
-              />
+              <Ionicons name="stats-chart-outline" size={19} color={colors.foreground} />
+              <Text style={[styles.instaActionCount, { color: colors.foreground }]}>
+                {formatCount(viewsCount)}
+              </Text>
             </Pressable>
           </View>
+
+          {/* Right: Save Post action with count */}
+          <Pressable
+            style={styles.instaActionPill}
+            onPress={handleSave}
+            accessibilityRole="button"
+            accessibilityLabel={`Save post, ${savesCount} saves`}
+          >
+            <Ionicons
+              name={isSaved ? "bookmark" : "bookmark-outline"}
+              size={21}
+              color={isSaved ? colors.primary : colors.foreground}
+            />
+            <Text
+              style={[
+                styles.instaActionCount,
+                { color: isSaved ? colors.primary : colors.foreground },
+              ]}
+            >
+              {formatCount(savesCount)}
+            </Text>
+          </Pressable>
         </View>
 
         {/* Post Details & Caption */}
@@ -440,6 +1313,8 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
         </View>
       </AnimatedPressable>
       {shareModal}
+      {optionsModal}
+      {insightsModal}
     </>
   );
 }
@@ -613,10 +1488,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   instaCard: {
+    width: "100%",
+    marginHorizontal: 0,
     borderRadius: 0,
     borderWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
-    marginBottom: 10,
+    marginBottom: 0,
   },
   instaHeader: {
     flexDirection: "row",
@@ -669,10 +1547,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
-  instaCategoryBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+  instaMoreBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
   instaCategoryText: {
     fontSize: 11,
@@ -697,10 +1577,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
-  instaInsightsWrap: {
+  instaLeftActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
   },
   instaInsightItem: {
     flexDirection: "row",
@@ -708,22 +1588,17 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   instaInsightCount: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
   instaInsightLabel: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  instaRightActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    fontFamily: "Inter_400Regular",
   },
   instaActionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -881,73 +1756,349 @@ const styles = StyleSheet.create({
   },
   shareOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    backgroundColor: "rgba(0, 0, 0, 0.48)",
     justifyContent: "flex-end",
   },
   shareCard: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderTopWidth: 1,
-    paddingHorizontal: 20,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 18,
     paddingTop: 12,
-    paddingBottom: 34,
+    paddingBottom: 24,
+    maxHeight: "82%",
     gap: 12,
+    overflow: "hidden",
   },
   shareHandle: {
-    width: 36,
+    width: 38,
     height: 4,
     borderRadius: 2,
     alignSelf: "center",
     marginBottom: 4,
   },
+  shareHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   shareTitle: {
     fontSize: 18,
     fontFamily: "Inter_700Bold",
   },
-  shareSub: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-  shareOptions: {
-    gap: 10,
-    marginTop: 6,
-  },
-  shareOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 12,
-  },
-  shareIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  shareCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
   },
-  shareOptionInfo: {
+  shareSearchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  shareSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    padding: 0,
+  },
+  shareSendAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  shareSendAllText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  shareChatsList: {
+    maxHeight: 220,
+  },
+  shareChatItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+  },
+  shareChatLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  shareChatAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+  },
+  shareChatAvatarFallback: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shareChatAvatarLetter: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+  },
+  shareChatInfo: {
     flex: 1,
     gap: 2,
   },
-  shareOptionTitle: {
-    fontSize: 15,
+  shareChatName: {
+    fontSize: 14,
     fontFamily: "Inter_600SemiBold",
   },
-  shareOptionDesc: {
+  shareChatDesc: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
   },
-  shareCancelBtn: {
+  shareChatSendBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    minWidth: 64,
+    alignItems: "center",
+  },
+  shareChatSendText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  shareSentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  shareEmptyChats: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+  shareEmptyChatsText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+  },
+  shareQuickActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  shareQuickAction: {
+    alignItems: "center",
+    gap: 6,
+  },
+  shareQuickActionCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 4,
+    borderWidth: 1,
   },
-  shareCancelText: {
+  shareQuickActionLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+  },
+  optionsOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.48)",
+    justifyContent: "flex-end",
+  },
+  optionsCard: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 32,
+    gap: 10,
+    overflow: "hidden",
+  },
+  optionsHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 4,
+  },
+  optionsHeader: {
+    paddingHorizontal: 6,
+    paddingBottom: 4,
+  },
+  optionsEventTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  optionsOrganizer: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  optionsGroup: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  optionsItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  optionsItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  optionsItemText: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
+  },
+  optionsCancelBtn: {
+    marginTop: 4,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionsCancelText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  reportFeedbackBox: {
+    alignItems: "center",
+    paddingVertical: 24,
+    gap: 10,
+  },
+  reportFeedbackTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+  },
+  reportFeedbackSub: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    paddingHorizontal: 20,
+    lineHeight: 18,
+  },
+  hiddenPostCard: {
+    width: "100%",
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  hiddenPostText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+  },
+  undoBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  undoBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  instaActionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  instaActionCount: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  insightsHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  insightsIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  insightsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginVertical: 4,
+  },
+  insightsMetricCard: {
+    width: "48%",
+    flexGrow: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 4,
+  },
+  insightsMetricValue: {
+    fontSize: 20,
+    fontFamily: "Inter_800ExtraBold",
+    marginTop: 2,
+  },
+  insightsMetricLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  insightsEngagementRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 2,
+  },
+  insightsEngagementLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  insightsEngagementText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  insightsEngagementValue: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
   },
 });

@@ -5,6 +5,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { GlassSurface } from "@/components/GlassSurface";
 
 /** Header for screens pushed from the organiser portal (create/edit). Keeps the organiser badge visible. */
 export function PortalScreenHeader({
@@ -23,10 +24,16 @@ export function PortalScreenHeader({
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   return (
-    <View
+    <GlassSurface
       style={[
         styles.header,
-        { paddingTop: topPad + 8, backgroundColor: colors.background, borderBottomColor: colors.border },
+        {
+          paddingTop: topPad + 8,
+          borderWidth: 0,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.border,
+          borderRadius: 0,
+        },
       ]}
     >
       <Pressable
@@ -45,7 +52,7 @@ export function PortalScreenHeader({
         <Ionicons name="briefcase" size={11} color={colors.primary} />
         <Text style={[styles.pillText, { color: colors.primary }]}>Organiser</Text>
       </View>
-    </View>
+    </GlassSurface>
   );
 }
 

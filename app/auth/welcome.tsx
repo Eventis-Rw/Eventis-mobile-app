@@ -120,7 +120,7 @@ export default function WelcomeScreen() {
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </Pressable>
           <Pressable
-            style={[styles.secondaryBtn, { borderColor: "rgba(255,255,255,0.3)" }]}
+            style={[styles.secondaryBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
             onPress={() => router.push("/auth/login" as any)}
           >
             <Text style={styles.secondaryBtnText}>I already have an account</Text>

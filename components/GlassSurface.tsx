@@ -1,18 +1,22 @@
 import { BlurView } from "expo-blur";
 import React from "react";
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, View, type ViewProps } from "react-native";
 
 import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
-type GlassSurfaceProps = {
+type GlassSurfaceProps = ViewProps & {
   children?: React.ReactNode;
-  style?: StyleProp<ViewStyle>;
   intensity?: number;
 };
 
 /** Frosted panel. On web the blur is a CSS backdrop filter; native uses BlurView. */
-export function GlassSurface({ children, style, intensity = 48 }: GlassSurfaceProps) {
+export function GlassSurface({
+  children,
+  style,
+  intensity = 48,
+  ...viewProps
+}: GlassSurfaceProps) {
   const colors = useColors();
   const { scheme } = useTheme();
   const webBlur =
@@ -20,11 +24,12 @@ export function GlassSurface({ children, style, intensity = 48 }: GlassSurfacePr
       ? ({
           backdropFilter: "blur(22px) saturate(1.4)",
           WebkitBackdropFilter: "blur(22px) saturate(1.4)",
-        } as ViewStyle)
+        } as any)
       : null;
 
   return (
     <View
+      {...viewProps}
       style={[
         styles.shell,
         webBlur,
@@ -40,6 +45,7 @@ export function GlassSurface({ children, style, intensity = 48 }: GlassSurfacePr
           intensity={intensity}
           tint={scheme === "dark" ? "dark" : "light"}
           style={StyleSheet.absoluteFill}
+          pointerEvents="none"
         />
       ) : null}
       {children}

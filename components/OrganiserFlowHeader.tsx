@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { GlassSurface } from "@/components/GlassSurface";
 
 const STEPS = ["About", "Subscription", "Organisation"];
 
@@ -24,10 +25,16 @@ export function OrganiserFlowHeader({
   const router = useRouter();
 
   return (
-    <View
+    <GlassSurface
       style={[
         styles.header,
-        { paddingTop: insets.top + 8, backgroundColor: colors.background, borderBottomColor: colors.border },
+        {
+          paddingTop: insets.top + 8,
+          borderWidth: 0,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.border,
+          borderRadius: 0,
+        },
       ]}
     >
       <View style={styles.row}>
@@ -61,7 +68,7 @@ export function OrganiserFlowHeader({
       <Text style={[styles.stepText, { color: colors.mutedForeground }]}>
         Step {step} of {STEPS.length} · {STEPS[step - 1]}
       </Text>
-    </View>
+    </GlassSurface>
   );
 }
 

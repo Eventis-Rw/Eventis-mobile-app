@@ -15,7 +15,6 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { Logo } from "@/components/Logo";
-import { ExploreDemoButton } from "@/components/ExploreDemoButton";
 import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
 import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
@@ -191,7 +190,6 @@ export default function RegisterScreen() {
         <Animated.View
           entering={Platform.OS !== "web" ? FadeInDown.delay(320).springify() : undefined}
         >
-          <ExploreDemoButton />
           <View style={styles.footerRow}>
             <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
               Already have an account?
@@ -224,7 +222,7 @@ const styles = StyleSheet.create({
     gap: 22,
   },
   brandSection: {
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
     marginBottom: 6,
   },
@@ -233,22 +231,24 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     letterSpacing: 1.4,
     textTransform: "uppercase",
+    textAlign: "center",
   },
   brandLogo: {
     width: 68,
     height: 68,
     marginBottom: 6,
+    alignSelf: "center",
   },
   title: {
     fontSize: 28,
     fontFamily: "Inter_900Black",
     letterSpacing: -0.8,
-    textAlign: "left",
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 15,
     fontFamily: "Inter_400Regular",
-    textAlign: "left",
+    textAlign: "center",
     lineHeight: 22,
   },
   fieldSection: {
