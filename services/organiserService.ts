@@ -17,14 +17,19 @@ export const USE_ORGANISER_API = process.env.EXPO_PUBLIC_USE_ORGANISER_API === "
 /** RWF has no minor unit (see @eventis/contracts money ADR), so amounts are whole francs. */
 export const SUBSCRIPTION_CURRENCY = "RWF";
 
+export type SubscriptionInterval = "day" | "week" | "month" | "year";
+
 export interface SubscriptionPlan {
   id: string;
   name: string;
-  /** Whole Rwandan francs. */
+  /** Whole Rwandan francs per single interval. */
   price: number;
-  interval: "month" | "year";
+  interval: SubscriptionInterval;
   features: string[];
   recommended?: boolean;
+  durations: number[];
+  badge?: string;
+  description?: string;
 }
 
 export type PaymentMethod = "mtn_momo" | "airtel_money";
@@ -32,6 +37,7 @@ export type PaymentMethod = "mtn_momo" | "airtel_money";
 export interface OrganiserSubscription {
   id: string;
   planId: string;
+  duration?: number;
   status: "active";
   renewsAt: string;
 }
@@ -67,19 +73,51 @@ export type DemoOutcome = "succeeded" | "failed" | "cancelled";
 
 const DEMO_PLANS: SubscriptionPlan[] = [
   {
-    id: "organiser_monthly",
-    name: "Monthly",
-    price: 15000,
-    interval: "month",
-    features: ["Unlimited event posts", "Organiser stories", "Booking insights"],
+    id: "organiser_daily",
+    name: "Daily",
+    price: 1500,
+    interval: "day",
+    description: "Ideal for single-day club nights, workshops & pop-ups",
+    features: [
+      "Instant event activation",
+      "Real-time attendee RSVP & tickets",
+      "Live check-in & door QR scan",
+      "Basic attendance analytics",
+    ],
+    durations: [1, 3, 7],
+    badge: "Flexible",
   },
   {
-    id: "organiser_yearly",
-    name: "Yearly",
-    price: 150000,
-    interval: "year",
-    features: ["Everything in Monthly", "Two months free", "Priority listing review"],
+    id: "organiser_weekly",
+    name: "Weekly",
+    price: 6000,
+    interval: "week",
+    description: "Best for weekend fests, tournaments & multi-day expos",
+    features: [
+      "Multiple event postings",
+      "Featured placement in Discover",
+      "Direct attendee announcements",
+      "Organiser stories & updates",
+    ],
+    durations: [1, 2, 4],
+    badge: "Popular",
+  },
+  {
+    id: "organiser_monthly",
+    name: "Monthly",
+    price: 18000,
+    interval: "month",
+    description: "Most loved by venues, clubs, promoters & active brands",
+    features: [
+      "Unlimited event listings",
+      "Official Verified Organiser badge",
+      "Top priority discovery & push alerts",
+      "Comprehensive revenue & analytics",
+      "Export guest lists & CSV reports",
+    ],
     recommended: true,
+    durations: [1, 3, 6, 12],
+    badge: "Best Value",
   },
 ];
 
@@ -99,7 +137,12 @@ export async function fetchSubscriptionPlans(): Promise<SubscriptionPlan[]> {
 // answers with a pending payment, poll it here until it is terminal so the
 // screens keep receiving a final SubscriptionResult.
 export async function startSubscription(
-  input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string },
+  input: {
+    planId: string;
+    paymentMethod: PaymentMethod;
+    payerPhone: string;
+    duration?: number;
+  },
   demoOutcome: DemoOutcome = "succeeded",
 ): Promise<SubscriptionResult> {
   if (!USE_ORGANISER_API) {
@@ -110,12 +153,22 @@ export async function startSubscription(
     if (demoOutcome === "cancelled") return { status: "cancelled" };
     const renewsAt = new Date();
     const plan = DEMO_PLANS.find((p) => p.id === input.planId);
-    renewsAt.setMonth(renewsAt.getMonth() + (plan?.interval === "year" ? 12 : 1));
+    const duration = Math.max(1, input.duration ?? 1);
+    if (plan?.interval === "day") {
+      renewsAt.setDate(renewsAt.getDate() + duration);
+    } else if (plan?.interval === "week") {
+      renewsAt.setDate(renewsAt.getDate() + duration * 7);
+    } else if (plan?.interval === "year") {
+      renewsAt.setFullYear(renewsAt.getFullYear() + duration);
+    } else {
+      renewsAt.setMonth(renewsAt.getMonth() + duration);
+    }
     return {
       status: "succeeded",
       subscription: {
         id: "sub_" + Date.now().toString(36),
         planId: input.planId,
+        duration,
         status: "active",
         renewsAt: renewsAt.toISOString(),
       },
@@ -184,6 +237,14 @@ export function describeError(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export function formatPlanPrice(plan: Pick<SubscriptionPlan, "price" | "interval">): string {
-  return `FRw ${plan.price.toLocaleString("en-US")} / ${plan.interval}`;
+export function formatPlanPrice(
+  plan: Pick<SubscriptionPlan, "price" | "interval">,
+  duration: number = 1,
+): string {
+  const total = plan.price * Math.max(1, duration);
+  if (duration <= 1) {
+    return `FRw ${total.toLocaleString("en-US")} / ${plan.interval}`;
+  }
+  const unit = duration > 1 ? `${plan.interval}s` : plan.interval;
+  return `FRw ${total.toLocaleString("en-US")} (${duration} ${unit})`;
 }

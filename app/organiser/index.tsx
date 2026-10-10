@@ -1,22 +1,61 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
+import { GlassSurface } from "@/components/GlassSurface";
 import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 
-const BENEFITS: { icon: React.ComponentProps<typeof Ionicons>["name"]; title: string; text: string }[] = [
-  { icon: "create-outline", title: "Create posts and events", text: "Publish events to the Eventis feed for people near you." },
-  { icon: "radio-outline", title: "Share organiser stories", text: "Post live updates your audience sees at the top of Home." },
-  { icon: "stats-chart-outline", title: "Manage bookings", text: "Track attendees and views from your organiser dashboard." },
-  { icon: "business-outline", title: "An organisation profile", text: "Your name, logo and website appear on everything you post." },
+const BENEFITS = [
+  {
+    icon: "sparkles" as const,
+    color: "#38BDF8",
+    bg: "rgba(56, 189, 248, 0.15)",
+    title: "Publish to Kigali & Beyond",
+    text: "Put your festivals, conferences, concerts, and club nights in front of active event-goers across Rwanda.",
+  },
+  {
+    icon: "ticket" as const,
+    color: "#10B981",
+    bg: "rgba(16, 185, 129, 0.15)",
+    title: "Instant Mobile Money Ticketing",
+    text: "Collect payments seamlessly via MTN MoMo and Airtel Money. Fast check-in with door QR scanner.",
+  },
+  {
+    icon: "radio" as const,
+    color: "#EC4899",
+    bg: "rgba(236, 72, 153, 0.15)",
+    title: "Live Stories & Feed Drops",
+    text: "Post behind-the-scenes stories, lineup drops, and schedule updates right at the top of attendee feeds.",
+  },
+  {
+    icon: "analytics" as const,
+    color: "#8B5CF6",
+    bg: "rgba(139, 92, 246, 0.15)",
+    title: "Deep Attendee Insights",
+    text: "Track real-time RSVP counts, page views, shares, saves, and revenue without cumbersome spreadsheets.",
+  },
 ];
 
-const STEPS = ["Choose a subscription plan", "Set up your organisation", "Start posting"];
+const STEPS = [
+  {
+    title: "Choose a flexible plan",
+    sub: "Daily, Weekly, or Monthly pass designed for events of any scale.",
+  },
+  {
+    title: "Set up organisation profile",
+    sub: "Add your brand name, logo, venue, and social links.",
+  },
+  {
+    title: "Start posting & selling",
+    sub: "Launch your first event and welcome verified attendees.",
+  },
+];
 
 const enter = (delay: number) =>
   Platform.OS !== "web" ? FadeInDown.delay(delay).springify() : undefined;
@@ -28,105 +67,169 @@ export default function BecomeOrganiserScreen() {
   const { from } = useLocalSearchParams<{ from?: string }>();
   const { step } = useOrganiserAccess();
 
-  // No automatic redirect here: this screen sits under the later steps in the
-  // stack, and redirecting on focus would trap the user when they go back.
   const cta =
     step === "ready"
-      ? { label: "Go to organiser dashboard", onPress: () => router.replace("/business/dashboard" as any) }
+      ? { label: "Go to Organiser Dashboard", onPress: () => router.replace("/business/dashboard" as any) }
       : step === "setup"
-        ? { label: "Continue organisation setup", onPress: () => router.push({ pathname: "/organiser/setup" as any, params: { from } }) }
-        : { label: "Continue to subscription", onPress: () => router.push({ pathname: "/organiser/subscribe" as any, params: { from } }) };
+        ? { label: "Continue Organisation Setup", onPress: () => router.push({ pathname: "/organiser/setup" as any, params: { from } }) }
+        : { label: "Explore Organiser Plans", onPress: () => router.push({ pathname: "/organiser/subscribe" as any, params: { from } }) };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <OrganiserFlowHeader title="Become an organiser" step={1} />
+      <OrganiserFlowHeader title="Become an Organiser" step={1} />
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* LOCK NOTICE IF ROUTED FROM CREATE-POST */}
         {from === "create-post" && step !== "ready" && (
-          <Animated.View
-            entering={enter(40)}
-            style={[styles.notice, { backgroundColor: colors.glass, borderColor: colors.primary + "44" }]}
-          >
-            <Ionicons name="lock-closed-outline" size={18} color={colors.primary} />
-            <Text style={[styles.noticeText, { color: colors.foreground }]}>
-              Creating posts is available to organisers. Set up organiser access to continue.
-            </Text>
+          <Animated.View entering={enter(30)}>
+            <GlassSurface style={styles.noticeBox}>
+              <View style={styles.noticeIconWrap}>
+                <Ionicons name="lock-closed" size={16} color="#38BDF8" />
+              </View>
+              <Text style={[styles.noticeText, { color: colors.foreground }]}>
+                Publishing is reserved for verified Eventis organisers. Activate your organiser pass to proceed.
+              </Text>
+            </GlassSurface>
           </Animated.View>
         )}
 
-        <Animated.View entering={enter(80)} style={styles.hero}>
-          <View style={[styles.heroIcon, { backgroundColor: colors.primary }]}>
-            <Ionicons name="megaphone" size={32} color="#fff" />
+        {/* HERO SECTION WITH AMBIENT GLOW */}
+        <Animated.View entering={enter(70)} style={styles.hero}>
+          <LinearGradient
+            colors={["rgba(56, 189, 248, 0.15)", "rgba(139, 92, 246, 0.08)", "transparent"]}
+            style={styles.heroGlow}
+          />
+          <View style={styles.kickerBadge}>
+            <View style={styles.kickerDot} />
+            <Text style={styles.kickerText}>EVENTIS ORGANISER HUB</Text>
           </View>
-          <Text style={[styles.title, { color: colors.foreground }]}>Host events on Eventis</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            Organiser access adds publishing tools to the account you already have. Your personal
-            profile, tickets and chats stay exactly as they are.
+          <Text style={[styles.heroTitle, { color: colors.foreground }]}>
+            Host Unforgettable Events on Eventis
           </Text>
-        </Animated.View>
+          <Text style={[styles.heroSubtitle, { color: colors.mutedForeground }]}>
+            Empower your team with high-impact ticketing, live storytelling, and discovery tools built for Africa's most exciting creators.
+          </Text>
 
-        <Animated.View entering={enter(140)} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.foreground }]}>What you get</Text>
-          {BENEFITS.map((b) => (
-            <View key={b.title} style={styles.benefitRow}>
-              <View style={[styles.benefitIcon, { backgroundColor: colors.primary + "1A" }]}>
-                <Ionicons name={b.icon} size={18} color={colors.primary} />
-              </View>
-              <View style={styles.benefitCopy}>
-                <Text style={[styles.benefitTitle, { color: colors.foreground }]}>{b.title}</Text>
-                <Text style={[styles.benefitText, { color: colors.mutedForeground }]}>{b.text}</Text>
-              </View>
+          {/* QUICK HIGHLIGHT STATS */}
+          <View style={styles.statsRow}>
+            <View style={[styles.statBadge, { borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.04)" }]}>
+              <Text style={[styles.statValue, { color: colors.primary }]}>Instant</Text>
+              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>MoMo Payouts</Text>
             </View>
-          ))}
+            <View style={[styles.statBadge, { borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.04)" }]}>
+              <Text style={[styles.statValue, { color: "#10B981" }]}>10K+</Text>
+              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Active Goers</Text>
+            </View>
+            <View style={[styles.statBadge, { borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.04)" }]}>
+              <Text style={[styles.statValue, { color: "#EC4899" }]}>0%</Text>
+              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Setup Delay</Text>
+            </View>
+          </View>
         </Animated.View>
 
-        <Animated.View entering={enter(200)} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.foreground }]}>How it works</Text>
-          {STEPS.map((label, i) => {
-            const done = (step === "setup" && i === 0) || step === "ready";
-            return (
-              <View key={label} style={styles.stepRow}>
-                <View style={[styles.stepBadge, { backgroundColor: done ? colors.success : colors.secondary }]}>
-                  {done ? (
-                    <Ionicons name="checkmark" size={14} color="#fff" />
-                  ) : (
-                    <Text style={[styles.stepNumber, { color: colors.foreground }]}>{i + 1}</Text>
-                  )}
+        {/* VALUE TILES (WHAT YOU GET) */}
+        <Animated.View entering={enter(130)}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionAccentLine} />
+            <Text style={[styles.sectionHeading, { color: colors.foreground }]}>What You Get</Text>
+          </View>
+
+          <View style={styles.benefitsGrid}>
+            {BENEFITS.map((b) => (
+              <GlassSurface key={b.title} style={styles.benefitCard}>
+                <View style={[styles.benefitIconWrap, { backgroundColor: b.bg }]}>
+                  <Ionicons name={b.icon} size={20} color={b.color} />
                 </View>
-                <Text style={[styles.stepLabel, { color: colors.foreground }]}>{label}</Text>
-              </View>
-            );
-          })}
+                <View style={styles.benefitBody}>
+                  <Text style={[styles.benefitTitle, { color: colors.foreground }]}>{b.title}</Text>
+                  <Text style={[styles.benefitText, { color: colors.mutedForeground }]}>{b.text}</Text>
+                </View>
+              </GlassSurface>
+            ))}
+          </View>
         </Animated.View>
 
-        <Animated.View entering={enter(260)} style={styles.infoRow}>
-          <Ionicons name="person-circle-outline" size={18} color={colors.mutedForeground} />
-          <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-            No separate login. You'll manage your organisation from this account and can switch
-            back to browsing events at any time.
-          </Text>
+        {/* 3-STEP ROADMAP (HOW IT WORKS) */}
+        <Animated.View entering={enter(190)}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionAccentLine} />
+            <Text style={[styles.sectionHeading, { color: colors.foreground }]}>How It Works</Text>
+          </View>
+
+          <GlassSurface style={styles.roadmapCard}>
+            {STEPS.map((stepItem, i) => {
+              const isDone = (step === "setup" && i === 0) || step === "ready";
+              return (
+                <View key={stepItem.title} style={styles.roadmapRow}>
+                  <View style={styles.roadmapIndicatorCol}>
+                    <View
+                      style={[
+                        styles.roadmapDot,
+                        {
+                          backgroundColor: isDone ? "#10B981" : colors.primary,
+                        },
+                      ]}
+                    >
+                      {isDone ? (
+                        <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.roadmapNumber}>{i + 1}</Text>
+                      )}
+                    </View>
+                    {i < STEPS.length - 1 && (
+                      <View style={[styles.roadmapLine, { backgroundColor: colors.border }]} />
+                    )}
+                  </View>
+                  <View style={styles.roadmapTextCol}>
+                    <Text style={[styles.roadmapTitle, { color: colors.foreground }]}>
+                      {stepItem.title}
+                    </Text>
+                    <Text style={[styles.roadmapSub, { color: colors.mutedForeground }]}>
+                      {stepItem.sub}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </GlassSurface>
         </Animated.View>
 
-        <Animated.View entering={enter(300)} style={styles.actions}>
+        {/* TRUST BANNER */}
+        <Animated.View entering={enter(240)}>
+          <View style={[styles.trustBanner, { borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.03)" }]}>
+            <Ionicons name="shield-checkmark-outline" size={20} color="#38BDF8" />
+            <Text style={[styles.trustText, { color: colors.mutedForeground }]}>
+              No separate credentials. Manage all your events from your existing Eventis login and switch between personal and organiser profiles at any time.
+            </Text>
+          </View>
+        </Animated.View>
+
+        {/* CTA BUTTONS */}
+        <Animated.View entering={enter(280)} style={styles.actions}>
           <Pressable
-            style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+            style={[styles.primaryCtaBtn, { backgroundColor: colors.primary }]}
             onPress={cta.onPress}
             accessibilityRole="button"
           >
-            <Text style={styles.primaryBtnText}>{cta.label}</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
+            <LinearGradient
+              colors={["rgba(255,255,255,0.2)", "transparent"]}
+              style={StyleSheet.absoluteFill}
+            />
+            <Text style={styles.primaryCtaText}>{cta.label}</Text>
+            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
           </Pressable>
+
           {step !== "ready" && (
             <Pressable
               onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
               accessibilityRole="button"
-              style={styles.secondaryBtn}
+              style={styles.cancelBtn}
             >
-              <Text style={[styles.secondaryBtnText, { color: colors.mutedForeground }]}>Not now</Text>
+              <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Maybe Later</Text>
             </Pressable>
           )}
         </Animated.View>
@@ -138,61 +241,250 @@ export default function BecomeOrganiserScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 20, gap: 20 },
-  notice: {
+  content: { paddingHorizontal: 20, paddingTop: 16, gap: 24 },
+
+  noticeBox: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.3)",
+  },
+  noticeIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(56,189,248,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noticeText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    lineHeight: 19,
+  },
+
+  // Hero
+  hero: {
+    alignItems: "center",
+    paddingVertical: 14,
+    position: "relative",
+  },
+  heroGlow: {
+    position: "absolute",
+    top: -20,
+    left: -20,
+    right: -20,
+    bottom: -20,
+    borderRadius: 30,
+    opacity: 0.6,
+  },
+  kickerBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: "rgba(56,189,248,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.25)",
+    marginBottom: 12,
+  },
+  kickerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#38BDF8",
+  },
+  kickerText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: "#38BDF8",
+    letterSpacing: 1.1,
+  },
+  heroTitle: {
+    fontSize: 27,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
+    textAlign: "center",
+    lineHeight: 34,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 22,
+    textAlign: "center",
+    marginTop: 8,
+    paddingHorizontal: 10,
+  },
+
+  // Stats row
+  statsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 18,
+    width: "100%",
+  },
+  statBadge: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+  },
+  statLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+
+  // Section heading
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  sectionAccentLine: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
+    backgroundColor: "#38BDF8",
+  },
+  sectionHeading: {
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+  },
+
+  // Benefits grid
+  benefitsGrid: {
     gap: 10,
+  },
+  benefitCard: {
+    flexDirection: "row",
+    padding: 16,
+    borderRadius: 18,
+    gap: 14,
+    alignItems: "flex-start",
+  },
+  benefitIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  benefitBody: {
+    flex: 1,
+    gap: 3,
+  },
+  benefitTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  benefitText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 19,
+  },
+
+  // Roadmap card
+  roadmapCard: {
+    borderRadius: 20,
+    padding: 20,
+    gap: 16,
+  },
+  roadmapRow: {
+    flexDirection: "row",
+    gap: 14,
+  },
+  roadmapIndicatorCol: {
+    alignItems: "center",
+    width: 26,
+  },
+  roadmapDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  roadmapNumber: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    color: "#FFFFFF",
+  },
+  roadmapLine: {
+    width: 2,
+    flex: 1,
+    marginTop: 4,
+    marginBottom: -8,
+  },
+  roadmapTextCol: {
+    flex: 1,
+    gap: 2,
+    paddingBottom: 8,
+  },
+  roadmapTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  roadmapSub: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+  },
+
+  // Trust banner
+  trustBanner: {
+    flexDirection: "row",
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-  },
-  noticeText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium", lineHeight: 19 },
-  hero: { alignItems: "center", gap: 12 },
-  heroIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
     alignItems: "center",
-    justifyContent: "center",
+    gap: 12,
   },
-  title: { fontSize: 26, fontFamily: "Inter_700Bold", textAlign: "center" },
-  subtitle: { fontSize: 15, fontFamily: "Inter_400Regular", lineHeight: 23, textAlign: "center" },
-  card: { borderRadius: 18, borderWidth: 1, padding: 16, gap: 14 },
-  cardTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
-  benefitRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  benefitIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
+  trustText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
   },
-  benefitCopy: { flex: 1, gap: 2 },
-  benefitTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  benefitText: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
-  stepRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  stepBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
+
+  // Actions
+  actions: {
+    gap: 10,
+    marginTop: 4,
   },
-  stepNumber: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  stepLabel: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
-  infoRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
-  actions: { gap: 4 },
-  primaryBtn: {
+  primaryCtaBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
     paddingVertical: 17,
     borderRadius: 16,
+    gap: 10,
+    overflow: "hidden",
   },
-  primaryBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
-  secondaryBtn: { alignItems: "center", paddingVertical: 12 },
-  secondaryBtnText: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  primaryCtaText: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#FFFFFF",
+  },
+  cancelBtn: {
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  cancelText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
 });

@@ -1,9 +1,11 @@
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 export function ExploreDemoButton() {
+  const router = useRouter();
   const { exploreDemo } = useAuth();
   const colors = useColors();
   const [busy, setBusy] = useState(false);
@@ -14,8 +16,8 @@ export function ExploreDemoButton() {
     setBusy(true);
     setError("");
     try {
-      // The authentication navigator opens Home once the session is saved.
       await exploreDemo();
+      router.replace("/(tabs)" as any);
     } catch {
       setError("Couldn't open the demo. Please try again.");
       setBusy(false);

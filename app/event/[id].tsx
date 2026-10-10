@@ -48,7 +48,6 @@ export default function EventDetailScreen() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
-  const [showInsightsModal, setShowInsightsModal] = useState(false);
   const [reportState, setReportState] = useState<"idle" | "reported">("idle");
 
   const [chatSearch, setChatSearch] = useState("");
@@ -76,12 +75,6 @@ export default function EventDetailScreen() {
   }, [viewsCount]);
 
   const [shareCount, setShareCount] = useState(initialShares);
-
-  const initialSaves = useMemo(() => {
-    return Math.max(12, Math.floor(viewsCount * 0.068));
-  }, [viewsCount]);
-
-  const savesCount = initialSaves + (isSaved ? 1 : 0);
 
   const attendeesCount = useMemo(() => {
     return Math.max(34, Math.floor(viewsCount * 0.14));
@@ -409,38 +402,30 @@ export default function EventDetailScreen() {
 
             <View style={styles.statDivider} />
 
-            {/* Saves */}
+            {/* Saves (count hidden, interactive bookmark toggle) */}
             <Pressable
               style={styles.statItem}
               onPress={handleSave}
               accessibilityRole="button"
-              accessibilityLabel={`Save event, currently ${savesCount} saves`}
+              accessibilityLabel={isSaved ? "Saved event" : "Save event"}
             >
               <Ionicons
                 name={isSaved ? "bookmark" : "bookmark-outline"}
-                size={15}
-                color={isSaved ? "#38BDF8" : "#F59E0B"}
+                size={16}
+                color={isSaved ? "#38BDF8" : "rgba(255,255,255,0.75)"}
               />
-              <Text style={styles.statValue}>{formatCount(savesCount)}</Text>
-              <Text style={styles.statLabel}>Saved</Text>
-            </Pressable>
-
-            <View style={styles.statDivider} />
-
-            {/* Insights button */}
-            <Pressable
-              style={styles.statInsightsBtn}
-              onPress={() => setShowInsightsModal(true)}
-              accessibilityRole="button"
-              accessibilityLabel="View post insights"
-            >
-              <LinearGradient
-                colors={["rgba(56,189,248,0.22)", "rgba(56,189,248,0.08)"]}
-                style={styles.statInsightsGradient}
+              <Text
+                style={[
+                  styles.statLabel,
+                  {
+                    marginTop: 4,
+                    fontWeight: "600",
+                    color: isSaved ? "#38BDF8" : "rgba(255,255,255,0.85)",
+                  },
+                ]}
               >
-                <Ionicons name="stats-chart" size={14} color="#38BDF8" />
-                <Text style={styles.statInsightsText}>Insights</Text>
-              </LinearGradient>
+                {isSaved ? "Saved" : "Save"}
+              </Text>
             </Pressable>
           </GlassSurface>
         </Animated.View>
@@ -468,10 +453,6 @@ export default function EventDetailScreen() {
             <Text style={styles.communityHeadline}>
               <Text style={styles.communityCount}>+{attendeesCount} people</Text> attending & interested
             </Text>
-            <View style={styles.communitySubRow}>
-              <View style={styles.pulseGreenDot} />
-              <Text style={styles.communitySubText}>Active Eventis community</Text>
-            </View>
           </View>
         </Animated.View>
 
@@ -1051,123 +1032,6 @@ export default function EventDetailScreen() {
                 </Pressable>
               </>
             )}
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* POST INSIGHTS MODAL */}
-      <Modal
-        visible={showInsightsModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowInsightsModal(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setShowInsightsModal(false)}
-        >
-          <Pressable
-            style={[styles.optionsCard, webBlurStyle]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            {Platform.OS !== "web" ? (
-              <BlurView
-                intensity={85}
-                tint={scheme === "dark" ? "dark" : "light"}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
-            ) : null}
-
-            <View style={styles.modalHandle} />
-
-            {/* Header */}
-            <View style={styles.optionsHeader}>
-              <View style={styles.insightsHeaderRow}>
-                <View style={[styles.insightsIconWrap, { backgroundColor: `${colors.primary}18` }]}>
-                  <Ionicons name="stats-chart" size={18} color={colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.optionsEventTitle, { color: colors.foreground }]} numberOfLines={1}>
-                    Event Insights
-                  </Text>
-                  <Text style={[styles.optionsOrganizer, { color: colors.mutedForeground }]} numberOfLines={1}>
-                    {event.title}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* 2x2 Metric Grid */}
-            <View style={styles.insightsGrid}>
-              {/* Total Views */}
-              <View style={[styles.insightsMetricCard, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}>
-                <Ionicons name="eye-outline" size={20} color={colors.primary} />
-                <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
-                  {formatCount(viewsCount)}
-                </Text>
-                <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
-                  Total Views
-                </Text>
-              </View>
-
-              {/* Shares */}
-              <View style={[styles.insightsMetricCard, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}>
-                <Ionicons name="paper-plane-outline" size={20} color="#10B981" />
-                <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
-                  {formatCount(shareCount)}
-                </Text>
-                <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
-                  Post Shares
-                </Text>
-              </View>
-
-              {/* Saves */}
-              <View style={[styles.insightsMetricCard, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}>
-                <Ionicons name="bookmark-outline" size={20} color="#F59E0B" />
-                <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
-                  {formatCount(savesCount)}
-                </Text>
-                <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
-                  Bookmarked
-                </Text>
-              </View>
-
-              {/* Attendees */}
-              <View style={[styles.insightsMetricCard, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}>
-                <Ionicons name="people-outline" size={20} color="#8B5CF6" />
-                <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
-                  {formatCount(attendeesCount)}
-                </Text>
-                <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
-                  Attendees
-                </Text>
-              </View>
-            </View>
-
-            {/* Engagement Rate */}
-            <View style={[styles.insightsEngagementRow, { backgroundColor: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.1)" }]}>
-              <View>
-                <Text style={[styles.insightsEngagementTitle, { color: colors.foreground }]}>
-                  Engagement Rate
-                </Text>
-                <Text style={[styles.insightsEngagementSub, { color: colors.mutedForeground }]}>
-                  Shares & saves per total impressions
-                </Text>
-              </View>
-              <Text style={[styles.insightsEngagementValue, { color: colors.primary }]}>
-                {(((shareCount + savesCount) / Math.max(viewsCount, 1)) * 100).toFixed(1)}%
-              </Text>
-            </View>
-
-            {/* Dismiss button */}
-            <Pressable
-              style={[styles.optionsCancelBtn, { backgroundColor: "rgba(255,255,255,0.09)", borderColor: "rgba(255,255,255,0.14)" }]}
-              onPress={() => setShowInsightsModal(false)}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.optionsCancelText, { color: colors.foreground }]}>Close</Text>
-            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
