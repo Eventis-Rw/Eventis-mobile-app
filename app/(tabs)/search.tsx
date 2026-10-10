@@ -62,10 +62,10 @@ export default function SearchScreen() {
     [categories]
   );
 
-  const hasActiveSearch = query.trim().length > 0 || selectedCategory !== "All";
+  const hasActiveQuery = query.trim().length > 0;
+  const hasActiveSearch = hasActiveQuery || selectedCategory !== "All";
 
   const results = useMemo(() => {
-    if (!hasActiveSearch) return [];
     let evts = [...events];
     if (query.trim()) {
       const q = query.trim().toLowerCase();
@@ -76,6 +76,7 @@ export default function SearchScreen() {
           e.city.toLowerCase().includes(q) ||
           e.location.toLowerCase().includes(q) ||
           e.organizer.toLowerCase().includes(q) ||
+          e.description.toLowerCase().includes(q) ||
           e.tags.some((t) => t.toLowerCase().includes(q))
       );
     }
@@ -88,7 +89,7 @@ export default function SearchScreen() {
     if (sort === "distance") evts.sort((a, b) => a.distance - b.distance);
     if (sort === "price") evts.sort((a, b) => a.price - b.price);
     return evts;
-  }, [events, query, selectedCategory, priceFilter, sort, hasActiveSearch]);
+  }, [events, query, selectedCategory, priceFilter, sort]);
 
   const SORT_OPTIONS: { label: string; value: SortOption }[] = [
     { label: "Relevance", value: "relevance" },
@@ -138,24 +139,24 @@ export default function SearchScreen() {
             <Ionicons name="chevron-back" size={20} color={colors.foreground} />
           </Pressable>
           <Text style={[styles.title, { color: colors.foreground }]}>Search</Text>
-          {hasActiveSearch && (
+          <View
+            style={[
+              styles.titleBadge,
+              { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}35` },
+            ]}
+          >
             <View
               style={[
-                styles.titleBadge,
-                { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}35` },
+                styles.titleBadgeDot,
+                { backgroundColor: results.length > 0 ? "#10B981" : colors.mutedForeground },
               ]}
-            >
-              <View
-                style={[
-                  styles.titleBadgeDot,
-                  { backgroundColor: results.length > 0 ? "#10B981" : colors.mutedForeground },
-                ]}
-              />
-              <Text style={[styles.titleBadgeText, { color: colors.primary }]}>
-                {results.length} {results.length === 1 ? "match" : "matches"}
-              </Text>
-            </View>
-          )}
+            />
+            <Text style={[styles.titleBadgeText, { color: colors.primary }]}>
+              {hasActiveSearch
+                ? `${results.length} ${results.length === 1 ? "match" : "matches"}`
+                : `${events.length} events`}
+            </Text>
+          </View>
         </View>
         <View
           style={[
@@ -227,75 +228,19 @@ export default function SearchScreen() {
         </ScrollView>
       </GlassSurface>
 
-      {/* Search Body: Initial Blank Page OR Live Results */}
-      {!hasActiveSearch ? (
-        <ScrollView
-          style={styles.blankScroll}
-          contentContainerStyle={[
-            styles.blankContent,
-            { paddingBottom: insets.bottom + 32 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View
-            style={[
-              styles.blankIconWrap,
-              { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}28` },
-            ]}
-          >
-            <Ionicons name="search" size={32} color={colors.primary} />
-          </View>
-          <Text style={[styles.blankTitle, { color: colors.foreground }]}>
-            Search Events
-          </Text>
-          <Text style={[styles.blankSubtitle, { color: colors.mutedForeground }]}>
-            Start typing above to see live matching events and counts in real time.
-          </Text>
-
-          <View style={styles.suggestionsCard}>
-            <View style={styles.suggestionsHeader}>
-              <Ionicons name="sparkles" size={14} color={colors.primary} />
-              <Text style={[styles.suggestionsTitle, { color: colors.foreground }]}>
-                Popular Searches
-              </Text>
-            </View>
-            <View style={styles.suggestionsGrid}>
-              {POPULAR_SEARCHES.map((term) => (
-                <Pressable
-                  key={term}
-                  style={[
-                    styles.suggestionPill,
-                    { backgroundColor: colors.card, borderColor: colors.border },
-                  ]}
-                  onPress={() => {
-                    setQuery(term);
-                    inputRef.current?.focus();
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Search for ${term}`}
-                >
-                  <Ionicons name="trending-up" size={12} color={colors.primary} />
-                  <Text style={[styles.suggestionPillText, { color: colors.foreground }]}>
-                    {term}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </ScrollView>
-      ) : (
-        <FlatList
-          data={results}
-          keyExtractor={(item) => item.id}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[
-            styles.list,
-            { paddingBottom: insets.bottom + 20 },
-          ]}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
+      {/* Events List: Always displays events and live-filters as user types */}
+      <FlatList
+        data={results}
+        keyExtractor={(item) => item.id}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
+          styles.list,
+          { paddingBottom: insets.bottom + 96 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          hasActiveQuery ? (
             <View style={styles.resultsHeader}>
               <View
                 style={[
@@ -333,50 +278,112 @@ export default function SearchScreen() {
                 </Text>{" "}
                 {results.length === 1 ? "event" : "events"} matching{" "}
                 <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>
-                  "{query.trim() || selectedCategory}"
+                  "{query.trim()}"
                 </Text>
               </Text>
             </View>
-          }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="search-outline" size={44} color={colors.border} />
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                No events found
-              </Text>
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                No events match "{query.trim()}". Try checking your spelling or adjusting your filters.
-              </Text>
-              <Pressable
+          ) : selectedCategory !== "All" ? (
+            <View style={styles.resultsHeader}>
+              <View
                 style={[
-                  styles.clearSearchBtn,
-                  { backgroundColor: colors.secondary, borderColor: colors.border },
+                  styles.liveCountingTag,
+                  {
+                    backgroundColor: `${colors.primary}14`,
+                    borderColor: `${colors.primary}28`,
+                  },
                 ]}
-                onPress={() => {
-                  setQuery("");
-                  setSelectedCategory("All");
-                  inputRef.current?.focus();
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
               >
-                <Ionicons name="arrow-back" size={14} color={colors.foreground} />
-                <Text style={[styles.clearSearchBtnText, { color: colors.foreground }]}>
-                  Reset search
+                <Ionicons name="funnel" size={12} color={colors.primary} />
+                <Text style={[styles.liveCountingText, { color: colors.primary }]}>
+                  {selectedCategory}
                 </Text>
-              </Pressable>
+              </View>
+              <Text style={[styles.resultsCountText, { color: colors.mutedForeground }]}>
+                <Text style={{ color: colors.foreground, fontFamily: "Inter_700Bold" }}>
+                  {results.length}
+                </Text>{" "}
+                {results.length === 1 ? "event" : "events"} in this category
+              </Text>
             </View>
-          }
-          renderItem={({ item, index }) => (
-            <Animated.View
-              entering={Platform.OS !== "web" ? FadeInDown.delay(index * 40).springify() : undefined}
+          ) : (
+            <View style={styles.discoverHeader}>
+              <View style={styles.discoverHeaderTop}>
+                <Text style={[styles.discoverTitle, { color: colors.foreground }]}>
+                  All Events
+                </Text>
+                <Text style={[styles.discoverCount, { color: colors.mutedForeground }]}>
+                  {results.length} available
+                </Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.quickPopularScroll}
+                contentContainerStyle={styles.quickPopularRow}
+              >
+                {POPULAR_SEARCHES.map((term) => (
+                  <Pressable
+                    key={term}
+                    style={[
+                      styles.quickPopularPill,
+                      { backgroundColor: colors.card, borderColor: colors.border },
+                    ]}
+                    onPress={() => {
+                      setQuery(term);
+                      inputRef.current?.focus();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Search for ${term}`}
+                  >
+                    <Ionicons name="trending-up" size={12} color={colors.primary} />
+                    <Text style={[styles.quickPopularText, { color: colors.foreground }]}>
+                      {term}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )
+        }
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Ionicons name="search-outline" size={44} color={colors.border} />
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+              No events found
+            </Text>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+              {query.trim()
+                ? `No events match "${query.trim()}". Try checking your spelling or adjusting your filters.`
+                : "No events available for this category."}
+            </Text>
+            <Pressable
+              style={[
+                styles.clearSearchBtn,
+                { backgroundColor: colors.secondary, borderColor: colors.border },
+              ]}
+              onPress={() => {
+                setQuery("");
+                setSelectedCategory("All");
+                inputRef.current?.focus();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
             >
-              <EventCard event={item} variant="feed" inset={0} />
-            </Animated.View>
-          )}
-          scrollEnabled={!!results.length}
-        />
-      )}
+              <Ionicons name="arrow-back" size={14} color={colors.foreground} />
+              <Text style={[styles.clearSearchBtnText, { color: colors.foreground }]}>
+                Reset search
+              </Text>
+            </Pressable>
+          </View>
+        }
+        renderItem={({ item, index }) => (
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(index * 40).springify() : undefined}
+          >
+            <EventCard event={item} variant="feed" inset={0} />
+          </Animated.View>
+        )}
+      />
     </View>
   );
 }
@@ -492,67 +499,42 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "right",
   },
-  blankScroll: {
-    flex: 1,
+  discoverHeader: {
+    paddingHorizontal: 20,
+    marginBottom: 14,
+    gap: 10,
   },
-  blankContent: {
+  discoverHeaderTop: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 24,
-    paddingTop: 48,
+    justifyContent: "space-between",
   },
-  blankIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  blankTitle: {
-    fontSize: 20,
+  discoverTitle: {
+    fontSize: 18,
     fontFamily: "Inter_700Bold",
-    marginBottom: 8,
-    textAlign: "center",
   },
-  blankSubtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    lineHeight: 20,
-    maxWidth: 290,
-    marginBottom: 32,
+  discoverCount: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
   },
-  suggestionsCard: {
-    width: "100%",
-    maxWidth: 360,
-    gap: 12,
+  quickPopularScroll: {
+    marginHorizontal: -20,
+    marginTop: 2,
   },
-  suggestionsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  suggestionsTitle: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.2,
-  },
-  suggestionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  quickPopularRow: {
+    paddingHorizontal: 20,
     gap: 8,
   },
-  suggestionPill: {
+  quickPopularPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 20,
     borderWidth: 1,
   },
-  suggestionPillText: {
+  quickPopularText: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
   },

@@ -34,11 +34,15 @@ export function CategoryPill({ category, isSelected, onPress }: CategoryPillProp
 
   return (
     <AnimatedPressable
-      style={[
+      style={({ pressed }: { pressed: boolean }) => [
         styles.pill,
         animatedStyle,
         {
-          backgroundColor: isSelected ? colors.primary : colors.glass,
+          backgroundColor: isSelected
+            ? colors.primary
+            : pressed
+            ? "rgba(255,255,255,0.14)"
+            : colors.glass,
           borderColor: isSelected ? colors.primary : colors.border,
         },
       ]}

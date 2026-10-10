@@ -253,7 +253,7 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: StoriesBarProps) {
         >
           {/* User Story Circle */}
           <Pressable
-            style={styles.storyItem}
+            style={({ pressed }) => [styles.storyItem, pressed && { opacity: 0.78 }]}
             onPress={handleUserStoryPress}
             accessibilityRole="button"
             accessibilityLabel="Your story"
@@ -300,7 +300,7 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: StoriesBarProps) {
           {DEFAULT_STORIES.map((story, index) => (
             <Pressable
               key={story.id}
-              style={styles.storyItem}
+              style={({ pressed }) => [styles.storyItem, pressed && { opacity: 0.78 }]}
               onPress={() => handleOpenStory(index)}
               accessibilityRole="button"
               accessibilityLabel={`${story.organizerName} story`}

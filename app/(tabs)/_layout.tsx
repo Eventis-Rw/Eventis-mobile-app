@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter } from "expo-router";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -20,64 +20,221 @@ import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { useChat } from "@/context/ChatContext";
 
-type TabIconName = React.ComponentProps<typeof Feather>["name"];
-
 // Change this single flag to true when FindLove is ready to return to navigation.
 const FIND_LOVE_ENABLED = false;
+
+interface TabIconProps {
+  color: ColorValue;
+  focused: boolean;
+  activeIcon: keyof typeof Ionicons.glyphMap;
+  inactiveIcon: keyof typeof Ionicons.glyphMap;
+  badgeCount?: number;
+  isCreate?: boolean;
+  isDisabled?: boolean;
+}
 
 function TabIcon({
   color,
   focused,
-  name,
+  activeIcon,
+  inactiveIcon,
+  badgeCount,
+  isCreate = false,
+  isDisabled = false,
+}: TabIconProps) {
+  const colors = useColors();
+  const { scheme } = useTheme();
+  const isDark = scheme === "dark";
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (focused) {
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 1.14,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 4,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [focused, scaleAnim]);
+
+  if (isCreate) {
+    return (
+      <Animated.View
+        style={[
+          styles.iconSlot,
+          { transform: [{ scale: scaleAnim }] },
+        ]}
+      >
+        <View
+          style={[
+            styles.createSquircle,
+            {
+              borderColor: focused
+                ? colors.primary
+                : isDark
+                ? "rgba(255, 255, 255, 0.28)"
+                : "rgba(0, 0, 0, 0.22)",
+              backgroundColor: focused
+                ? `${colors.primary}1A`
+                : isDark
+                ? "rgba(255, 255, 255, 0.06)"
+                : "rgba(0, 0, 0, 0.04)",
+            },
+          ]}
+        >
+          <Ionicons
+            name="add"
+            size={22}
+            color={focused ? colors.primary : colors.foreground}
+          />
+        </View>
+        {focused && <View style={[styles.activeDot, { backgroundColor: colors.primary }]} />}
+      </Animated.View>
+    );
+  }
+
+  return (
+    <Animated.View
+      style={[
+        styles.iconSlot,
+        isDisabled && styles.disabledSlot,
+        { transform: [{ scale: scaleAnim }] },
+      ]}
+    >
+      <Ionicons
+        name={focused ? activeIcon : inactiveIcon}
+        size={24}
+        color={isDisabled ? colors.disabled : focused ? colors.primary : color}
+      />
+
+      {/* Unread message badge */}
+      {badgeCount !== undefined && badgeCount > 0 && (
+        <View
+          style={[
+            styles.tabBadge,
+            {
+              backgroundColor: "#38BDF8",
+              borderColor: isDark ? "#0A0F1E" : "#FFFFFF",
+            },
+          ]}
+        >
+          <Text style={styles.tabBadgeText}>
+            {badgeCount > 99 ? "99+" : badgeCount}
+          </Text>
+        </View>
+      )}
+
+      {/* Active micro indicator dot */}
+      {focused && !isDisabled && (
+        <View style={[styles.activeDot, { backgroundColor: colors.primary }]} />
+      )}
+    </Animated.View>
+  );
+}
+
+function LiveTabIcon({
+  color,
+  focused,
 }: {
   color: ColorValue;
   focused: boolean;
-  name: TabIconName;
 }) {
-  const colors = useColors();
-  const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.7)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.timing(progress, {
-      toValue: focused ? 1 : 0,
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [focused, progress]);
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(pulseAnim, {
+            toValue: 2.2,
+            duration: 1300,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseOpacity, {
+            toValue: 0,
+            duration: 1300,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseOpacity, {
+            toValue: 0.7,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnim, pulseOpacity]);
+
+  useEffect(() => {
+    if (focused) {
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 1.14,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 4,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [focused, scaleAnim]);
 
   return (
-    <View style={styles.iconSlot}>
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.activePill,
-          {
-            backgroundColor: colors.primary,
-            opacity: progress,
-            transform: [
-              {
-                scaleX: progress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.45, 1],
-                }),
-              },
-              {
-                scaleY: progress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.72, 1],
-                }),
-              },
-            ],
-          },
-        ]}
+    <Animated.View
+      style={[
+        styles.iconSlot,
+        { transform: [{ scale: scaleAnim }] },
+      ]}
+    >
+      <Ionicons
+        name={focused ? "videocam" : "videocam-outline"}
+        size={24}
+        color={focused ? "#EF4444" : color}
       />
-      <Feather
-        name={name}
-        size={26}
-        color={focused ? colors.primaryForeground : color}
-      />
-    </View>
+      {/* Sleek LIVE micro-badge with pulsing beacon */}
+      <View style={styles.liveMicroBadge}>
+        <View style={styles.livePulseContainer}>
+          <Animated.View
+            style={[
+              styles.livePulsePing,
+              {
+                transform: [{ scale: pulseAnim }],
+                opacity: pulseOpacity,
+              },
+            ]}
+          />
+          <View style={styles.livePulseCore} />
+        </View>
+        <Text style={styles.liveMicroText}>LIVE</Text>
+      </View>
+
+      {focused && <View style={[styles.activeDot, { backgroundColor: "#EF4444" }]} />}
+    </Animated.View>
   );
 }
 
@@ -112,18 +269,24 @@ function TabLayout() {
             backgroundColor: isIOS
               ? "transparent"
               : isDark
-              ? "rgba(7, 8, 20, 0.92)"
-              : "rgba(240, 244, 250, 0.92)",
+              ? "rgba(10, 15, 30, 0.94)"
+              : "rgba(255, 255, 255, 0.94)",
             borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: colors.border,
-            elevation: 0,
-            height: isWeb ? 70 : 60 + insets.bottom,
-            paddingBottom: isWeb ? 0 : insets.bottom,
-            paddingTop: 6,
+            borderTopColor: isDark
+              ? "rgba(255, 255, 255, 0.10)"
+              : "rgba(0, 0, 0, 0.08)",
+            elevation: 8,
+            shadowColor: "#000000",
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: isDark ? 0.25 : 0.06,
+            shadowRadius: 16,
+            height: isWeb ? 68 : 58 + insets.bottom,
+            paddingBottom: isWeb ? 0 : Math.max(insets.bottom - 4, 4),
+            paddingTop: 4,
           },
           tabBarBackground: () =>
             isIOS ? (
-              <BlurView intensity={100} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+              <BlurView intensity={95} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
             ) : isWeb ? (
               <View
                 style={[
@@ -143,7 +306,12 @@ function TabLayout() {
           options={{
             title: "Home",
             tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="home" color={color} focused={focused} />
+              <TabIcon
+                activeIcon="home"
+                inactiveIcon="home-outline"
+                color={color}
+                focused={focused}
+              />
             ),
           }}
         />
@@ -157,20 +325,14 @@ function TabLayout() {
           }}
           options={{
             title: "Chat",
-            tabBarBadge: unread || undefined,
-            tabBarBadgeStyle: {
-              backgroundColor: "#38BDF8",
-              color: "#FFFFFF",
-              fontSize: 10,
-              fontFamily: "Inter_700Bold",
-              minWidth: 18,
-              height: 18,
-              borderRadius: 9,
-              lineHeight: 18,
-              alignSelf: "center",
-            },
             tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="message-circle" color={color} focused={focused} />
+              <TabIcon
+                activeIcon="chatbubble-ellipses"
+                inactiveIcon="chatbubble-ellipses-outline"
+                color={color}
+                focused={focused}
+                badgeCount={unread}
+              />
             ),
           }}
         />
@@ -189,7 +351,13 @@ function TabLayout() {
           options={{
             title: "Post",
             tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="plus-square" color={color} focused={focused} />
+              <TabIcon
+                isCreate
+                activeIcon="add"
+                inactiveIcon="add"
+                color={color}
+                focused={focused}
+              />
             ),
           }}
         />
@@ -211,21 +379,35 @@ function TabLayout() {
             ],
             tabBarIcon: ({ color, focused }) => (
               <TabIcon
-                name="heart"
-                color={FIND_LOVE_ENABLED ? color : colors.disabled}
+                activeIcon="heart"
+                inactiveIcon="heart-outline"
+                color={color}
                 focused={FIND_LOVE_ENABLED && focused}
+                isDisabled={!FIND_LOVE_ENABLED}
               />
             ),
           }}
         />
         <Tabs.Screen name="tickets" options={{ href: null }} />
         <Tabs.Screen
+          name="live"
+          options={{
+            title: "Live",
+            tabBarIcon: ({ color, focused }) => (
+              <LiveTabIcon color={color} focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="search"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
           name="settings"
           options={{
-            title: "Settings",
-            tabBarIcon: ({ color, focused }) => (
-              <TabIcon name="settings" color={color} focused={focused} />
-            ),
+            href: null,
           }}
         />
       </Tabs>
@@ -334,17 +516,93 @@ function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  activePill: {
-    borderRadius: 20,
-    height: 40,
-    position: "absolute",
-    width: 52,
-  },
   iconSlot: {
     alignItems: "center",
-    height: 40,
+    height: 44,
     justifyContent: "center",
-    width: 52,
+    width: 48,
+    position: "relative",
+  },
+  disabledSlot: {
+    opacity: 0.45,
+  },
+  activeDot: {
+    position: "absolute",
+    bottom: 2,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+  createSquircle: {
+    width: 34,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabBadge: {
+    position: "absolute",
+    top: 1,
+    right: 3,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#38BDF8",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+  },
+  tabBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontFamily: "Inter_700Bold",
+    lineHeight: 11,
+    textAlign: "center",
+  },
+  liveMicroBadge: {
+    position: "absolute",
+    top: -1,
+    right: -7,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EF4444",
+    paddingHorizontal: 4,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    gap: 3,
+    shadowColor: "#EF4444",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.45,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  livePulseContainer: {
+    width: 5,
+    height: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  livePulsePing: {
+    position: "absolute",
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#FFFFFF",
+  },
+  livePulseCore: {
+    width: 3.5,
+    height: 3.5,
+    borderRadius: 1.75,
+    backgroundColor: "#FFFFFF",
+  },
+  liveMicroText: {
+    color: "#FFFFFF",
+    fontSize: 7.5,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.6,
+    lineHeight: 9,
   },
   item: {
     alignItems: "center",

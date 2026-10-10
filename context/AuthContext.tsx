@@ -71,7 +71,7 @@ interface AuthContextType {
   toggleSaveEvent: (eventId: string) => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
   subscribeAsOrganiser: (
-    input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string },
+    input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string; duration?: number },
     demoOutcome?: DemoOutcome,
   ) => Promise<SubscriptionResult>;
   setupOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
@@ -320,7 +320,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const subscribeAsOrganiser = useCallback(
     async (
-      input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string },
+      input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string; duration?: number },
       demoOutcome?: DemoOutcome,
     ) => {
       const result = await startSubscription(input, demoOutcome);

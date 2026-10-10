@@ -1039,7 +1039,10 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
               </View>
             )}
             <Pressable
-              style={[styles.saveBtn, { backgroundColor: colors.surface }]}
+              style={({ pressed }) => [
+                styles.saveBtn,
+                { backgroundColor: colors.surface, opacity: pressed ? 0.75 : 1 },
+              ]}
               onPress={handleSave}
             >
               <Ionicons
@@ -1200,7 +1203,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
             </View>
           </View>
           <Pressable
-            style={styles.instaMoreBtn}
+            style={({ pressed }) => [styles.instaMoreBtn, pressed && { opacity: 0.65 }]}
             hitSlop={8}
             onPress={(e) => {
               e.stopPropagation();
@@ -1223,13 +1226,13 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
           />
         </View>
 
-        {/* Action bar: shares, insights, and saves with live counts */}
+        {/* Action bar: shares with live count, and saved without count */}
         <View style={styles.instaActionBar}>
-          {/* Left: Interactive Share with count & Insights with view count */}
+          {/* Left: Interactive Share with count */}
           <View style={styles.instaLeftActions}>
-            {/* Share action with count */}
+            {/* Share action with count kept */}
             <Pressable
-              style={styles.instaActionPill}
+              style={({ pressed }) => [styles.instaActionPill, pressed && { opacity: 0.7 }]}
               onPress={handleShare}
               accessibilityRole="button"
               accessibilityLabel={`Share event, ${shareCount} shares`}
@@ -1239,41 +1242,20 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
                 {formatCount(shareCount)}
               </Text>
             </Pressable>
-
-            {/* Post Insights action with count */}
-            <Pressable
-              style={styles.instaActionPill}
-              onPress={() => setShowInsightsModal(true)}
-              accessibilityRole="button"
-              accessibilityLabel={`View post insights, ${formatCount(viewsCount)} views`}
-            >
-              <Ionicons name="stats-chart-outline" size={19} color={colors.foreground} />
-              <Text style={[styles.instaActionCount, { color: colors.foreground }]}>
-                {formatCount(viewsCount)}
-              </Text>
-            </Pressable>
           </View>
 
-          {/* Right: Save Post action with count */}
+          {/* Right: Save Post action without count (hidden) */}
           <Pressable
-            style={styles.instaActionPill}
+            style={({ pressed }) => [styles.instaActionPill, pressed && { opacity: 0.7 }]}
             onPress={handleSave}
             accessibilityRole="button"
-            accessibilityLabel={`Save post, ${savesCount} saves`}
+            accessibilityLabel={isSaved ? "Saved post" : "Save post"}
           >
             <Ionicons
               name={isSaved ? "bookmark" : "bookmark-outline"}
               size={21}
               color={isSaved ? colors.primary : colors.foreground}
             />
-            <Text
-              style={[
-                styles.instaActionCount,
-                { color: isSaved ? colors.primary : colors.foreground },
-              ]}
-            >
-              {formatCount(savesCount)}
-            </Text>
           </Pressable>
         </View>
 
