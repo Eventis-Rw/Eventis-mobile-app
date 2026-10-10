@@ -22,6 +22,13 @@ import {
 } from "@/services/organiserService";
 import { api, ApiError, clearToken, getToken, setToken } from "@/utils/apiClient";
 
+/**
+ * customer   – books and attends events.
+ * individual – a person who publishes their own events (no organisation).
+ * business   – publishes events as an organisation.
+ */
+export type AccountType = "customer" | "individual" | "business";
+
 export interface User {
   id: string;
   username: string;
@@ -30,6 +37,10 @@ export interface User {
   avatarUrl?: string;
   isPhoneVerified: boolean;
   isBusinessAccount: boolean;
+  /** Not returned by the API yet; when absent it is derived by `getAccountType`. */
+  accountType?: AccountType;
+  /** City/area shown on the profile. Businesses fall back to their organisation's location. */
+  location?: string;
   bio?: string;
   businessName?: string;
   businessType?: string;
@@ -78,6 +89,11 @@ interface AuthContextType {
   updateOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
   switchOrganisation: (organisationId: string) => Promise<void>;
   deleteOrganisation: (organisationId: string) => Promise<void>;
+}
+
+export function getAccountType(user: User | null): AccountType {
+  if (user?.accountType) return user.accountType;
+  return user?.isBusinessAccount ? "business" : "customer";
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
