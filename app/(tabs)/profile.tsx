@@ -192,6 +192,12 @@ export default function ProfileScreen() {
           />
         )}
         <ProfileNavRow
+          icon="bookmark-outline"
+          label="Saved events"
+          sublabel={`${profile.savedEvents.length} saved`}
+          onPress={() => router.push("/saved-events" as any)}
+        />
+        <ProfileNavRow
           icon="settings-outline"
           label="Settings"
           sublabel="Account, notifications and privacy"
