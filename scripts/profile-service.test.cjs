@@ -54,6 +54,8 @@ const publisher = load("services/publisherService.ts", (name) => {
   if (name === "@/services/profileService") return profile;
 });
 
+const validation = load("utils/profileValidation.ts", () => undefined);
+
 beforeEach(() => {
   stored = new Map();
 });
@@ -369,4 +371,46 @@ test("publisher profile keeps social links when other fields change", async () =
   assert.deepEqual(updated.categories, ["Music"]);
   assert.equal(updated.socialLinks.instagram, "https://instagram.com/jazz");
   assert.deepEqual((await profile.fetchPublisherProfile("u2")).socialLinks, {});
+});
+
+test("profile names, phones, emails and websites are validated", () => {
+  assert.equal(validation.validateUsername("Aline U."), undefined);
+  assert.match(validation.validateUsername(" a "), /2 characters/);
+  assert.match(validation.validateUsername("bad<name>"), /letters/);
+
+  assert.equal(validation.validatePhone(""), undefined);
+  assert.match(validation.validatePhone("", { required: true }), /Enter/);
+  assert.equal(validation.validatePhone("+250 788 123 456"), undefined);
+  assert.match(validation.validatePhone("12345"), /full phone/);
+  assert.match(validation.validatePhone("+250 abc"), /digits/);
+  assert.ok(validation.samePhone("+250 788 123 456", "+250788123456"));
+
+  assert.equal(validation.validateEmail("hi@eventis.rw"), undefined);
+  assert.match(validation.validateEmail("hi@eventis"), /valid email/);
+
+  assert.equal(validation.validateWebsite("eventis.rw"), undefined);
+  assert.equal(validation.normaliseWebsite("eventis.rw"), "https://eventis.rw");
+  assert.match(validation.validateWebsite("not a site"), /valid website/);
+});
+
+test("social links accept handles or links on the right platform", () => {
+  assert.equal(validation.normaliseSocialLink("instagram", "@kigalijazz"), "https://instagram.com/kigalijazz");
+  assert.equal(validation.normaliseSocialLink("x", "twitter.com/kigalijazz"), "https://twitter.com/kigalijazz");
+  assert.equal(validation.normaliseSocialLink("tiktok", "kigalijazz"), "https://tiktok.com/@kigalijazz");
+  assert.equal(validation.normaliseSocialLink("instagram", "  "), undefined);
+
+  assert.equal(validation.validateSocialLink("instagram", "https://www.instagram.com/kigalijazz"), undefined);
+  assert.equal(validation.validateSocialLink("youtube", "https://youtu.be/abc"), undefined);
+  assert.match(validation.validateSocialLink("instagram", "https://facebook.com/kigalijazz"), /Instagram link/);
+  assert.match(validation.validateSocialLink("facebook", "https://facebook.com/"), /link or username/);
+});
+
+test("legal identity and categories are validated", () => {
+  assert.equal(validation.validateTaxId("123 456 789"), undefined);
+  assert.match(validation.validateTaxId("12345"), /9 digits/);
+  assert.equal(validation.validateTaxId(""), undefined);
+  assert.equal(validation.validateRegistrationNumber("RDB-102938"), undefined);
+  assert.match(validation.validateRegistrationNumber("a b"), /letters/);
+  assert.equal(validation.validateCategories(["Music", "Food"]), undefined);
+  assert.match(validation.validateCategories(["a", "b", "c", "d", "e", "f"]), /up to 5/);
 });

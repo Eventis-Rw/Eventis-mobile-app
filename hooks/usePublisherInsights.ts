@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Event } from "@/constants/events";
 import { useAuth } from "@/context/AuthContext";
@@ -12,23 +13,25 @@ import {
   type PublisherAnalytics,
 } from "@/services/publisherService";
 
-/** Contact, social, category and legal details shown on a publisher's Overview. */
+/** Contact, social, category and legal details shown on a publisher's Overview. Reloads on focus (after Edit Profile). */
 export function usePublisherProfile(active: boolean) {
   const { user } = useAuth();
   const userId = user?.id;
   const [profile, setProfile] = useState<PublisherProfile | undefined>();
   const [isLoading, setIsLoading] = useState(active);
   const [error, setError] = useState<string | null>(null);
+  const hasLoaded = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!userId || !active) {
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
+    if (!hasLoaded.current) setIsLoading(true);
     setError(null);
     try {
       setProfile(await fetchPublisherProfile(userId));
+      hasLoaded.current = true;
     } catch (err) {
       setError(describeProfileError(err, "We couldn't load your profile details."));
     } finally {
@@ -36,9 +39,11 @@ export function usePublisherProfile(active: boolean) {
     }
   }, [userId, active]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
 
   return { profile, isLoading, error, refresh };
 }

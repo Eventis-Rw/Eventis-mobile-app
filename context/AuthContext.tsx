@@ -324,12 +324,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = useCallback(
     async (data: Partial<User>) => {
       if (!user) return;
-      try {
-        const resp = await api.put<{ user: User }>("/users/me", data);
-        await persistUser(resp.user);
-      } catch {
+      // Demo and offline phone sessions have no server account, so they save on
+      // the device. Real sessions surface API errors instead of faking success.
+      const token = await getToken();
+      if (user.isDemo || !token || token.startsWith("demo_token_")) {
         await persistUser({ ...user, ...data });
+        return;
       }
+      // INTEGRATION POINT: a new photo is a local file URI; upload it through the
+      // presigned upload endpoint and send the returned URL once that exists.
+      const resp = await api.put<{ user: User }>("/users/me", data);
+      await persistUser(resp.user);
     },
     [user, persistUser]
   );
