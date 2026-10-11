@@ -34,6 +34,7 @@ import { usePublisherInsights, usePublisherProfile } from "@/hooks/usePublisherI
 import { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
 import type { ProfileTab } from "@/utils/accountCapabilities";
 import { reviewableBookings } from "@/utils/customerProfile";
+import { localToday } from "@/utils/dates";
 
 export default function ProfileScreen() {
   const colors = useColors();
@@ -307,7 +308,7 @@ export default function ProfileScreen() {
   );
 }
 
-const todayISO = () => new Date().toISOString().split("T")[0];
+const todayISO = () => localToday();
 
 const styles = StyleSheet.create({
   root: { flex: 1 },

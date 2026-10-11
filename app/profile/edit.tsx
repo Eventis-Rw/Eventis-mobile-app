@@ -159,6 +159,16 @@ export default function EditProfileScreen() {
     void loadPublisherDetails();
   }, [loadPublisherDetails]);
 
+  // Customers have nothing to fetch; seed the form once the user is known
+  // (on a reload or deep link, auth may still be loading on first render).
+  useEffect(() => {
+    if (user && !isPublisher && !initial) {
+      const next = initialValues(user);
+      setInitial(next);
+      setValues(next);
+    }
+  }, [user, isPublisher, initial]);
+
   const categoryOptions = useMemo(() => eventCategories.filter((c) => c !== "All"), [eventCategories]);
 
   const errors = useMemo(() => {

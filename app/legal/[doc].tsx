@@ -14,7 +14,8 @@ export default function LegalScreen() {
   const { doc } = useLocalSearchParams<{ doc: string }>();
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
-  const document = doc && doc in LEGAL_DOCUMENTS ? LEGAL_DOCUMENTS[doc as LegalDocumentKey] : undefined;
+  const document =
+    doc && Object.prototype.hasOwnProperty.call(LEGAL_DOCUMENTS, doc) ? LEGAL_DOCUMENTS[doc as LegalDocumentKey] : undefined;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>

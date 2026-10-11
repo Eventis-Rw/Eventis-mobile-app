@@ -29,12 +29,13 @@ import type {
 } from "@/services/profileService";
 import { PROMOTION_PLACEMENTS, type PromotionStatus } from "@/services/publisherService";
 import type { ProfileTab } from "@/utils/accountCapabilities";
+import { localToday } from "@/utils/dates";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 type PublisherEventsState = ReturnType<typeof usePublisherEvents>;
 type InsightsState = ReturnType<typeof usePublisherInsights>;
 
-const today = () => new Date().toISOString().split("T")[0];
+const today = () => localToday();
 const isPast = (m: ManagedEvent) => m.event.date < today();
 
 function formatDate(date: string) {

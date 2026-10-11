@@ -22,6 +22,7 @@ import { useBookings } from "@/context/BookingsContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import { DEMO_WRONG_CODE, describeProfileError, PHONE_CODE_MAX_ATTEMPTS, USE_PROFILE_API } from "@/services/profileService";
+import { localToday } from "@/utils/dates";
 import {
   DELETE_CONFIRM_PHRASE,
   matchesDeletePhrase,
@@ -73,7 +74,7 @@ export default function DeleteAccountScreen() {
   }
 
   const accountType = getAccountType(user);
-  const today = new Date().toISOString().split("T")[0];
+  const today = localToday();
   const upcoming = bookings.filter((b) => b.status !== "cancelled" && b.eventDate >= today).length;
   const lockedOut = attempts >= PHONE_CODE_MAX_ATTEMPTS;
 

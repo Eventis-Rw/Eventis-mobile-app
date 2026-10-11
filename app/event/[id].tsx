@@ -24,7 +24,7 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { GlassSurface } from "@/components/GlassSurface";
 import { getEventImage } from "@/constants/eventImages";
 import { getEventPalette, getEventTiming } from "@/constants/eventPresentation";
-import { useAuth } from "@/context/AuthContext";
+import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
 import { useChat } from "@/context/ChatContext";
 import { useEvents } from "@/context/EventsContext";
@@ -64,7 +64,9 @@ export default function EventDetailScreen() {
   const palette = getEventPalette(event?.category ?? "Business");
   const timing = useMemo(() => (event ? getEventTiming(event) : null), [event]);
 
-  const savedOrganisers = useSavedOrganisers();
+  // Saving organisers is a customer feature; publishers have no list to save into.
+  const savedOrganisers = useSavedOrganisers({ active: getAccountType(user) === "customer" });
+  const [saveOrganiserError, setSaveOrganiserError] = useState<string | null>(null);
   const organiserId = event ? organiserIdFromName(event.organizer) : "";
   const isOrganiserSaved = savedOrganisers.isSaved(organiserId);
 
@@ -80,7 +82,7 @@ export default function EventDetailScreen() {
       return;
     }
     Haptics.selectionAsync();
-    await savedOrganisers.toggle({ id: organiserId, name: event.organizer, location: event.city });
+    setSaveOrganiserError(await savedOrganisers.toggle({ id: organiserId, name: event.organizer, location: event.city }));
   }, [event, user, router, savedOrganisers, organiserId]);
 
   // Dynamic metrics
@@ -613,6 +615,11 @@ export default function EventDetailScreen() {
                 </Pressable>
               )}
             </View>
+            {saveOrganiserError ? (
+              <Text style={styles.organizerError} accessibilityLiveRegion="polite">
+                {saveOrganiserError}
+              </Text>
+            ) : null}
           </GlassSurface>
 
           {/* SECTION: ABOUT THIS EVENT */}
@@ -1531,6 +1538,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
+  organizerError: { color: "#FCA5A5", fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 10 },
   organizerActionsRow: {
     flexDirection: "row",
     alignItems: "center",

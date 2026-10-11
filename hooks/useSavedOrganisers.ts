@@ -61,14 +61,14 @@ export function useSavedOrganisers({ active = true }: { active?: boolean } = {})
   const toggle = useCallback(
     async (organiser: Omit<SavedOrganiser, "savedAt">): Promise<string | null> => {
       if (!userId || !enabled) return "Sign in to save organisers.";
-      const previous = organisers;
-      const wasSaved = previous.some((o) => o.id === organiser.id);
+      const previousEntry = organisers.find((o) => o.id === organiser.id);
+      const wasSaved = !!previousEntry;
 
       setPendingIds((ids) => [...ids, organiser.id]);
-      setOrganisers(
+      setOrganisers((list) =>
         wasSaved
-          ? previous.filter((o) => o.id !== organiser.id)
-          : [{ ...organiser, savedAt: new Date().toISOString() }, ...previous],
+          ? list.filter((o) => o.id !== organiser.id)
+          : [{ ...organiser, savedAt: new Date().toISOString() }, ...list],
       );
       try {
         if (wasSaved) {
@@ -79,7 +79,14 @@ export function useSavedOrganisers({ active = true }: { active?: boolean } = {})
         }
         return null;
       } catch (err) {
-        setOrganisers(previous);
+        // Roll back only this organiser so other toggles in flight aren't undone.
+        setOrganisers((list) =>
+          wasSaved
+            ? list.some((o) => o.id === organiser.id)
+              ? list
+              : [previousEntry!, ...list]
+            : list.filter((o) => o.id !== organiser.id),
+        );
         return describeProfileError(
           err,
           wasSaved ? "We couldn't remove this organiser." : "We couldn't save this organiser.",

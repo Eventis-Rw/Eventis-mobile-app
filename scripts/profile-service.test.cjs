@@ -61,6 +61,7 @@ const support = load("services/supportService.ts", (name) => {
   if (name === "@/utils/apiClient") return apiStub;
 });
 const legal = load("constants/legal.ts", () => undefined);
+const dates = load("utils/dates.ts", () => undefined);
 const security = load("services/securityService.ts", (name) => {
   if (name === "@/services/profileService") return profile;
   if (name === "@/utils/apiClient") return apiStub;
@@ -533,4 +534,11 @@ test("legal documents have content for every section", () => {
     assert.ok(doc.sections.length > 0);
     assert.ok(doc.sections.every((s) => s.heading && s.paragraphs.length && s.paragraphs.every(Boolean)));
   }
+});
+
+test("today is the local calendar date, not the UTC one", () => {
+  // 00:30 local on 12 Oct is still 11 Oct in UTC for zones ahead of UTC.
+  const justAfterMidnight = new Date(2026, 9, 12, 0, 30);
+  assert.equal(dates.localToday(justAfterMidnight), "2026-10-12");
+  assert.equal(dates.localToday(new Date(2026, 0, 5, 23, 59)), "2026-01-05");
 });

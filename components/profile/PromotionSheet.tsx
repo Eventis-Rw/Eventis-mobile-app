@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { InlineError } from "@/components/profile/ProfileSection";
@@ -38,14 +38,18 @@ export function PromotionSheet({ visible, events, initialEventId, onSubmit, onCl
   const [saving, setSaving] = useState(false);
   const [sent, setSent] = useState(false);
 
+  // Reset only when the sheet opens. The parent re-renders after a request
+  // (new promotions list), which must not wipe the "Request sent" screen.
+  const wasVisible = useRef(false);
   useEffect(() => {
-    if (visible) {
+    if (visible && !wasVisible.current) {
       setEventId(initialEventId ?? (events.length === 1 ? events[0].id : undefined));
       setPlacement(undefined);
       setDurationDays(undefined);
       setError(null);
       setSent(false);
     }
+    wasVisible.current = visible;
   }, [visible, initialEventId, events]);
 
   const submit = async () => {

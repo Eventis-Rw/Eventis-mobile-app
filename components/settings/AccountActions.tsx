@@ -15,13 +15,18 @@ export function AccountActions() {
   const { logout } = useAuth();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const doLogout = async () => {
     setBusy(true);
+    setError(null);
     try {
       await logout();
       setConfirming(false);
       router.replace("/onboarding" as any);
+    } catch {
+      setConfirming(false);
+      setError("We couldn't log you out. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -29,7 +34,7 @@ export function AccountActions() {
 
   return (
     <>
-      <SettingsGroup title="Account actions">
+      <SettingsGroup title="Account actions" footer={error ?? undefined} footerTone="error">
         <SettingsRow icon="log-out-outline" label="Log out" destructive onPress={() => setConfirming(true)} />
         <SettingsRow
           icon="trash-outline"

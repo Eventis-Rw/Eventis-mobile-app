@@ -46,19 +46,11 @@ export default function BookingScreen() {
   const openTicket = () =>
     activeBooking && router.push({ pathname: "/ticket/[id]", params: { id: activeBooking.id } } as any);
 
-  if (!event) {
-    return (
-      <View style={[styles.notFound, { backgroundColor: colors.background }]}>
-        <Text style={[{ color: colors.foreground }]}>Event not found</Text>
-      </View>
-    );
-  }
+  const total = (event?.price ?? 0) * quantity;
 
-  const total = event.price * quantity;
-  const formatPrice = (amount: number) => `${event.currency} ${amount.toLocaleString()}`;
-
+  // Declared before any early return so the hook order never changes.
   const handleConfirm = useCallback(async () => {
-    if (!user) return;
+    if (!user || !event) return;
     // Paid bookings need a verified phone (also enforced on the event page).
     if (event.isPaid && !user.isPhoneVerified) {
       router.push({ pathname: "/verify-phone", params: { purpose: "payment", eventId: event.id } } as any);
@@ -86,6 +78,84 @@ export default function BookingScreen() {
     setLoading(false);
     router.replace("/(tabs)/tickets" as any);
   }, [user, event, quantity, total, addBooking, router]);
+
+  // Ended events drop out of the public list, but their bookings still open here.
+  if (!event) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <GlassSurface
+          style={[
+            styles.header,
+            {
+              paddingTop: insets.top + 8,
+              borderWidth: 0,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: colors.border,
+              borderRadius: 0,
+            },
+          ]}
+        >
+          <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back" hitSlop={8}>
+            <Ionicons name="chevron-back" size={24} color={colors.foreground} />
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Booking</Text>
+          <View style={{ width: 24 }} />
+        </GlassSurface>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
+          {existingBooking ? (
+            <View style={[styles.bookedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.bookedHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]} numberOfLines={2}>
+                  {existingBooking.eventTitle}
+                </Text>
+                <View style={[styles.bookedStatus, { backgroundColor: `${bookingStatusColor(existingBooking.status, colors)}22` }]}>
+                  <Text style={[styles.bookedStatusText, { color: bookingStatusColor(existingBooking.status, colors) }]}>
+                    {existingBooking.status}
+                  </Text>
+                </View>
+              </View>
+              <BookedRow label="Date" value={`${formatDate(existingBooking.eventDate)} · ${existingBooking.eventTime}`} />
+              <BookedRow label="Venue" value={existingBooking.eventLocation} />
+              <BookedRow label="Ticket code" value={existingBooking.ticketCode} />
+              <BookedRow
+                label="Tickets"
+                value={`${existingBooking.quantity} × ${existingBooking.isPaid ? "General Admission" : "Free Reservation"}`}
+              />
+              <BookedRow
+                label="Total"
+                value={
+                  existingBooking.totalPrice === 0
+                    ? "Free"
+                    : `${existingBooking.currency} ${existingBooking.totalPrice.toLocaleString()}`
+                }
+              />
+              <BookedRow label="Booked on" value={formatDate(existingBooking.purchasedAt)} />
+              <Text style={[styles.eventMetaText, { color: colors.mutedForeground }]}>
+                This event has ended or is no longer listed.
+              </Text>
+              <Pressable
+                onPress={() => router.push({ pathname: "/ticket/[id]", params: { id: existingBooking.id } } as any)}
+                style={({ pressed }) => [styles.confirmBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+                accessibilityRole="button"
+              >
+                <Ionicons name="qr-code-outline" size={20} color="#fff" />
+                <Text style={styles.confirmBtnText}>View Ticket</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.notFound}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Event not found</Text>
+              <Text style={[styles.eventMetaText, { color: colors.mutedForeground }]}>
+                It may have ended or been removed.
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  const formatPrice = (amount: number) => `${event.currency} ${amount.toLocaleString()}`;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -357,7 +427,7 @@ function formatDate(dateStr: string) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  notFound: { flex: 1, alignItems: "center", justifyContent: "center" },
+  notFound: { alignItems: "center", gap: 8, paddingTop: 40 },
   bookedCard: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 10 },
   bookedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   bookedStatus: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },

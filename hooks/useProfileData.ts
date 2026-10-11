@@ -4,6 +4,7 @@ import type { Event } from "@/constants/events";
 import { getAccountType, useAuth, type AccountType } from "@/context/AuthContext";
 import { useBookings, type Booking } from "@/context/BookingsContext";
 import { useEvents } from "@/context/EventsContext";
+import { localToday } from "@/utils/dates";
 
 /**
  * Everything the profile screen renders, derived from the existing contexts.
@@ -22,7 +23,7 @@ export function useProfileData() {
   const organisation = accountType === "business" ? user?.organisation : undefined;
   const isPublisher = accountType !== "customer";
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = localToday();
 
   const { upcomingTickets, pastBookings, recentBookings } = useMemo(() => {
     const active = bookings.filter((b) => b.status !== "cancelled");

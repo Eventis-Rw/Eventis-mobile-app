@@ -40,7 +40,7 @@ export function PreferenceSettings({ capabilities }: { capabilities?: AccountCap
           icon="compass-outline"
           label="Categories & location"
           sublabel={sublabel}
-          onPress={() => router.push("/preferences" as any)}
+          onPress={discovery.error ? () => void discovery.reload() : () => router.push("/preferences" as any)}
         />
       ) : null}
       <AppearanceRow />

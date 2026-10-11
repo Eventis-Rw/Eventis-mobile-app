@@ -4,7 +4,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 
 import { FormField } from "@/components/OrganisationForm";
 import { ProfileSubHeader } from "@/components/profile/ProfileSubHeader";
-import { InlineError } from "@/components/profile/ProfileSection";
+import { InlineError, SectionState } from "@/components/profile/ProfileSection";
 import { SettingsGroup, SettingsRow } from "@/components/settings/SettingsPrimitives";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
@@ -33,7 +33,23 @@ export default function SecurityScreen() {
     getToken().then((token) => setHasServerSession(!!token && !token.startsWith("demo_token_") && !user?.isDemo));
   }, [user?.isDemo]);
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <ProfileSubHeader title="Security" />
+        <View style={styles.content}>
+          <SectionState
+            kind="empty"
+            icon="person-outline"
+            title="Sign in to manage security"
+            message="Your sign-in details belong to your account."
+            actionLabel="Sign in"
+            onAction={() => router.replace("/auth/login" as any)}
+          />
+        </View>
+      </View>
+    );
+  }
   const canChangePassword = PASSWORD_CHANGE_SUPPORTED && hasServerSession;
 
   const submitPassword = async () => {

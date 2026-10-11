@@ -16,11 +16,12 @@ import type { useMyReviews } from "@/hooks/useMyReviews";
 import type { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
 import type { Review, SavedOrganiser } from "@/services/profileService";
 import { eventsByOrganiser, groupBookings, type BookingGroup } from "@/utils/customerProfile";
+import { localToday } from "@/utils/dates";
 
 type SavedOrganisersState = ReturnType<typeof useSavedOrganisers>;
 type ReviewsState = ReturnType<typeof useMyReviews>;
 
-const today = () => new Date().toISOString().split("T")[0];
+const today = () => localToday();
 
 function useOpeners() {
   const router = useRouter();

@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { GlassSurface } from "@/components/GlassSurface";
 import { ProfileSubHeader } from "@/components/profile/ProfileSubHeader";
+import { SectionState } from "@/components/profile/ProfileSection";
 import { SettingsGroup, SettingsRow } from "@/components/settings/SettingsPrimitives";
 import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
@@ -23,7 +24,23 @@ export default function PrivacyVisibilityScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  if (!user) return null;
+  if (!user) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <ProfileSubHeader title="Privacy & visibility" />
+        <View style={styles.content}>
+          <SectionState
+            kind="empty"
+            icon="person-outline"
+            title="Sign in to see your privacy details"
+            message="What others can see depends on your account."
+            actionLabel="Sign in"
+            onAction={() => router.replace("/auth/login" as any)}
+          />
+        </View>
+      </View>
+    );
+  }
 
   const accountType = getAccountType(user);
   const isPublisher = accountType !== "customer";

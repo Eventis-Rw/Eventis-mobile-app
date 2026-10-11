@@ -107,7 +107,7 @@ export function getAccountType(user: User | null): AccountType {
 const AuthContext = createContext<AuthContextType | null>(null);
 const USER_CACHE_KEY = "@eventis_user_cache";
 const ONBOARDING_KEY = "@eventis_onboarding_complete";
-/** BookingsContext's cache; removed when the account is deleted. */
+/** BookingsContext's cache; removed on logout and account deletion. */
 const BOOKINGS_CACHE_KEY = "@eventis_bookings_v2";
 
 function getOrganisations(user: User): Organisation[] {
@@ -224,9 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setHasCompletedOnboarding(false);
     await clearToken();
-    await AsyncStorage.removeItem(USER_CACHE_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
+    await AsyncStorage.multiRemove([USER_CACHE_KEY, ONBOARDING_KEY, ONBOARDING_COMPLETE_KEY, BOOKINGS_CACHE_KEY]);
     void Promise.race([
       api.post("/auth/logout").catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, 1500)),

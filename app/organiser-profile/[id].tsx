@@ -8,12 +8,13 @@ import { GlassSurface } from "@/components/GlassSurface";
 import { OrganiserAvatar } from "@/components/profile/CustomerTabs";
 import { ProfileSection, ProfileStatGrid, SectionState } from "@/components/profile/ProfileSection";
 import { ProfileSubHeader } from "@/components/profile/ProfileSubHeader";
-import { useAuth } from "@/context/AuthContext";
+import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
 import { eventsByOrganiser } from "@/utils/customerProfile";
+import { localToday } from "@/utils/dates";
 
 /**
  * Public page for an event organiser: who they are and what they host.
@@ -27,9 +28,10 @@ export default function OrganiserProfileScreen() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { events, isLoading: eventsLoading, error: eventsError, refreshEvents } = useEvents();
-  const saved = useSavedOrganisers();
+  // Customer-only feature: publishers (including a business previewing its own page) don't get Save.
+  const saved = useSavedOrganisers({ active: getAccountType(user) === "customer" });
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const organiserId = id ?? "";
@@ -37,7 +39,7 @@ export default function OrganiserProfileScreen() {
   const savedEntry = saved.organisers.find((o) => o.id === organiserId);
   const name = hosted[0]?.organizer ?? savedEntry?.name ?? nameParam ?? "Organiser";
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = localToday();
   const upcoming = hosted.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
   const past = hosted.filter((e) => e.date < today).sort((a, b) => b.date.localeCompare(a.date));
   const website = hosted.find((e) => e.organizerWebsite)?.organizerWebsite;
@@ -130,7 +132,7 @@ export default function OrganiserProfileScreen() {
             <Text style={[styles.error, { color: colors.destructive }]} accessibilityLiveRegion="polite">
               {saveError}
             </Text>
-          ) : (
+          ) : !saved.enabled && isAuthenticated ? null : (
             <Text style={[styles.hint, { color: colors.mutedForeground }]}>
               Saved organisers are private to you and listed on your profile.
             </Text>

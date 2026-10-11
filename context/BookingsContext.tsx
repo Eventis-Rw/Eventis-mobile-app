@@ -47,20 +47,15 @@ export function BookingsProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const lastFetch = useRef<number>(0);
   const { user, isLoading: authLoading } = useAuth();
-
-  // Signing out or deleting the account must not leave the last user's
-  // bookings in memory for whoever uses the app next.
-  useEffect(() => {
-    if (!authLoading && !user) {
-      setBookings([]);
-      lastFetch.current = 0;
-    }
-  }, [authLoading, user]);
+  const userId = user?.id;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
 
   const loadLocal = useCallback(async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) setBookings(JSON.parse(stored));
+      // The cache is shared on the device, so only show the signed-in user's bookings.
+      if (stored) setBookings((JSON.parse(stored) as Booking[]).filter((b) => b.userId === userIdRef.current));
     } catch {}
   }, []);
 
@@ -87,12 +82,18 @@ export function BookingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [loadLocal, saveLocal]);
 
+  // Load for whoever is signed in, and reload when that changes. Signing out
+  // must not leave the last user's bookings in memory for the next person.
   useEffect(() => {
+    if (authLoading) return;
+    setBookings([]);
+    lastFetch.current = 0;
+    if (!userId) return;
     (async () => {
       await loadLocal();
       await refreshBookings();
     })();
-  }, [loadLocal, refreshBookings]);
+  }, [authLoading, userId, loadLocal, refreshBookings]);
 
   const addBooking = useCallback(
     async (

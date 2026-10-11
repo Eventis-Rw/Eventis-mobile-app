@@ -14,6 +14,7 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { TicketCard } from "@/components/TicketCard";
 import { useBookings } from "@/context/BookingsContext";
 import { useColors } from "@/hooks/useColors";
+import { localToday } from "@/utils/dates";
 
 type Tab = "upcoming" | "past" | "cancelled";
 
@@ -26,7 +27,7 @@ export default function TicketsScreen() {
 
   const headerTop = Platform.OS === "web" ? 67 : insets.top;
 
-  const now = new Date().toISOString().split("T")[0];
+  const now = localToday();
 
   const upcoming = bookings.filter(
     (b) => b.status !== "cancelled" && b.eventDate >= now

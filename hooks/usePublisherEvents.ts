@@ -5,6 +5,7 @@ import type { Event } from "@/constants/events";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { describeProfileError } from "@/services/profileService";
+import { localToday } from "@/utils/dates";
 import {
   deletePublisherEvent,
   fetchPublisherEvents,
@@ -77,7 +78,7 @@ export function usePublisherEvents({
         .filter((e) => !ownIds.has(e.id))
         .map((event) => ({ event, status: "listed" as const, manageable: false })),
     ];
-    const today = new Date().toISOString().split("T")[0];
+    const today = localToday();
     const upcoming = all.filter((m) => m.event.date >= today).sort((a, b) => a.event.date.localeCompare(b.event.date));
     const past = all.filter((m) => m.event.date < today).sort((a, b) => b.event.date.localeCompare(a.event.date));
     return [...upcoming, ...past];

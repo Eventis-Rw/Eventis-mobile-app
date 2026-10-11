@@ -10,9 +10,11 @@ import { ProfileSubHeader } from "@/components/profile/ProfileSubHeader";
 import { SectionState } from "@/components/profile/ProfileSection";
 import { TicketCodePattern } from "@/components/TicketCodePattern";
 import { getEventImage } from "@/constants/eventImages";
+import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { localToday } from "@/utils/dates";
 
 function formatDate(date: string) {
   const parsed = new Date(date);
@@ -27,6 +29,9 @@ export default function TicketScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { getBooking, isLoading } = useBookings();
+  const { user } = useAuth();
+  // Reviews live on the customer profile; publishers have no My Reviews tab.
+  const canReview = getAccountType(user) === "customer";
   const [copied, setCopied] = useState(false);
 
   const booking = getBooking(id ?? "");
@@ -53,7 +58,7 @@ export default function TicketScreen() {
     );
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = localToday();
   const isCancelled = booking.status === "cancelled";
   const isPending = booking.status === "pending";
   const isPast = booking.eventDate < today;
@@ -143,7 +148,7 @@ export default function TicketScreen() {
             label="View event"
             onPress={() => router.push({ pathname: "/event/[id]", params: { id: booking.eventId } } as any)}
           />
-          {isPast && !isCancelled ? (
+          {isPast && !isCancelled && canReview ? (
             <ActionButton
               icon="star-outline"
               label="Rate this event"

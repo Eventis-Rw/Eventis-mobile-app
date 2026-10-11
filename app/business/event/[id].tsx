@@ -15,6 +15,7 @@ import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import { describeProfileError } from "@/services/profileService";
+import { localToday } from "@/utils/dates";
 import {
   deletePublisherEvent,
   fetchPublisherEvent,
@@ -50,7 +51,10 @@ export default function ManageEventScreen() {
   const [promoting, setPromoting] = useState(false);
 
   const load = useCallback(async () => {
-    if (!user || !id) return;
+    if (!user || !id) {
+      setIsLoading(false);
+      return;
+    }
     setLoadError(null);
     try {
       setEvent(await fetchPublisherEvent(user.id, id));
@@ -92,7 +96,7 @@ export default function ManageEventScreen() {
     );
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = localToday();
   const isPast = event.date < today;
   const isPaused = event.status === "paused";
   const fill = event.capacity ? Math.round((event.attendees / event.capacity) * 100) : 0;
