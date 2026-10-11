@@ -61,6 +61,7 @@ export function useProfileData() {
     recentBookings,
     savedEvents,
     publishedEvents,
+    events,
     isLoading: authLoading,
     bookingsLoading: bookingsLoading && bookings.length === 0,
     eventsLoading: eventsLoading && events.length === 0,

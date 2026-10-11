@@ -95,6 +95,8 @@ function RootLayoutNav() {
         name="booking/[id]"
         options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
+      <Stack.Screen name="ticket/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="organiser-profile/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="business" />
       <Stack.Screen name="organiser" options={{ animation: "slide_from_right" }} />
     </Stack>

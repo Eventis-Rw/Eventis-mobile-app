@@ -31,6 +31,8 @@ import { useEvents } from "@/context/EventsContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
+import { organiserIdFromName } from "@/services/profileService";
 import { shareEvent } from "@/utils/shareEvent";
 
 export default function EventDetailScreen() {
@@ -61,6 +63,25 @@ export default function EventDetailScreen() {
   const isSaved = user?.savedEvents.includes(id ?? "") ?? false;
   const palette = getEventPalette(event?.category ?? "Business");
   const timing = useMemo(() => (event ? getEventTiming(event) : null), [event]);
+
+  const savedOrganisers = useSavedOrganisers();
+  const organiserId = event ? organiserIdFromName(event.organizer) : "";
+  const isOrganiserSaved = savedOrganisers.isSaved(organiserId);
+
+  const openOrganiser = useCallback(() => {
+    if (!event) return;
+    router.push({ pathname: "/organiser-profile/[id]", params: { id: organiserId, name: event.organizer } } as never);
+  }, [event, organiserId, router]);
+
+  const toggleSaveOrganiser = useCallback(async () => {
+    if (!event) return;
+    if (!user) {
+      router.push("/auth/login" as never);
+      return;
+    }
+    Haptics.selectionAsync();
+    await savedOrganisers.toggle({ id: organiserId, name: event.organizer, location: event.city });
+  }, [event, user, router, savedOrganisers, organiserId]);
 
   // Dynamic metrics
   const viewsCount = useMemo(() => {
@@ -528,7 +549,12 @@ export default function EventDetailScreen() {
           </View>
 
           <GlassSurface style={styles.organizerCard} intensity={45}>
-            <View style={styles.organizerHeaderRow}>
+            <Pressable
+              style={({ pressed }) => [styles.organizerHeaderRow, { opacity: pressed ? 0.75 : 1 }]}
+              onPress={openOrganiser}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${event.organizer}'s organiser page`}
+            >
               <View style={[styles.organizerAvatar, { backgroundColor: palette.accent }]}>
                 <Text style={styles.organizerAvatarLetter}>
                   {event.organizer.charAt(0).toUpperCase()}
@@ -543,7 +569,8 @@ export default function EventDetailScreen() {
                 </View>
                 <Text style={styles.organizerRole}>Verified Host · Event Organizer</Text>
               </View>
-            </View>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+            </Pressable>
 
             {/* Organizer Quick Actions */}
             <View style={styles.organizerActionsRow}>
@@ -556,6 +583,22 @@ export default function EventDetailScreen() {
                 <Ionicons name="chatbubbles-outline" size={16} color="#FFFFFF" />
                 <Text style={styles.organizerBtnText}>Message Host</Text>
               </Pressable>
+
+              {savedOrganisers.enabled || !user ? (
+                <Pressable
+                  style={[styles.organizerBtn, styles.organizerBtnOutline]}
+                  onPress={toggleSaveOrganiser}
+                  disabled={savedOrganisers.isPending(organiserId)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isOrganiserSaved }}
+                  accessibilityLabel={isOrganiserSaved ? "Remove organiser from saved" : "Save organiser"}
+                >
+                  <Ionicons name={isOrganiserSaved ? "bookmark" : "bookmark-outline"} size={16} color="#38BDF8" />
+                  <Text style={[styles.organizerBtnText, { color: "#38BDF8" }]}>
+                    {isOrganiserSaved ? "Saved" : "Save"}
+                  </Text>
+                </Pressable>
+              ) : null}
 
               {event.organizerWebsite && (
                 <Pressable

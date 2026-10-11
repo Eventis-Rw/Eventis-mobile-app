@@ -135,7 +135,11 @@ export default function TicketsScreen() {
         ]}
         showsVerticalScrollIndicator={false}
         renderItem={({ item, index }) => (
-          <TicketCard booking={item} index={index} />
+          <TicketCard
+            booking={item}
+            index={index}
+            onPress={() => router.push({ pathname: "/ticket/[id]", params: { id: item.id } } as any)}
+          />
         )}
         scrollEnabled={!!activeBookings.length}
         ListEmptyComponent={

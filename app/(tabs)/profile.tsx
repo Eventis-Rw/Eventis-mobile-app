@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -18,15 +18,19 @@ import {
   PublishedEventsList,
   PublisherOverview,
 } from "@/components/profile/ProfileActivity";
+import { MyBookingsTab, MyReviewsTab, MyTicketsTab, SavedOrganisersTab } from "@/components/profile/CustomerTabs";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileCard, ProfileNavRow, ProfileSection, SectionState } from "@/components/profile/ProfileSection";
 import { ProfileTabBar } from "@/components/profile/ProfileTabBar";
 import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useMyReviews } from "@/hooks/useMyReviews";
 import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { useProfileData } from "@/hooks/useProfileData";
+import { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
 import type { ProfileTab } from "@/utils/accountCapabilities";
+import { reviewableBookings } from "@/utils/customerProfile";
 
 export default function ProfileScreen() {
   const colors = useColors();
@@ -37,6 +41,14 @@ export default function ProfileScreen() {
   const capabilities = useAccountCapabilities();
   const { openOrganiserFlow } = useOrganiserAccess();
   const [refreshing, setRefreshing] = useState(false);
+
+  const isCustomer = !capabilities.isPublisher;
+  const savedOrganisers = useSavedOrganisers({ active: isCustomer });
+  const myReviews = useMyReviews({ active: isCustomer });
+  const awaitingReview = useMemo(
+    () => (myReviews.enabled ? reviewableBookings(profile.recentBookings, myReviews.reviews, todayISO()) : []),
+    [myReviews.enabled, myReviews.reviews, profile.recentBookings],
+  );
 
   const { profileTabs } = capabilities;
   // `?tab=` deep links into a section; anything the account can't see falls back to Overview.
@@ -65,7 +77,12 @@ export default function ProfileScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([profile.refresh(), capabilities.refreshVerification()]);
+      await Promise.all([
+        profile.refresh(),
+        capabilities.refreshVerification(),
+        savedOrganisers.refresh(),
+        myReviews.refresh(),
+      ]);
     } finally {
       setRefreshing(false);
     }
@@ -187,6 +204,8 @@ export default function ProfileScreen() {
                 upcomingTickets={profile.upcomingTickets}
                 pastBookings={profile.pastBookings}
                 savedEventsCount={profile.savedEvents.length}
+                savedOrganisersCount={savedOrganisers.enabled ? savedOrganisers.organisers.length : undefined}
+                awaitingReviewCount={myReviews.isLoading ? 0 : awaitingReview.length}
                 isLoading={profile.bookingsLoading}
                 onSelectTab={selectTab}
               />
@@ -206,9 +225,24 @@ export default function ProfileScreen() {
         );
       case "manage":
         return <EventManagementActions includeOrganisation={accountType === "business"} />;
+      case "bookings":
+        return <MyBookingsTab bookings={profile.recentBookings} isLoading={profile.bookingsLoading} />;
+      case "tickets":
+        return (
+          <MyTicketsTab
+            upcomingTickets={profile.upcomingTickets}
+            pastBookings={profile.pastBookings}
+            isLoading={profile.bookingsLoading}
+          />
+        );
+      case "saved-organisers":
+        return <SavedOrganisersTab saved={savedOrganisers} events={profile.events} />;
+      case "reviews":
+        return (
+          <MyReviewsTab reviews={myReviews} awaitingReview={awaitingReview} bookingsLoading={profile.bookingsLoading} />
+        );
       default:
-        // TEMPORARY: bookings, tickets, saved organisers, reviews and analytics
-        // tabs are built in the next subtasks.
+        // TEMPORARY: the analytics tab is built in subtask 4.
         return (
           <SectionState
             kind="empty"
@@ -251,6 +285,8 @@ export default function ProfileScreen() {
     </View>
   );
 }
+
+const todayISO = () => new Date().toISOString().split("T")[0];
 
 const styles = StyleSheet.create({
   root: { flex: 1 },

@@ -28,18 +28,23 @@ const EVENT_IMAGES: Record<string, number> = {
 };
 
 export default function BookingScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `id` is the event; `bookingId` (from My Bookings / a ticket) opens that booking's summary.
+  const { id, bookingId } = useLocalSearchParams<{ id: string; bookingId?: string }>();
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { addBooking, hasBookedEvent } = useBookings();
+  const { bookings, addBooking, hasBookedEvent } = useBookings();
   const { getEventById } = useEvents();
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
 
   const event = getEventById(id ?? "");
   const isAlreadyBooked = hasBookedEvent(id ?? "");
+  const activeBooking = bookings.find((b) => b.eventId === id && b.status !== "cancelled");
+  const existingBooking = bookings.find((b) => b.id === bookingId && b.eventId === id) ?? activeBooking;
+  const openTicket = () =>
+    activeBooking && router.push({ pathname: "/ticket/[id]", params: { id: activeBooking.id } } as any);
 
   if (!event) {
     return (
@@ -103,6 +108,33 @@ export default function BookingScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
       >
+        {existingBooking ? (
+          <View style={[styles.bookedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.bookedHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>Your booking</Text>
+              <View style={[styles.bookedStatus, { backgroundColor: `${bookingStatusColor(existingBooking.status, colors)}22` }]}>
+                <Text style={[styles.bookedStatusText, { color: bookingStatusColor(existingBooking.status, colors) }]}>
+                  {existingBooking.status}
+                </Text>
+              </View>
+            </View>
+            <BookedRow label="Ticket code" value={existingBooking.ticketCode} />
+            <BookedRow
+              label="Tickets"
+              value={`${existingBooking.quantity} × ${existingBooking.isPaid ? "General Admission" : "Free Reservation"}`}
+            />
+            <BookedRow
+              label="Total"
+              value={
+                existingBooking.totalPrice === 0
+                  ? "Free"
+                  : `${existingBooking.currency} ${existingBooking.totalPrice.toLocaleString()}`
+              }
+            />
+            <BookedRow label="Booked on" value={formatDate(existingBooking.purchasedAt)} />
+          </View>
+        ) : null}
+
         {/* Event summary */}
         <Animated.View
           entering={Platform.OS !== "web" ? FadeInDown.delay(80).springify() : undefined}
@@ -264,20 +296,20 @@ export default function BookingScreen() {
             styles.confirmBtn,
             {
               backgroundColor: isAlreadyBooked ? colors.success : colors.primary,
-              opacity: loading || isAlreadyBooked ? 0.8 : 1,
+              opacity: loading ? 0.8 : 1,
             },
           ]}
-          onPress={isAlreadyBooked ? undefined : handleConfirm}
-          disabled={loading || isAlreadyBooked}
+          onPress={isAlreadyBooked ? openTicket : handleConfirm}
+          disabled={loading}
         >
           <Ionicons
-            name={isAlreadyBooked ? "checkmark-circle" : event.isPaid && event.organizerWebsite ? "open-outline" : "ticket"}
+            name={isAlreadyBooked ? "qr-code-outline" : event.isPaid && event.organizerWebsite ? "open-outline" : "ticket"}
             size={20}
             color="#fff"
           />
           <Text style={styles.confirmBtnText}>
             {isAlreadyBooked
-              ? "Already Booked"
+              ? "View Ticket"
               : loading
               ? "Processing..."
               : event.isPaid && event.organizerWebsite
@@ -288,6 +320,23 @@ export default function BookingScreen() {
           </Text>
         </Pressable>
       </GlassSurface>
+    </View>
+  );
+}
+
+function bookingStatusColor(
+  status: "confirmed" | "pending" | "cancelled",
+  colors: ReturnType<typeof useColors>,
+) {
+  return status === "confirmed" ? colors.success : status === "pending" ? colors.warning : colors.destructive;
+}
+
+function BookedRow({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  return (
+    <View style={styles.bookedRow}>
+      <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>{label}</Text>
+      <Text style={[styles.summaryValue, { color: colors.foreground }]}>{value}</Text>
     </View>
   );
 }
@@ -304,6 +353,11 @@ function formatDate(dateStr: string) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   notFound: { flex: 1, alignItems: "center", justifyContent: "center" },
+  bookedCard: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 10 },
+  bookedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  bookedStatus: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  bookedStatusText: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "capitalize" },
+  bookedRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   header: {
     flexDirection: "row",
     alignItems: "center",

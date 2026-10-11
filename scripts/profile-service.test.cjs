@@ -44,6 +44,10 @@ const { getAccountCapabilities } = load("utils/accountCapabilities.ts", (name) =
   if (name === "@/services/profileService") return profile;
 });
 
+const customer = load("utils/customerProfile.ts", (name) => {
+  if (name === "@/services/profileService") return profile;
+});
+
 beforeEach(() => {
   stored = new Map();
 });
@@ -186,4 +190,74 @@ test("paid publishing is unlocked only for verified businesses", () => {
   assert.equal(verified.canPublishPaidEvents, true);
   assert.equal(verified.paidEventsBlockedReason, undefined);
   assert.equal(verified.settings.businessVerification, true);
+});
+
+const booking = (over) => ({
+  id: over.id,
+  eventId: over.eventId ?? `ev_${over.id}`,
+  eventTitle: "Event",
+  eventDate: "2026-10-01",
+  eventTime: "18:00",
+  eventLocation: "Kigali",
+  eventImage: "concert",
+  userId: "u1",
+  status: "confirmed",
+  ticketCode: `EVT-${over.id}`,
+  quantity: 1,
+  totalPrice: 0,
+  currency: "RWF",
+  purchasedAt: "2026-09-01T00:00:00.000Z",
+  isPaid: false,
+  ...over,
+});
+
+test("bookings split into upcoming, past and cancelled", () => {
+  const groups = customer.groupBookings(
+    [
+      booking({ id: "a", eventDate: "2026-12-01" }),
+      booking({ id: "b", eventDate: "2026-11-01" }),
+      booking({ id: "c", eventDate: "2026-09-01" }),
+      booking({ id: "d", eventDate: "2026-12-05", status: "cancelled" }),
+    ],
+    "2026-10-11",
+  );
+  assert.deepEqual(groups.upcoming.map((b) => b.id), ["b", "a"]);
+  assert.deepEqual(groups.past.map((b) => b.id), ["c"]);
+  assert.deepEqual(groups.cancelled.map((b) => b.id), ["d"]);
+});
+
+test("only attended, unreviewed events wait for a review, once per event", () => {
+  const pending = customer.reviewableBookings(
+    [
+      booking({ id: "past1", eventId: "e1", eventDate: "2026-09-01" }),
+      booking({ id: "past1b", eventId: "e1", eventDate: "2026-09-01" }),
+      booking({ id: "reviewed", eventId: "e2", eventDate: "2026-09-02" }),
+      booking({ id: "cancelled", eventId: "e3", eventDate: "2026-09-03", status: "cancelled" }),
+      booking({ id: "pending", eventId: "e4", eventDate: "2026-09-04", status: "pending" }),
+      booking({ id: "future", eventId: "e5", eventDate: "2026-12-01" }),
+    ],
+    [{ id: "r1", eventId: "e2", eventTitle: "Event", rating: 4, createdAt: "2026-09-03" }],
+    "2026-10-11",
+  );
+  assert.deepEqual(pending.map((b) => b.eventId), ["e1"]);
+});
+
+test("organiser events match by organiser id, ignoring case and spacing", () => {
+  const events = [
+    { id: "1", organizer: "Kigali Jazz Club" },
+    { id: "2", organizer: "  kigali jazz club " },
+    { id: "3", organizer: "Other Host" },
+  ];
+  const id = profile.organiserIdFromName("Kigali Jazz Club");
+  assert.deepEqual(customer.eventsByOrganiser(events, id).map((e) => e.id), ["1", "2"]);
+});
+
+test("ticket pattern is stable per code and differs between codes", () => {
+  const a = customer.ticketPattern("EVT-ABC123", 9);
+  assert.deepEqual(a, customer.ticketPattern("EVT-ABC123", 9));
+  assert.notDeepEqual(a, customer.ticketPattern("EVT-XYZ789", 9));
+  assert.equal(a.length, 9);
+  assert.ok(a.every((row) => row.length === 9));
+  // Finder corners are always solid.
+  assert.ok(a[0][0] && a[0][8] && a[8][0]);
 });

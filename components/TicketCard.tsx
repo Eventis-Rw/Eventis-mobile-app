@@ -1,17 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
+import { TicketCodePattern } from "@/components/TicketCodePattern";
 import { useColors } from "@/hooks/useColors";
 import type { Booking } from "@/context/BookingsContext";
 
 interface TicketCardProps {
   booking: Booking;
   index: number;
+  /** Opens the full digital ticket. */
+  onPress?: () => void;
 }
 
-export function TicketCard({ booking, index }: TicketCardProps) {
+export function TicketCard({ booking, index, onPress }: TicketCardProps) {
   const colors = useColors();
   const isCancelled = booking.status === "cancelled";
 
@@ -30,141 +33,97 @@ export function TicketCard({ booking, index }: TicketCardProps) {
         { backgroundColor: colors.card, borderColor: colors.border, opacity: isCancelled ? 0.55 : 1 },
       ]}
     >
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.eventTitle, { color: colors.foreground }]} numberOfLines={2}>
-            {booking.eventTitle}
-          </Text>
-          <View style={[styles.statusBadge, { backgroundColor: `${statusColor}22` }]}>
-            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-            <Text style={[styles.statusText, { color: statusColor }]}>
-              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress}
+        style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+        accessibilityRole={onPress ? "button" : undefined}
+        accessibilityLabel={onPress ? `Open ticket for ${booking.eventTitle}` : undefined}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={[styles.eventTitle, { color: colors.foreground }]} numberOfLines={2}>
+              {booking.eventTitle}
             </Text>
-          </View>
-        </View>
-        <View style={[styles.priceBlock, { backgroundColor: colors.primary }]}>
-          <Text style={styles.priceValue}>
-            {booking.totalPrice === 0
-              ? "Free"
-              : `${booking.currency} ${booking.totalPrice.toLocaleString()}`}
-          </Text>
-        </View>
-      </View>
-
-      <View style={[styles.divider, { backgroundColor: colors.border }]}>
-        <View style={[styles.notch, styles.notchLeft, { backgroundColor: colors.background }]} />
-        <View style={styles.dashedLine}>
-          {Array(20)
-            .fill(null)
-            .map((_, i) => (
-              <View
-                key={i}
-                style={[styles.dash, { backgroundColor: colors.border }]}
-              />
-            ))}
-        </View>
-        <View style={[styles.notch, styles.notchRight, { backgroundColor: colors.background }]} />
-      </View>
-
-      <View style={styles.details}>
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Ionicons name="calendar-outline" size={14} color={colors.mutedForeground} />
-            <View>
-              <Text style={[styles.detailLabel, { color: colors.mutedForeground }]}>Date</Text>
-              <Text style={[styles.detailValue, { color: colors.foreground }]}>
-                {formatDate(booking.eventDate)}
+            <View style={[styles.statusBadge, { backgroundColor: `${statusColor}22` }]}>
+              <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+              <Text style={[styles.statusText, { color: statusColor }]}>
+                {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
               </Text>
             </View>
           </View>
-          <View style={styles.detailItem}>
-            <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
-            <View>
-              <Text style={[styles.detailLabel, { color: colors.mutedForeground }]}>Time</Text>
-              <Text style={[styles.detailValue, { color: colors.foreground }]}>
-                {booking.eventTime}
+          <View style={[styles.priceBlock, { backgroundColor: colors.primary }]}>
+            <Text style={styles.priceValue}>
+              {booking.totalPrice === 0
+                ? "Free"
+                : `${booking.currency} ${booking.totalPrice.toLocaleString()}`}
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]}>
+          <View style={[styles.notch, styles.notchLeft, { backgroundColor: colors.background }]} />
+          <View style={styles.dashedLine}>
+            {Array(20)
+              .fill(null)
+              .map((_, i) => (
+                <View
+                  key={i}
+                  style={[styles.dash, { backgroundColor: colors.border }]}
+                />
+              ))}
+          </View>
+          <View style={[styles.notch, styles.notchRight, { backgroundColor: colors.background }]} />
+        </View>
+
+        <View style={styles.details}>
+          <View style={styles.detailRow}>
+            <View style={styles.detailItem}>
+              <Ionicons name="calendar-outline" size={14} color={colors.mutedForeground} />
+              <View>
+                <Text style={[styles.detailLabel, { color: colors.mutedForeground }]}>Date</Text>
+                <Text style={[styles.detailValue, { color: colors.foreground }]}>
+                  {formatDate(booking.eventDate)}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.detailItem}>
+              <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
+              <View>
+                <Text style={[styles.detailLabel, { color: colors.mutedForeground }]}>Time</Text>
+                <Text style={[styles.detailValue, { color: colors.foreground }]}>
+                  {booking.eventTime}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <View style={[styles.detailItem, { marginTop: 10 }]}>
+            <Ionicons name="location-outline" size={14} color={colors.mutedForeground} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.detailLabel, { color: colors.mutedForeground }]}>Location</Text>
+              <Text style={[styles.detailValue, { color: colors.foreground }]} numberOfLines={2}>
+                {booking.eventLocation}
               </Text>
             </View>
           </View>
         </View>
-        <View style={[styles.detailItem, { marginTop: 10 }]}>
-          <Ionicons name="location-outline" size={14} color={colors.mutedForeground} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.detailLabel, { color: colors.mutedForeground }]}>Location</Text>
-            <Text style={[styles.detailValue, { color: colors.foreground }]} numberOfLines={2}>
-              {booking.eventLocation}
+
+        <View style={[styles.qrSection, { backgroundColor: colors.muted }]}>
+          <TicketCodePattern code={booking.ticketCode} size={54} dimmed={isCancelled} />
+          <View style={styles.ticketInfo}>
+            <Text style={[styles.ticketLabel, { color: colors.mutedForeground }]}>Ticket Code</Text>
+            <Text style={[styles.ticketCode, { color: colors.foreground }]}>
+              {booking.ticketCode}
+            </Text>
+            <Text style={[styles.quantityText, { color: colors.mutedForeground }]}>
+              {booking.quantity} {booking.quantity === 1 ? "ticket" : "tickets"}
             </Text>
           </View>
         </View>
-      </View>
-
-      <View style={[styles.qrSection, { backgroundColor: colors.muted }]}>
-        <View style={styles.qrCode}>
-          <QRPattern />
-        </View>
-        <View style={styles.ticketInfo}>
-          <Text style={[styles.ticketLabel, { color: colors.mutedForeground }]}>Ticket Code</Text>
-          <Text style={[styles.ticketCode, { color: colors.foreground }]}>
-            {booking.ticketCode}
-          </Text>
-          <Text style={[styles.quantityText, { color: colors.mutedForeground }]}>
-            {booking.quantity} {booking.quantity === 1 ? "ticket" : "tickets"}
-          </Text>
-        </View>
-      </View>
+      </Pressable>
     </Animated.View>
   );
 }
-
-function QRPattern() {
-  const colors = useColors();
-  const rows = 6;
-  const cols = 6;
-  const cells = React.useMemo(() => {
-    const arr: boolean[][] = [];
-    for (let r = 0; r < rows; r++) {
-      arr[r] = [];
-      for (let c = 0; c < cols; c++) {
-        arr[r][c] = Math.random() > 0.45;
-      }
-    }
-    arr[0][0] = arr[0][1] = arr[1][0] = arr[1][1] = true;
-    arr[0][4] = arr[0][5] = arr[1][4] = arr[1][5] = true;
-    arr[4][0] = arr[4][1] = arr[5][0] = arr[5][1] = true;
-    return arr;
-  }, []);
-
-  return (
-    <View style={qrStyles.grid}>
-      {cells.map((row, r) =>
-        row.map((filled, c) => (
-          <View
-            key={`${r}-${c}`}
-            style={[
-              qrStyles.cell,
-              { backgroundColor: filled ? colors.foreground : "transparent" },
-            ]}
-          />
-        ))
-      )}
-    </View>
-  );
-}
-
-const qrStyles = StyleSheet.create({
-  grid: {
-    width: 60,
-    height: 60,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 2,
-  },
-  cell: {
-    width: 8,
-    height: 8,
-    borderRadius: 1.5,
-  },
-});
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -282,11 +241,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 18,
     gap: 20,
-  },
-  qrCode: {
-    padding: 8,
-    backgroundColor: "#fff",
-    borderRadius: 10,
   },
   ticketInfo: {
     flex: 1,

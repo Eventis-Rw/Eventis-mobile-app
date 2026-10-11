@@ -34,14 +34,23 @@ function formatBookingDate(date: string) {
   return parsed.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function BookingRow({ booking, showStatus }: { booking: Booking; showStatus?: boolean }) {
+export function BookingRow({
+  booking,
+  showStatus,
+  onPress,
+}: {
+  booking: Booking;
+  showStatus?: boolean;
+  /** Defaults to opening the event. */
+  onPress?: () => void;
+}) {
   const colors = useColors();
   const router = useRouter();
   const statusColor = colors[STATUS_COLOR[booking.status]];
 
   return (
     <Pressable
-      onPress={() => router.push({ pathname: "/event/[id]", params: { id: booking.eventId } } as any)}
+      onPress={onPress ?? (() => router.push({ pathname: "/event/[id]", params: { id: booking.eventId } } as any))}
       style={({ pressed }) => [styles.bookingRow, { opacity: pressed ? 0.7 : 1 }]}
       accessibilityRole="button"
       accessibilityLabel={`${booking.eventTitle}, ${formatBookingDate(booking.eventDate)}, ${booking.status}`}
@@ -71,6 +80,10 @@ interface CustomerOverviewProps {
   upcomingTickets: Booking[];
   pastBookings: Booking[];
   savedEventsCount: number;
+  /** Shown instead of saved events when the Saved Organisers tab is available. */
+  savedOrganisersCount?: number;
+  /** Attended events still waiting for a review; 0 hides the prompt. */
+  awaitingReviewCount?: number;
   isLoading: boolean;
   onSelectTab: (tab: ProfileTab) => void;
 }
@@ -80,6 +93,8 @@ export function CustomerOverview({
   upcomingTickets,
   pastBookings,
   savedEventsCount,
+  savedOrganisersCount,
+  awaitingReviewCount = 0,
   isLoading,
   onSelectTab,
 }: CustomerOverviewProps) {
@@ -98,11 +113,18 @@ export function CustomerOverview({
             },
             {
               label: "Attended",
-              value: pastBookings.length,
+              value: pastBookings.filter((b) => b.status === "confirmed").length,
               icon: "checkmark-done-outline",
               onPress: () => onSelectTab("bookings"),
             },
-            { label: "Saved events", value: savedEventsCount, icon: "bookmark-outline" },
+            savedOrganisersCount === undefined
+              ? { label: "Saved events", value: savedEventsCount, icon: "bookmark-outline" }
+              : {
+                  label: "Organisers",
+                  value: savedOrganisersCount,
+                  icon: "bookmark-outline",
+                  onPress: () => onSelectTab("saved-organisers"),
+                },
           ]}
         />
       </ProfileSection>
@@ -116,7 +138,12 @@ export function CustomerOverview({
           <SectionState kind="loading" message="Loading your tickets…" />
         ) : upcomingTickets.length ? (
           <ProfileCard>
-            <BookingRow booking={upcomingTickets[0]} />
+            <BookingRow
+              booking={upcomingTickets[0]}
+              onPress={() =>
+                router.push({ pathname: "/ticket/[id]", params: { id: upcomingTickets[0].id } } as any)
+              }
+            />
           </ProfileCard>
         ) : (
           <SectionState
@@ -129,6 +156,17 @@ export function CustomerOverview({
           />
         )}
       </ProfileSection>
+
+      {awaitingReviewCount > 0 ? (
+        <ProfileCard>
+          <ProfileNavRow
+            icon="star-outline"
+            label="Rate your recent events"
+            sublabel={`${awaitingReviewCount} ${awaitingReviewCount === 1 ? "event is" : "events are"} waiting for your review`}
+            onPress={() => onSelectTab("reviews")}
+          />
+        </ProfileCard>
+      ) : null}
     </>
   );
 }
