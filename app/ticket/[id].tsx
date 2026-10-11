@@ -150,6 +150,16 @@ export default function TicketScreen() {
               onPress={() => router.push({ pathname: "/(tabs)/profile", params: { tab: "reviews" } } as any)}
             />
           ) : null}
+          <ActionButton
+            icon="flag-outline"
+            label="Report a problem"
+            onPress={() =>
+              router.push({
+                pathname: "/report-problem",
+                params: { reference: booking.ticketCode, category: "bookings" },
+              } as any)
+            }
+          />
         </View>
       </ScrollView>
     </View>

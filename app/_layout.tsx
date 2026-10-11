@@ -102,6 +102,10 @@ function RootLayoutNav() {
       <Stack.Screen name="security" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="privacy-visibility" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="delete-account" options={{ animation: "slide_from_right", gestureEnabled: false }} />
+      <Stack.Screen name="help" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="report-problem" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="legal/[doc]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="about" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="organiser-profile/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="business" />
       <Stack.Screen name="organiser" options={{ animation: "slide_from_right" }} />

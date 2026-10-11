@@ -55,6 +55,12 @@ const publisher = load("services/publisherService.ts", (name) => {
 });
 
 const validation = load("utils/profileValidation.ts", () => undefined);
+const support = load("services/supportService.ts", (name) => {
+  if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
+  if (name === "@/services/profileService") return profile;
+  if (name === "@/utils/apiClient") return apiStub;
+});
+const legal = load("constants/legal.ts", () => undefined);
 const security = load("services/securityService.ts", (name) => {
   if (name === "@/services/profileService") return profile;
   if (name === "@/utils/apiClient") return apiStub;
@@ -496,4 +502,35 @@ test("new passwords are checked before they're sent", () => {
   assert.match(security.validateNewPassword("abc12345", "abc12345", "abc12345"), /haven't used/);
   assert.match(security.validateNewPassword("old", "abc12345", "abc12346"), /match/);
   assert.equal(security.validateNewPassword("old", "abc12345", "abc12345"), null);
+});
+
+test("problem reports need a category, a real description and a reply email", async () => {
+  const valid = {
+    category: "bookings",
+    description: "My ticket code isn't showing at the venue entrance.",
+    contactEmail: "aline@eventis.rw",
+  };
+  assert.deepEqual(support.validateProblemReport(valid), {});
+  const errors = support.validateProblemReport({ category: "", description: "broken", contactEmail: "nope" });
+  assert.ok(errors.category && errors.description && errors.contactEmail);
+  assert.match(
+    support.validateProblemReport({ ...valid, description: "x".repeat(support.REPORT_DESCRIPTION_MAX + 1) }).description,
+    /under/,
+  );
+
+  await assert.rejects(support.submitProblemReport({ ...valid, contactEmail: "" }), /email/);
+  const receipt = await support.submitProblemReport({ ...valid, reference: "  EVT-123  " });
+  assert.match(receipt.reference, /^SUP-/);
+  const saved = JSON.parse(stored.get("@eventis_support_reports"));
+  assert.equal(saved[0].reference, receipt.reference);
+  assert.equal(saved[0].description, valid.description);
+});
+
+test("legal documents have content for every section", () => {
+  for (const key of ["terms", "privacy"]) {
+    const doc = legal.LEGAL_DOCUMENTS[key];
+    assert.ok(doc.title && doc.intro);
+    assert.ok(doc.sections.length > 0);
+    assert.ok(doc.sections.every((s) => s.heading && s.paragraphs.length && s.paragraphs.every(Boolean)));
+  }
 });
