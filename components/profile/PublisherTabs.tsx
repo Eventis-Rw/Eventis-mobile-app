@@ -341,8 +341,17 @@ function VerificationSection({
   paidEventsBlockedReason?: string;
 }) {
   const colors = useColors();
+  const router = useRouter();
   const copy = isBusiness ? VERIFICATION_COPY[status ?? "unverified"] : undefined;
   const requirements = verification?.requirements ?? [];
+  const action = isBusiness
+    ? {
+        label: status === "verified" ? "View verification" : status === "pending" ? "View status" : status === "rejected" ? "Fix and resubmit" : "Start verification",
+        onPress: () => router.push("/business/verification" as any),
+      }
+    : !isPhoneVerified
+      ? { label: "Verify phone", onPress: () => router.push({ pathname: "/verify-phone", params: { purpose: "settings" } } as any) }
+      : undefined;
 
   return (
     <ProfileSection title="Verification">
@@ -395,6 +404,15 @@ function VerificationSection({
             {canPublishPaidEvents ? "You can publish paid events." : paidEventsBlockedReason}
           </Text>
         </View>
+        {action ? (
+          <Pressable
+            onPress={action.onPress}
+            style={({ pressed }) => [styles.verifyBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.verifyBtnText}>{action.label}</Text>
+          </Pressable>
+        ) : null}
       </GlassSurface>
     </ProfileSection>
   );
@@ -796,6 +814,8 @@ const styles = StyleSheet.create({
   requirements: { gap: 8 },
   requirement: { flexDirection: "row", alignItems: "center", gap: 8 },
   requirementText: { fontSize: 13, fontFamily: "Inter_400Regular", flex: 1 },
+  verifyBtn: { minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  verifyBtnText: { color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_600SemiBold" },
   paidRow: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12 },
   sampleNote: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 14, borderWidth: 1 },
   sampleText: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium" },

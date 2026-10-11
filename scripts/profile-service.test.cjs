@@ -123,16 +123,56 @@ test("business verification requires a verified phone and valid details", async 
   assert.equal(initial.status, "unverified");
   assert.equal(initial.requirements.find((r) => r.id === "phone").completed, false);
 
-  const input = { registrationNumber: "RDB-123", taxId: "123456789", representativeName: "Aline" };
+  const input = {
+    legalName: "Kigali Jazz Ltd",
+    registrationNumber: "RDB-123",
+    taxId: "123 456 789",
+    representativeName: "Aline",
+    paymentWebsite: "https://tickets.kigalijazz.rw",
+    registrationDocumentUri: "file:///cert.jpg",
+  };
   await assert.rejects(profile.submitBusinessVerification("u1", "org1", false, input), /phone/);
   await assert.rejects(
     profile.submitBusinessVerification("u1", "org1", true, { ...input, taxId: "12" }),
     /9-digit TIN/,
   );
+  await assert.rejects(
+    profile.submitBusinessVerification("u1", "org1", true, { ...input, paymentWebsite: "tickets" }),
+    /payment|website/i,
+  );
+  await assert.rejects(
+    profile.submitBusinessVerification("u1", "org1", true, { ...input, registrationDocumentUri: "" }),
+    /certificate/,
+  );
 
   const submitted = await profile.submitBusinessVerification("u1", "org1", true, input);
   assert.equal(submitted.status, "pending");
+  assert.ok(submitted.requirements.every((r) => r.completed));
   assert.equal((await profile.fetchBusinessVerification("u1", "org1", true)).status, "pending");
+
+  const declined = await profile.demoReviewBusinessVerification("u1", "org1", "rejected");
+  assert.equal(declined.status, "rejected");
+  assert.ok(declined.rejectionReason);
+  const approved = await profile.demoReviewBusinessVerification("u1", "org1", "verified");
+  assert.equal(approved.status, "verified");
+  assert.equal(approved.rejectionReason, undefined);
+});
+
+test("phone codes are 4 digits and the demo wrong code is rejected", async () => {
+  assert.match(profile.validatePhoneCode("12a4"), /4-digit/);
+  const request = await profile.requestPhoneVerification("+250 788 123 456");
+  assert.equal(request.resendAfterSeconds, profile.PHONE_CODE_RESEND_SECONDS);
+  await assert.rejects(profile.confirmPhoneVerification("+250 788 123 456", profile.DEMO_WRONG_CODE), /isn't right/);
+  const ok = await profile.confirmPhoneVerification("+250 788 123 456", "4821");
+  assert.equal(ok.isPhoneVerified, true);
+});
+
+test("paid publishing stays locked until a business is verified", () => {
+  for (const businessVerification of ["unverified", "pending", "rejected"]) {
+    const caps = getAccountCapabilities({ accountType: "business", hasOrganiserAccess: true, isPhoneVerified: true, businessVerification });
+    assert.equal(caps.canPublishPaidEvents, false, businessVerification);
+    assert.match(caps.paidEventsBlockedReason, /verification/);
+  }
 });
 
 test("clearing local data only removes that user's profile slices", async () => {

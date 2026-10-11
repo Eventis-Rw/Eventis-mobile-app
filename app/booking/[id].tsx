@@ -59,6 +59,11 @@ export default function BookingScreen() {
 
   const handleConfirm = useCallback(async () => {
     if (!user) return;
+    // Paid bookings need a verified phone (also enforced on the event page).
+    if (event.isPaid && !user.isPhoneVerified) {
+      router.push({ pathname: "/verify-phone", params: { purpose: "payment", eventId: event.id } } as any);
+      return;
+    }
     if (event.isPaid && event.organizerWebsite) {
       Linking.openURL(event.organizerWebsite);
       return;

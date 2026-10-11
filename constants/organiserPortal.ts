@@ -63,7 +63,8 @@ export const ORGANISATION_ACTIONS: PortalAction[] = [
   {
     key: "verification",
     title: "Verification",
-    description: "Get a verified badge on your posts and events.",
+    description: "Verify your business to publish paid events.",
     icon: "shield-checkmark-outline",
+    href: "/business/verification",
   },
 ];

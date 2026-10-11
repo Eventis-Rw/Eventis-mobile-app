@@ -81,6 +81,8 @@ interface AuthContextType {
   clearOTPContext: () => void;
   toggleSaveEvent: (eventId: string) => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
+  /** Mirrors a phone number the server just verified; keeps the current session. */
+  markPhoneVerified: (phone: string) => Promise<void>;
   subscribeAsOrganiser: (
     input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string; duration?: number },
     demoOutcome?: DemoOutcome,
@@ -339,6 +341,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, persistUser]
   );
 
+  const markPhoneVerified = useCallback(
+    async (phone: string) => {
+      if (!user) return;
+      await persistUser({ ...user, phone, isPhoneVerified: true });
+    },
+    [user, persistUser]
+  );
+
   const subscribeAsOrganiser = useCallback(
     async (
       input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string; duration?: number },
@@ -444,6 +454,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearOTPContext,
         toggleSaveEvent,
         updateProfile,
+        markPhoneVerified,
         subscribeAsOrganiser,
         setupOrganisation,
         updateOrganisation,

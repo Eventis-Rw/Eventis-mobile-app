@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 
 import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
@@ -42,9 +43,12 @@ export function useAccountCapabilities() {
     }
   }, [userId, organisationId, isPhoneVerified]);
 
-  useEffect(() => {
-    void loadVerification();
-  }, [loadVerification]);
+  // Reload on focus so a submission or review shows up when you come back.
+  useFocusEffect(
+    useCallback(() => {
+      void loadVerification();
+    }, [loadVerification]),
+  );
 
   // The organisation record may carry a status from the API; the dedicated
   // verification endpoint is more detailed and wins once loaded.

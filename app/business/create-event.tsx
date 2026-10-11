@@ -22,6 +22,7 @@ import { InlineError } from "@/components/profile/ProfileSection";
 import { CATEGORIES, type EventCategory } from "@/constants/events";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
+import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
 import { useColors } from "@/hooks/useColors";
 import { describeProfileError } from "@/services/profileService";
 import {
@@ -133,6 +134,8 @@ export default function CreateEventScreen() {
   const { id: editId } = useLocalSearchParams<{ id?: string }>();
   const { user } = useAuth();
   const { refreshEvents } = useEvents();
+  // Journey rule: only verified businesses can charge for tickets.
+  const { canPublishPaidEvents, paidEventsBlockedReason, accountType } = useAccountCapabilities();
   const [form, setForm] = useState<FormState>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +174,10 @@ export default function CreateEventScreen() {
   async function handleSubmit() {
     if (!isValid || submitting || !user) return;
     const input = toInput(form);
+    if (input.isPaid && !canPublishPaidEvents) {
+      setError(paidEventsBlockedReason ?? "Paid events need a verified business account.");
+      return;
+    }
     const problem = validateEventInput(input);
     if (problem) {
       setError(problem);
@@ -360,14 +367,27 @@ export default function CreateEventScreen() {
                 <View style={styles.switchLabel}>
                   <Text style={[styles.label, { color: colors.foreground }]}>Paid Event</Text>
                   <Text style={[styles.switchSub, { color: colors.mutedForeground }]}>
-                    Customers pay on your website
+                    {canPublishPaidEvents ? "Customers pay on your website" : paidEventsBlockedReason}
                   </Text>
+                  {!canPublishPaidEvents && accountType === "business" ? (
+                    <Pressable
+                      onPress={() => router.push("/business/verification" as any)}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                    >
+                      <Text style={[styles.gateLink, { color: colors.primary }]}>Get verified</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
                 <Switch
                   value={form.isPaid}
                   onValueChange={(v) => set("isPaid", v)}
+                  // An existing paid event can still be switched to free.
+                  disabled={!canPublishPaidEvents && !form.isPaid}
                   trackColor={{ true: colors.primary, false: colors.border }}
                   thumbColor="#fff"
+                  accessibilityLabel="Paid event"
+                  accessibilityHint={canPublishPaidEvents ? undefined : paidEventsBlockedReason}
                 />
               </View>
 
@@ -445,6 +465,7 @@ export default function CreateEventScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   kav: { flex: 1 },
+  gateLink: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginTop: 4 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
   submitBlock: { gap: 10 },
   scroll: { flex: 1 },

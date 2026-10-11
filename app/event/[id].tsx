@@ -42,7 +42,7 @@ export default function EventDetailScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
-  const { user, toggleSaveEvent, requestOTP } = useAuth();
+  const { user, toggleSaveEvent } = useAuth();
   const { hasBookedEvent, addBooking } = useBookings();
   const { getEventById, isLoading } = useEvents();
   const { conversations, getContact, sendMessage } = useChat();
@@ -108,10 +108,11 @@ export default function EventDetailScreen() {
       router.push("/auth/register" as never);
       return;
     }
+    // Journey rule: paid bookings need a verified phone. This verifies the
+    // current account (the sign-up OTP screen would replace the session).
     if (event.isPaid && !user.isPhoneVerified) {
-      requestOTP("payment", event.id);
       router.push({
-        pathname: "/auth/otp",
+        pathname: "/verify-phone",
         params: { purpose: "payment", eventId: event.id },
       } as never);
       return;
@@ -137,7 +138,7 @@ export default function EventDetailScreen() {
     });
     setBookingLoading(false);
     router.push("/(tabs)/tickets" as never);
-  }, [addBooking, event, requestOTP, router, timing?.kind, user]);
+  }, [addBooking, event, router, timing?.kind, user]);
 
   const handleSave = useCallback(() => {
     if (!event) return;
@@ -565,9 +566,9 @@ export default function EventDetailScreen() {
                   <Text style={styles.organizerName} numberOfLines={1}>
                     {event.organizer}
                   </Text>
-                  <Ionicons name="checkmark-circle" size={17} color="#38BDF8" style={{ marginLeft: 5 }} />
                 </View>
-                <Text style={styles.organizerRole}>Verified Host · Event Organizer</Text>
+                {/* Events don't carry the organiser's verification status yet, so no badge is claimed. */}
+                <Text style={styles.organizerRole}>Event organiser · View profile</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
             </Pressable>

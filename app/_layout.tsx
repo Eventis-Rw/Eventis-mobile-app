@@ -98,6 +98,7 @@ function RootLayoutNav() {
       <Stack.Screen name="ticket/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="saved-events" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="preferences" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="verify-phone" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="organiser-profile/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="business" />
       <Stack.Screen name="organiser" options={{ animation: "slide_from_right" }} />

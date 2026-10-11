@@ -119,7 +119,7 @@ export interface ReviewInput {
 export type BusinessVerificationStatus = "unverified" | "pending" | "verified" | "rejected";
 
 export interface VerificationRequirement {
-  id: "phone" | "registration" | "tax_id" | "representative_id";
+  id: "phone" | "registration" | "tax_id" | "representative_id" | "payment_website";
   label: string;
   description: string;
   completed: boolean;
@@ -134,9 +134,25 @@ export interface BusinessVerification {
 }
 
 export interface BusinessVerificationInput {
+  legalName: string;
   registrationNumber: string;
   taxId: string;
   representativeName: string;
+  /** Where customers pay for tickets (journey: paid events redirect there). */
+  paymentWebsite: string;
+  /** Photo or scan of the RDB registration certificate (local URI until uploads exist). */
+  registrationDocumentUri: string;
+}
+
+/** Codes are 4 digits; the demo treats this one as wrong so the error state can be reviewed. */
+export const DEMO_WRONG_CODE = "0000";
+export const PHONE_CODE_RESEND_SECONDS = 60;
+export const PHONE_CODE_MAX_ATTEMPTS = 5;
+
+export interface PhoneVerificationRequest {
+  phone: string;
+  /** Seconds before another code can be requested. */
+  resendAfterSeconds: number;
 }
 
 export const REVIEW_COMMENT_MAX = 500;
@@ -164,10 +180,19 @@ export function validateReview(input: Pick<ReviewInput, "rating" | "comment">): 
 }
 
 export function validateBusinessVerification(input: BusinessVerificationInput): string | null {
+  if (input.legalName.trim().length < 2) return "Enter your legal business name.";
   if (!input.registrationNumber.trim()) return "Enter your business registration number.";
-  if (!/^\d{9}$/.test(input.taxId.trim())) return "Enter your 9-digit TIN.";
+  if (!/^\d{9}$/.test(input.taxId.replace(/\s/g, ""))) return "Enter your 9-digit TIN.";
   if (input.representativeName.trim().length < 2) return "Enter the name of the authorised representative.";
+  if (!/^https?:\/\/([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(input.paymentWebsite.trim())) {
+    return "Enter the website where customers pay, starting with https://";
+  }
+  if (!input.registrationDocumentUri) return "Add a photo or scan of your registration certificate.";
   return null;
+}
+
+export function validatePhoneCode(code: string): string | null {
+  return /^\d{4}$/.test(code) ? null : "Enter the 4-digit code.";
 }
 
 export function describeProfileError(error: unknown, fallback: string): string {
@@ -212,7 +237,7 @@ function baseRequirements(phoneVerified: boolean): VerificationRequirement[] {
     {
       id: "registration",
       label: "Business registration",
-      description: "Your RDB company registration number.",
+      description: "Legal name, RDB registration number and certificate.",
       completed: false,
     },
     {
@@ -225,6 +250,12 @@ function baseRequirements(phoneVerified: boolean): VerificationRequirement[] {
       id: "representative_id",
       label: "Authorised representative",
       description: "The person allowed to act for the business.",
+      completed: false,
+    },
+    {
+      id: "payment_website",
+      label: "Payment website",
+      description: "Where customers pay; Eventis doesn't take ticket payments.",
       completed: false,
     },
   ];
@@ -417,6 +448,39 @@ export async function deleteReview(userId: string, reviewId: string): Promise<vo
 }
 
 // ---------------------------------------------------------------------------
+// Phone verification (for an account that is already signed in)
+// ---------------------------------------------------------------------------
+
+// INTEGRATION POINT: POST /api/v1/users/me/phone/verification { phone } -> PhoneVerificationRequest
+// Sends an SMS code. Unlike /auth/otp this never creates or replaces a session.
+export async function requestPhoneVerification(phone: string): Promise<PhoneVerificationRequest> {
+  if (!USE_PROFILE_API) {
+    await wait(DEMO_LATENCY_MS);
+    return { phone, resendAfterSeconds: PHONE_CODE_RESEND_SECONDS };
+  }
+  return api.post<PhoneVerificationRequest>("/api/v1/users/me/phone/verification", { phone });
+}
+
+// INTEGRATION POINT: POST /api/v1/users/me/phone/verification/confirm { phone, code } -> { phone, isPhoneVerified }
+// The server marks the number verified; the client only mirrors the result.
+export async function confirmPhoneVerification(
+  phone: string,
+  code: string,
+): Promise<{ phone: string; isPhoneVerified: true }> {
+  const problem = validatePhoneCode(code);
+  if (problem) throw new Error(problem);
+  if (!USE_PROFILE_API) {
+    await wait(DEMO_LATENCY_MS);
+    if (code === DEMO_WRONG_CODE) throw new Error("That code isn't right. Check the SMS and try again.");
+    return { phone, isPhoneVerified: true };
+  }
+  return api.post<{ phone: string; isPhoneVerified: true }>("/api/v1/users/me/phone/verification/confirm", {
+    phone,
+    code,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Business verification
 // ---------------------------------------------------------------------------
 
@@ -457,10 +521,35 @@ export async function submitBusinessVerification(
     };
     return writeLocal(userId, `verification:${organisationId}`, verification);
   }
+  // TODO: upload `registrationDocumentUri` via the presigned upload endpoint and send its key.
+  const { registrationDocumentUri: _localDocument, ...body } = input;
   return api.post<BusinessVerification>(
     `/api/v1/organisations/${encodeURIComponent(organisationId)}/verification`,
-    input,
+    body,
   );
+}
+
+/**
+ * Demo only: stands in for the Eventis review team so the approved and
+ * declined states can be reviewed without a backend.
+ */
+export async function demoReviewBusinessVerification(
+  userId: string,
+  organisationId: string,
+  outcome: "verified" | "rejected",
+): Promise<BusinessVerification> {
+  if (USE_PROFILE_API) throw new Error("Verification is reviewed by the Eventis team.");
+  await wait(DEMO_LATENCY_MS);
+  const current = await fetchBusinessVerification(userId, organisationId, true);
+  const reviewed: BusinessVerification = {
+    ...current,
+    status: outcome,
+    rejectionReason:
+      outcome === "rejected"
+        ? "The registration certificate was unreadable. Upload a clearer photo and submit again."
+        : undefined,
+  };
+  return writeLocal(userId, `verification:${organisationId}`, reviewed);
 }
 
 /** Removes every locally stored profile slice for a user, e.g. after account deletion. */
