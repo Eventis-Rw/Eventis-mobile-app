@@ -101,7 +101,8 @@ export function getAccountCapabilities(input: CapabilityInput): AccountCapabilit
       accountVisibility: features.accountVisibility,
       blockedUsers: features.blockedUsers,
       notifications: features.notificationPreferences,
-      savedOrganiserNotifications: features.notificationPreferences && features.savedOrganisers,
+      // Saved organisers are a customer feature, so only customers get their alerts.
+      savedOrganiserNotifications: !isPublisher && features.notificationPreferences && features.savedOrganisers,
       businessVerification: isBusiness && features.businessVerification,
       discoveryPreferences: features.discoveryPreferences,
       languagePreference: features.languagePreference,

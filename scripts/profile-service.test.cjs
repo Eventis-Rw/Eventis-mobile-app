@@ -154,6 +154,15 @@ test("customers see the customer tabs and no publisher tools", () => {
   assert.equal(caps.canViewAnalytics, false);
   assert.equal(caps.settings.businessVerification, false);
   assert.equal(caps.settings.editBusinessProfile, false);
+  assert.equal(caps.settings.savedOrganiserNotifications, true);
+});
+
+test("saved-organiser alerts are offered only to customers", () => {
+  for (const accountType of ["individual", "business"]) {
+    const caps = getAccountCapabilities({ accountType, hasOrganiserAccess: true, isPhoneVerified: true });
+    assert.equal(caps.settings.savedOrganiserNotifications, false, accountType);
+    assert.equal(caps.settings.notifications, true, accountType);
+  }
 });
 
 test("unsupported features are hidden rather than shown", () => {

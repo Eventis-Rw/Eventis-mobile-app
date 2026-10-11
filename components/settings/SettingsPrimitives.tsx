@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 
 import { GlassSurface } from "@/components/GlassSurface";
 import { useTheme, type ThemePreference } from "@/context/ThemeContext";
@@ -15,7 +15,18 @@ type Tone = "success" | "warning" | "destructive" | "primary" | "mutedForeground
  * Renders nothing when every child is null, so groups disappear when none of
  * their options apply to the account.
  */
-export function SettingsGroup({ title, footer, children }: { title: string; footer?: string; children: React.ReactNode }) {
+export function SettingsGroup({
+  title,
+  footer,
+  footerTone = "muted",
+  children,
+}: {
+  title: string;
+  footer?: string;
+  /** `error` for a failed save under the group. */
+  footerTone?: "muted" | "error";
+  children: React.ReactNode;
+}) {
   const colors = useColors();
   const rows = React.Children.toArray(children).filter(Boolean);
   if (!rows.length) return null;
@@ -32,7 +43,14 @@ export function SettingsGroup({ title, footer, children }: { title: string; foot
           </React.Fragment>
         ))}
       </GlassSurface>
-      {footer ? <Text style={[styles.footer, { color: colors.mutedForeground }]}>{footer}</Text> : null}
+      {footer ? (
+        <Text
+          style={[styles.footer, { color: footerTone === "error" ? colors.destructive : colors.mutedForeground }]}
+          accessibilityLiveRegion={footerTone === "error" ? "polite" : "none"}
+        >
+          {footer}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -98,6 +116,52 @@ export function SettingsRow({ icon, label, sublabel, badge, onPress, destructive
     >
       {content}
     </Pressable>
+  );
+}
+
+/** A setting that saves when switched. Shows a spinner while the save is in flight. */
+export function SettingsToggleRow({
+  icon,
+  label,
+  sublabel,
+  value,
+  onChange,
+  pending,
+  disabled,
+}: {
+  icon: IconName;
+  label: string;
+  sublabel?: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  pending?: boolean;
+  disabled?: boolean;
+}) {
+  const colors = useColors();
+  return (
+    <View style={styles.row}>
+      <View style={[styles.icon, { backgroundColor: `${colors.primary}14` }]}>
+        <Ionicons name={icon} size={18} color={colors.primary} />
+      </View>
+      <View style={styles.copy}>
+        <Text style={[styles.label, { color: colors.foreground }]}>{label}</Text>
+        {sublabel ? <Text style={[styles.sublabel, { color: colors.mutedForeground }]}>{sublabel}</Text> : null}
+      </View>
+      {pending ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+      <Switch
+        value={value}
+        onValueChange={(next) => {
+          if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+          onChange(next);
+        }}
+        disabled={disabled || pending}
+        trackColor={{ true: colors.primary, false: colors.border }}
+        thumbColor="#FFFFFF"
+        accessibilityLabel={label}
+        accessibilityHint={sublabel}
+        accessibilityState={{ checked: value, busy: pending, disabled: disabled || pending }}
+      />
+    </View>
   );
 }
 

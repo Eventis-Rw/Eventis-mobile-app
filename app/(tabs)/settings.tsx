@@ -6,6 +6,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-n
 import { GlassSurface } from "@/components/GlassSurface";
 import { AccountActions } from "@/components/settings/AccountActions";
 import { AccountSettings, AccountSummary } from "@/components/settings/AccountSettings";
+import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { PreferenceSettings } from "@/components/settings/PreferenceSettings";
 import { APP_VERSION, SupportSettings } from "@/components/settings/SupportSettings";
 import { VerificationSettings } from "@/components/settings/VerificationSettings";
@@ -20,8 +21,8 @@ import { useColors } from "@/hooks/useColors";
  * components/settings and shows only the options that are supported and apply
  * to this account (`useAccountCapabilities`); an empty group is not rendered.
  *
- * TEMPORARY: Notifications arrive in subtask 7 and Privacy & Security in
- * subtask 9; they aren't shown until they have working options.
+ * TEMPORARY: Privacy & Security arrives in subtask 9; it isn't shown until it
+ * has working options.
  */
 export default function SettingsScreen() {
   const colors = useColors();
@@ -62,7 +63,8 @@ export default function SettingsScreen() {
           <>
             <AccountSummary user={user} accountType={getAccountType(user)} />
             <AccountSettings capabilities={capabilities} />
-            <PreferenceSettings />
+            <NotificationSettings capabilities={capabilities} />
+            <PreferenceSettings capabilities={capabilities} />
             <VerificationSettings
               user={user}
               capabilities={capabilities}
