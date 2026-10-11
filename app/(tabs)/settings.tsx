@@ -8,6 +8,7 @@ import { AccountActions } from "@/components/settings/AccountActions";
 import { AccountSettings, AccountSummary } from "@/components/settings/AccountSettings";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { PreferenceSettings } from "@/components/settings/PreferenceSettings";
+import { PrivacySecuritySettings } from "@/components/settings/PrivacySecuritySettings";
 import { APP_VERSION, SupportSettings } from "@/components/settings/SupportSettings";
 import { VerificationSettings } from "@/components/settings/VerificationSettings";
 import { getAccountType, useAuth } from "@/context/AuthContext";
@@ -20,9 +21,6 @@ import { useColors } from "@/hooks/useColors";
  * Security, Verification, Help & Support, Account actions. Each group lives in
  * components/settings and shows only the options that are supported and apply
  * to this account (`useAccountCapabilities`); an empty group is not rendered.
- *
- * TEMPORARY: Privacy & Security arrives in subtask 9; it isn't shown until it
- * has working options.
  */
 export default function SettingsScreen() {
   const colors = useColors();
@@ -65,6 +63,7 @@ export default function SettingsScreen() {
             <AccountSettings capabilities={capabilities} />
             <NotificationSettings capabilities={capabilities} />
             <PreferenceSettings capabilities={capabilities} />
+            <PrivacySecuritySettings capabilities={capabilities} />
             <VerificationSettings
               user={user}
               capabilities={capabilities}

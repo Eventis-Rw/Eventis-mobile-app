@@ -20,6 +20,8 @@ import {
   type PaymentMethod,
   type SubscriptionResult,
 } from "@/services/organiserService";
+import { clearLocalProfileData } from "@/services/profileService";
+import { requestAccountDeletion } from "@/services/securityService";
 import { api, ApiError, clearToken, getToken, setToken } from "@/utils/apiClient";
 
 /**
@@ -74,7 +76,11 @@ interface AuthContextType {
   completeOnboarding: () => Promise<void>;
   exploreDemo: () => Promise<void>;
   logout: () => Promise<void>;
-  deleteAccount: () => Promise<void>;
+  /**
+   * Deletes the account after the identity check (`deletionToken`) and the
+   * typed confirmation. Throws if the server refuses; nothing is cleared then.
+   */
+  deleteAccount: (deletionToken: string, confirmation: string) => Promise<void>;
   signInWithPhoneSession: (phone: string, fullName?: string) => Promise<void>;
   verifyOTP: (code: string, phone?: string, fullName?: string) => Promise<boolean>;
   requestOTP: (purpose: "register" | "payment" | "chat", eventId?: string) => void;
@@ -101,6 +107,8 @@ export function getAccountType(user: User | null): AccountType {
 const AuthContext = createContext<AuthContextType | null>(null);
 const USER_CACHE_KEY = "@eventis_user_cache";
 const ONBOARDING_KEY = "@eventis_onboarding_complete";
+/** BookingsContext's cache; removed when the account is deleted. */
+const BOOKINGS_CACHE_KEY = "@eventis_bookings_v2";
 
 function getOrganisations(user: User): Organisation[] {
   if (user.organisations?.length) return user.organisations;
@@ -225,18 +233,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ]);
   }, []);
 
-  const deleteAccount = useCallback(async () => {
-    setUser(null);
-    setHasCompletedOnboarding(false);
-    await clearToken();
-    await AsyncStorage.removeItem(USER_CACHE_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
-    void Promise.race([
-      api.delete("/users/me").catch(() => undefined),
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-    ]);
-  }, []);
+  const deleteAccount = useCallback(
+    async (deletionToken: string, confirmation: string) => {
+      const token = await getToken();
+      const localOnly = !user || user.isDemo || !token || token.startsWith("demo_token_");
+      // Real accounts: the server must confirm first. If it fails, the error
+      // reaches the screen and the user stays signed in.
+      if (!localOnly) await requestAccountDeletion(deletionToken, confirmation);
+
+      const userId = user?.id;
+      setUser(null);
+      setHasCompletedOnboarding(false);
+      await clearToken();
+      await AsyncStorage.multiRemove([USER_CACHE_KEY, ONBOARDING_KEY, ONBOARDING_COMPLETE_KEY, BOOKINGS_CACHE_KEY]);
+      if (userId) await clearLocalProfileData(userId).catch(() => undefined);
+    },
+    [user],
+  );
 
   const signInWithPhoneSession = useCallback(
     async (phone: string, fullName?: string) => {

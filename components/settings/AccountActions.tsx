@@ -6,22 +6,21 @@ import { SettingsGroup, SettingsRow } from "@/components/settings/SettingsPrimit
 import { useAuth } from "@/context/AuthContext";
 
 /**
- * Group 7: sign out and delete account. Both confirm in an in-app dialog
- * (React Native's Alert buttons don't work on web).
- * TEMPORARY: delete gets OTP re-authentication and type-to-confirm in subtask 9.
+ * Group 7: log out (confirmed in an in-app dialog, since React Native's Alert
+ * buttons don't work on web) and delete account, which opens the secure
+ * three-step flow in app/delete-account.tsx.
  */
 export function AccountActions() {
   const router = useRouter();
-  const { logout, deleteAccount } = useAuth();
-  const [confirm, setConfirm] = useState<"logout" | "delete" | null>(null);
+  const { logout } = useAuth();
+  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const run = async () => {
+  const doLogout = async () => {
     setBusy(true);
     try {
-      if (confirm === "logout") await logout();
-      else await deleteAccount();
-      setConfirm(null);
+      await logout();
+      setConfirming(false);
       router.replace("/onboarding" as any);
     } finally {
       setBusy(false);
@@ -31,28 +30,24 @@ export function AccountActions() {
   return (
     <>
       <SettingsGroup title="Account actions">
-        <SettingsRow icon="log-out-outline" label="Log out" destructive onPress={() => setConfirm("logout")} />
+        <SettingsRow icon="log-out-outline" label="Log out" destructive onPress={() => setConfirming(true)} />
         <SettingsRow
           icon="trash-outline"
           label="Delete account"
           sublabel="Permanently remove your account and data"
           destructive
-          onPress={() => setConfirm("delete")}
+          onPress={() => router.push("/delete-account" as any)}
         />
       </SettingsGroup>
       <ChatConfirmDialog
-        visible={!!confirm}
-        title={confirm === "delete" ? "Delete your account?" : "Log out of Eventis?"}
-        description={
-          confirm === "delete"
-            ? "Your profile, bookings and saved items will be removed. This can't be undone."
-            : "You'll need to sign in again to see your tickets and bookings."
-        }
-        confirmLabel={confirm === "delete" ? "Delete account" : "Log out"}
+        visible={confirming}
+        title="Log out of Eventis?"
+        description="You'll need to sign in again to see your tickets and bookings."
+        confirmLabel="Log out"
         destructive
         busy={busy}
-        onConfirm={() => void run()}
-        onClose={() => setConfirm(null)}
+        onConfirm={() => void doLogout()}
+        onClose={() => setConfirming(false)}
       />
     </>
   );

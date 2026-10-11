@@ -55,6 +55,10 @@ const publisher = load("services/publisherService.ts", (name) => {
 });
 
 const validation = load("utils/profileValidation.ts", () => undefined);
+const security = load("services/securityService.ts", (name) => {
+  if (name === "@/services/profileService") return profile;
+  if (name === "@/utils/apiClient") return apiStub;
+});
 
 beforeEach(() => {
   stored = new Map();
@@ -462,4 +466,34 @@ test("legal identity and categories are validated", () => {
   assert.match(validation.validateRegistrationNumber("a b"), /letters/);
   assert.equal(validation.validateCategories(["Music", "Food"]), undefined);
   assert.match(validation.validateCategories(["a", "b", "c", "d", "e", "f"]), /up to 5/);
+});
+
+test("account deletion re-checks identity on the verified channel", async () => {
+  const sms = await security.requestDeletionChallenge({ phone: "+250 788 123 456", phoneVerified: true, email: "a@b.rw" });
+  assert.equal(sms.channel, "sms");
+  assert.equal(sms.destination, "+250 ••• ••• 456");
+  const email = await security.requestDeletionChallenge({ phone: "+250 788 123 456", phoneVerified: false, email: "aline@eventis.rw" });
+  assert.equal(email.channel, "email");
+  assert.equal(email.destination, "al•••@eventis.rw");
+
+  await assert.rejects(security.verifyDeletionCode("12"), /4-digit/);
+  await assert.rejects(security.verifyDeletionCode(profile.DEMO_WRONG_CODE), /isn't right/);
+  assert.match(await security.verifyDeletionCode("4821"), /^demo_deletion_/);
+});
+
+test("type-to-confirm needs the exact phrase", async () => {
+  assert.equal(security.matchesDeletePhrase("DELETE"), true);
+  assert.equal(security.matchesDeletePhrase(" DELETE "), true);
+  assert.equal(security.matchesDeletePhrase("delete"), false);
+  assert.equal(security.matchesDeletePhrase("DELET"), false);
+  await assert.rejects(security.requestAccountDeletion("token", "delete"), /Type DELETE/);
+});
+
+test("new passwords are checked before they're sent", () => {
+  assert.match(security.validateNewPassword("", "abc12345", "abc12345"), /current/);
+  assert.match(security.validateNewPassword("old", "short1", "short1"), /8 characters/);
+  assert.match(security.validateNewPassword("old", "abcdefgh", "abcdefgh"), /letters and numbers/);
+  assert.match(security.validateNewPassword("abc12345", "abc12345", "abc12345"), /haven't used/);
+  assert.match(security.validateNewPassword("old", "abc12345", "abc12346"), /match/);
+  assert.equal(security.validateNewPassword("old", "abc12345", "abc12345"), null);
 });

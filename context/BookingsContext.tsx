@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 
+import { useAuth } from "@/context/AuthContext";
 import { api, getToken } from "@/utils/apiClient";
 
 export interface Booking {
@@ -45,6 +46,16 @@ export function BookingsProvider({ children }: { children: React.ReactNode }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const lastFetch = useRef<number>(0);
+  const { user, isLoading: authLoading } = useAuth();
+
+  // Signing out or deleting the account must not leave the last user's
+  // bookings in memory for whoever uses the app next.
+  useEffect(() => {
+    if (!authLoading && !user) {
+      setBookings([]);
+      lastFetch.current = 0;
+    }
+  }, [authLoading, user]);
 
   const loadLocal = useCallback(async () => {
     try {
