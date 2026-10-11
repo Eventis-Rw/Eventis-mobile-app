@@ -48,6 +48,12 @@ const customer = load("utils/customerProfile.ts", (name) => {
   if (name === "@/services/profileService") return profile;
 });
 
+const publisher = load("services/publisherService.ts", (name) => {
+  if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
+  if (name === "@/utils/apiClient") return apiStub;
+  if (name === "@/services/profileService") return profile;
+});
+
 beforeEach(() => {
   stored = new Map();
 });
@@ -260,4 +266,107 @@ test("ticket pattern is stable per code and differs between codes", () => {
   assert.ok(a.every((row) => row.length === 9));
   // Finder corners are always solid.
   assert.ok(a[0][0] && a[0][8] && a[8][0]);
+});
+
+const eventInput = (over = {}) => ({
+  title: "Rooftop Jazz",
+  description: "Live jazz on the roof.",
+  category: "Music",
+  location: "Kigali Heights, Kigali",
+  date: "2099-01-15",
+  time: "19:30",
+  capacity: 120,
+  isPaid: false,
+  price: 0,
+  ...over,
+});
+
+test("event input validation covers dates, times, capacity and paid rules", () => {
+  const today = "2026-10-11";
+  assert.equal(publisher.validateEventInput(eventInput(), today), null);
+  assert.match(publisher.validateEventInput(eventInput({ title: " " }), today), /title/);
+  assert.match(publisher.validateEventInput(eventInput({ date: "15/01/2099" }), today), /YYYY-MM-DD/);
+  assert.match(publisher.validateEventInput(eventInput({ date: "2026-10-10" }), today), /past/);
+  assert.match(publisher.validateEventInput(eventInput({ time: "7pm" }), today), /HH:MM/);
+  assert.match(publisher.validateEventInput(eventInput({ capacity: 0 }), today), /Capacity/);
+  assert.match(publisher.validateEventInput(eventInput({ isPaid: true, price: 0 }), today), /price/);
+  assert.match(
+    publisher.validateEventInput(eventInput({ isPaid: true, price: 5000, websiteUrl: "tickets" }), today),
+    /website/,
+  );
+  assert.equal(
+    publisher.validateEventInput(eventInput({ isPaid: true, price: 5000, websiteUrl: "https://tix.rw/jazz" }), today),
+    null,
+  );
+});
+
+test("publishers create, edit, pause and delete only their own events", async () => {
+  const created = await publisher.createPublisherEvent("u1", "Jazz Co", eventInput());
+  assert.equal(created.status, "published");
+  assert.equal(created.organizer, "Jazz Co");
+  assert.equal(created.city, "Kigali");
+  await publisher.createPublisherEvent("u2", "Other", eventInput({ title: "Other event" }));
+
+  assert.deepEqual((await publisher.fetchPublisherEvents("u1")).map((e) => e.id), [created.id]);
+
+  const edited = await publisher.updatePublisherEvent("u1", created.id, eventInput({ title: "Rooftop Jazz II" }));
+  assert.equal(edited.title, "Rooftop Jazz II");
+
+  await publisher.setPublisherEventStatus("u1", created.id, "paused");
+  assert.deepEqual((await publisher.fetchDemoPublishedEvents()).map((e) => e.title), ["Other event"]);
+
+  await assert.rejects(publisher.deletePublisherEvent("u2", created.id), /no longer exists/);
+  await publisher.deletePublisherEvent("u1", created.id);
+  assert.equal((await publisher.fetchPublisherEvents("u1")).length, 0);
+});
+
+test("free events drop any price or payment site", async () => {
+  const created = await publisher.createPublisherEvent(
+    "u1",
+    "Jazz Co",
+    eventInput({ isPaid: false, price: 9000, websiteUrl: "https://tix.rw" }),
+  );
+  assert.equal(created.isPaid, false);
+  assert.equal(created.price, 0);
+  assert.equal(created.organizerWebsite, undefined);
+});
+
+test("analytics totals derive rates safely", () => {
+  const empty = publisher.summariseAnalytics([], { impressions: 0, clicks: 0 }, true);
+  assert.equal(empty.totals.clickThroughRate, 0);
+  assert.equal(empty.totals.fillRate, 0);
+
+  const summary = publisher.summariseAnalytics(
+    [
+      { eventId: "a", title: "A", views: 200, websiteClicks: 10, attendees: 50, capacity: 100 },
+      { eventId: "b", title: "B", views: 300, websiteClicks: 15, attendees: 150, capacity: 100 },
+    ],
+    { impressions: 40, clicks: 4 },
+    false,
+  );
+  assert.equal(summary.totals.views, 500);
+  assert.equal(summary.totals.clickThroughRate, 0.05);
+  assert.equal(summary.totals.fillRate, 1);
+  assert.equal(summary.totals.bannerImpressions, 40);
+});
+
+test("promotion requests are validated and not duplicated while in review", async () => {
+  assert.match(publisher.validatePromotionRequest({}), /event/);
+  assert.match(publisher.validatePromotionRequest({ eventId: "e1" }), /where/);
+  assert.match(publisher.validatePromotionRequest({ eventId: "e1", placement: "featured", durationDays: 5 }), /how long/);
+
+  const input = { eventId: "e1", eventTitle: "Jazz", placement: "home_banner", durationDays: 7 };
+  const promo = await publisher.requestPromotion("u1", input);
+  assert.equal(promo.status, "in_review");
+  await assert.rejects(publisher.requestPromotion("u1", input), /already/);
+  assert.equal((await publisher.fetchPromotions("u1")).length, 1);
+  assert.equal((await publisher.fetchPromotions("u2")).length, 0);
+});
+
+test("publisher profile keeps social links when other fields change", async () => {
+  await profile.updatePublisherProfile("u1", { socialLinks: { instagram: "https://instagram.com/jazz" } });
+  const updated = await profile.updatePublisherProfile("u1", { categories: ["Music"] });
+  assert.deepEqual(updated.categories, ["Music"]);
+  assert.equal(updated.socialLinks.instagram, "https://instagram.com/jazz");
+  assert.deepEqual((await profile.fetchPublisherProfile("u2")).socialLinks, {});
 });

@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
 import { GlassSurface } from "@/components/GlassSurface";
 import { BookingRow } from "@/components/profile/ProfileActivity";
-import { ProfileCard, ProfileSection, SectionState } from "@/components/profile/ProfileSection";
+import { FilterChips, InlineError, ProfileCard, ProfileSection, SectionState } from "@/components/profile/ProfileSection";
 import { ReviewSheet, StarRating } from "@/components/profile/ReviewSheet";
 import { TicketCard } from "@/components/TicketCard";
 import type { Event } from "@/constants/events";
@@ -416,44 +416,6 @@ export function MyReviewsTab({
 // Shared bits
 // ---------------------------------------------------------------------------
 
-function FilterChips<K extends string>({
-  options,
-  active,
-  onChange,
-}: {
-  options: { key: K; label: string; count: number }[];
-  active: K;
-  onChange: (key: K) => void;
-}) {
-  const colors = useColors();
-  return (
-    <View style={styles.chips} accessibilityRole="tablist">
-      {options.map((option) => {
-        const selected = option.key === active;
-        return (
-          <Pressable
-            key={option.key}
-            onPress={() => onChange(option.key)}
-            style={[
-              styles.chip,
-              {
-                backgroundColor: selected ? colors.primary : colors.secondary,
-                borderColor: selected ? colors.primary : colors.border,
-              },
-            ]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-          >
-            <Text style={[styles.chipText, { color: selected ? "#FFFFFF" : colors.foreground }]}>
-              {option.label} {option.count ? `(${option.count})` : ""}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 function TextAction({
   icon,
   label,
@@ -475,20 +437,7 @@ function TextAction({
   );
 }
 
-function InlineError({ message }: { message: string }) {
-  const colors = useColors();
-  return (
-    <View style={styles.inlineError} accessibilityLiveRegion="polite">
-      <Ionicons name="alert-circle" size={16} color={colors.destructive} />
-      <Text style={[styles.inlineErrorText, { color: colors.destructive }]}>{message}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  chips: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip: { paddingHorizontal: 14, minHeight: 36, justifyContent: "center", borderRadius: 999, borderWidth: 1 },
-  chipText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   orgRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   orgMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
   orgCopy: { flex: 1, minWidth: 0, gap: 2 },
@@ -514,6 +463,4 @@ const styles = StyleSheet.create({
   reviewActions: { flexDirection: "row", gap: 18, marginTop: 4 },
   textAction: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32 },
   textActionLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  inlineError: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 },
-  inlineErrorText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
 });

@@ -159,6 +159,55 @@ export function SectionState(props: SectionStateProps) {
   );
 }
 
+/** Single-select filter pills with optional counts. */
+export function FilterChips<K extends string>({
+  options,
+  active,
+  onChange,
+}: {
+  options: { key: K; label: string; count: number }[];
+  active: K;
+  onChange: (key: K) => void;
+}) {
+  const colors = useColors();
+  return (
+    <View style={styles.chips} accessibilityRole="tablist">
+      {options.map((option) => {
+        const selected = option.key === active;
+        return (
+          <Pressable
+            key={option.key}
+            onPress={() => onChange(option.key)}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: selected ? colors.primary : colors.secondary,
+                borderColor: selected ? colors.primary : colors.border,
+              },
+            ]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+          >
+            <Text style={[styles.chipText, { color: selected ? "#FFFFFF" : colors.foreground }]}>
+              {option.label} {option.count ? `(${option.count})` : ""}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function InlineError({ message }: { message: string }) {
+  const colors = useColors();
+  return (
+    <View style={styles.inlineError} accessibilityLiveRegion="polite">
+      <Ionicons name="alert-circle" size={16} color={colors.destructive} />
+      <Text style={[styles.inlineErrorText, { color: colors.destructive }]}>{message}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   section: { gap: 10 },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4 },
@@ -181,4 +230,9 @@ const styles = StyleSheet.create({
   stateText: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular", textAlign: "center" },
   stateBtn: { marginTop: 6, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12 },
   stateBtnText: { color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  chips: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  chip: { paddingHorizontal: 14, minHeight: 36, justifyContent: "center", borderRadius: 999, borderWidth: 1 },
+  chipText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  inlineError: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 },
+  inlineErrorText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
 });

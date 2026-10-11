@@ -1,9 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { EventCard } from "@/components/EventCard";
 import {
   ProfileCard,
   ProfileNavRow,
@@ -11,22 +9,16 @@ import {
   ProfileStatGrid,
   SectionState,
 } from "@/components/profile/ProfileSection";
-import type { Event } from "@/constants/events";
 import { getEventImage } from "@/constants/eventImages";
 import type { Booking } from "@/context/BookingsContext";
 import { useColors } from "@/hooks/useColors";
-import type { Organisation } from "@/services/organiserService";
 import type { ProfileTab } from "@/utils/accountCapabilities";
-
-const PREVIEW_COUNT = 3;
 
 const STATUS_COLOR = {
   confirmed: "success",
   pending: "warning",
   cancelled: "destructive",
 } as const;
-
-const today = () => new Date().toISOString().split("T")[0];
 
 function formatBookingDate(date: string) {
   const parsed = new Date(date);
@@ -171,183 +163,6 @@ export function CustomerOverview({
   );
 }
 
-interface PublishedEventsListProps {
-  events: Event[];
-  isLoading: boolean;
-  error: string | null;
-  onRetry: () => void;
-  canManage: boolean;
-  /** The overview shows a short preview that links to the full tab. */
-  limit?: number;
-  onSeeAll?: () => void;
-}
-
-export function PublishedEventsList({
-  events,
-  isLoading,
-  error,
-  onRetry,
-  canManage,
-  limit,
-  onSeeAll,
-}: PublishedEventsListProps) {
-  const router = useRouter();
-  const shown = limit ? events.slice(0, limit) : events;
-
-  return (
-    <ProfileSection
-      title="Published events"
-      actionLabel={onSeeAll && limit && events.length > limit ? "See all" : undefined}
-      onAction={onSeeAll}
-    >
-      {isLoading ? (
-        <SectionState kind="loading" message="Loading your events…" />
-      ) : error && !events.length ? (
-        <SectionState kind="error" message={error} onRetry={onRetry} />
-      ) : events.length ? (
-        <View style={styles.eventList}>
-          {shown.map((event) => (
-            <EventCard key={event.id} event={event} variant="compact" inset={0} />
-          ))}
-        </View>
-      ) : (
-        <SectionState
-          kind="empty"
-          icon="calendar-outline"
-          title="No published events"
-          message={canManage ? "Events you publish will appear on your profile." : "You haven't published any events yet."}
-          actionLabel={canManage ? "Create event" : undefined}
-          onAction={canManage ? () => router.push("/business/create-event" as any) : undefined}
-        />
-      )}
-    </ProfileSection>
-  );
-}
-
-function publisherStats(events: Event[]) {
-  const now = today();
-  return [
-    { label: "Published", value: events.length, icon: "calendar-outline" as const },
-    { label: "Upcoming", value: events.filter((e) => e.date >= now).length, icon: "time-outline" as const },
-    { label: "Attendees", value: events.reduce((sum, e) => sum + e.attendees, 0), icon: "people-outline" as const },
-  ];
-}
-
-/** Event management entry points; only rendered when the account has organiser access. */
-export function EventManagementActions({ includeOrganisation }: { includeOrganisation?: boolean }) {
-  const router = useRouter();
-  return (
-    <ProfileSection title="Manage">
-      <ProfileCard>
-        <ProfileNavRow
-          icon="briefcase-outline"
-          label="Organiser portal"
-          sublabel="Your events, posts and stories"
-          onPress={() => router.push("/business/dashboard" as any)}
-        />
-        <ProfileNavRow
-          icon="add-circle-outline"
-          label="Create event"
-          sublabel="List a new event with tickets"
-          onPress={() => router.push("/business/create-event" as any)}
-        />
-        {includeOrganisation ? (
-          <ProfileNavRow
-            icon="business-outline"
-            label="Edit organisation"
-            sublabel="Name, logo, description and website"
-            onPress={() => router.push("/business/edit-organisation" as any)}
-          />
-        ) : null}
-      </ProfileCard>
-    </ProfileSection>
-  );
-}
-
-function OrganisationDetails({ organisation, canManage }: { organisation: Organisation; canManage: boolean }) {
-  const colors = useColors();
-  const router = useRouter();
-
-  const details: { icon: React.ComponentProps<typeof Ionicons>["name"]; text: string; onPress?: () => void }[] = [];
-  if (organisation.activities) details.push({ icon: "pricetags-outline", text: organisation.activities });
-  if (organisation.location) details.push({ icon: "location-outline", text: organisation.location });
-  const website = organisation.website;
-  if (website) {
-    details.push({
-      icon: "globe-outline",
-      text: website.replace(/^https?:\/\//, ""),
-      onPress: () => {
-        const url = /^https?:\/\//.test(website) ? website : `https://${website}`;
-        void Linking.openURL(url).catch(() => {});
-      },
-    });
-  }
-
-  return (
-    <ProfileSection
-      title="Organisation"
-      actionLabel={canManage ? "Manage" : undefined}
-      onAction={() => router.push("/business/organisation" as any)}
-    >
-      <ProfileCard>
-        <View style={styles.orgBody}>
-          {organisation.description ? (
-            <Text style={[styles.orgDescription, { color: colors.foreground }]}>{organisation.description}</Text>
-          ) : null}
-          {details.map((detail) => (
-            <Pressable
-              key={detail.icon}
-              onPress={detail.onPress}
-              disabled={!detail.onPress}
-              style={styles.orgDetail}
-              accessibilityRole={detail.onPress ? "link" : "text"}
-            >
-              <Ionicons name={detail.icon} size={15} color={colors.mutedForeground} />
-              <Text
-                style={[styles.orgDetailText, { color: detail.onPress ? colors.primary : colors.mutedForeground }]}
-                numberOfLines={2}
-              >
-                {detail.text}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </ProfileCard>
-    </ProfileSection>
-  );
-}
-
-interface PublisherOverviewProps {
-  organisation?: Organisation;
-  publishedEvents: Event[];
-  eventsLoading: boolean;
-  eventsError: string | null;
-  onRetryEvents: () => void;
-  canManage: boolean;
-  onSelectTab: (tab: ProfileTab) => void;
-}
-
-/** Individual posters and businesses: stats, organisation identity and a preview of published events. */
-export function PublisherOverview({ organisation, onSelectTab, ...props }: PublisherOverviewProps) {
-  return (
-    <>
-      <ProfileSection title="At a glance">
-        <ProfileStatGrid stats={publisherStats(props.publishedEvents)} />
-      </ProfileSection>
-      {organisation ? <OrganisationDetails organisation={organisation} canManage={props.canManage} /> : null}
-      <PublishedEventsList
-        events={props.publishedEvents}
-        isLoading={props.eventsLoading}
-        error={props.eventsError}
-        onRetry={props.onRetryEvents}
-        canManage={props.canManage}
-        limit={PREVIEW_COUNT}
-        onSeeAll={() => onSelectTab("published")}
-      />
-    </>
-  );
-}
-
 const styles = StyleSheet.create({
   bookingRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
   bookingImage: { width: 48, height: 48, borderRadius: 10 },
@@ -357,9 +172,4 @@ const styles = StyleSheet.create({
   ticketCode: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   statusText: { fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "capitalize" },
-  eventList: { gap: 10 },
-  orgBody: { paddingVertical: 12, gap: 8 },
-  orgDescription: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular" },
-  orgDetail: { flexDirection: "row", alignItems: "center", gap: 8 },
-  orgDetailText: { fontSize: 13, fontFamily: "Inter_400Regular", flexShrink: 1 },
 });

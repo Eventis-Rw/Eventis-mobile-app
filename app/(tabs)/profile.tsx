@@ -12,15 +12,16 @@ import {
   View,
 } from "react-native";
 
-import {
-  CustomerOverview,
-  EventManagementActions,
-  PublishedEventsList,
-  PublisherOverview,
-} from "@/components/profile/ProfileActivity";
+import { CustomerOverview } from "@/components/profile/ProfileActivity";
 import { MyBookingsTab, MyReviewsTab, MyTicketsTab, SavedOrganisersTab } from "@/components/profile/CustomerTabs";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
-import { ProfileCard, ProfileNavRow, ProfileSection, SectionState } from "@/components/profile/ProfileSection";
+import { ProfileCard, ProfileNavRow, ProfileSection } from "@/components/profile/ProfileSection";
+import {
+  AnalyticsTab,
+  EventManagementTab,
+  PublishedEventsTab,
+  PublisherOverviewTab,
+} from "@/components/profile/PublisherTabs";
 import { ProfileTabBar } from "@/components/profile/ProfileTabBar";
 import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
@@ -28,6 +29,8 @@ import { useColors } from "@/hooks/useColors";
 import { useMyReviews } from "@/hooks/useMyReviews";
 import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { useProfileData } from "@/hooks/useProfileData";
+import { usePublisherEvents } from "@/hooks/usePublisherEvents";
+import { usePublisherInsights, usePublisherProfile } from "@/hooks/usePublisherInsights";
 import { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
 import type { ProfileTab } from "@/utils/accountCapabilities";
 import { reviewableBookings } from "@/utils/customerProfile";
@@ -50,6 +53,10 @@ export default function ProfileScreen() {
     [myReviews.enabled, myReviews.reviews, profile.recentBookings],
   );
 
+  const { isPublisher } = capabilities;
+  const publisherEvents = usePublisherEvents({ active: isPublisher, listedEvents: profile.publishedEvents });
+  const publisherProfile = usePublisherProfile(isPublisher);
+
   const { profileTabs } = capabilities;
   // `?tab=` deep links into a section; anything the account can't see falls back to Overview.
   const resolveTab = useCallback(
@@ -61,6 +68,12 @@ export default function ProfileScreen() {
   useEffect(() => {
     setActiveTab((current) => resolveTab(params.tab ?? current));
   }, [params.tab, resolveTab]);
+
+  const ownEvents = useMemo(
+    () => publisherEvents.items.filter((m) => m.manageable).map((m) => m.event),
+    [publisherEvents.items],
+  );
+  const insights = usePublisherInsights(capabilities.canViewAnalytics && activeTab === "analytics", ownEvents);
 
   const selectTab = useCallback(
     (tab: ProfileTab) => {
@@ -82,6 +95,9 @@ export default function ProfileScreen() {
         capabilities.refreshVerification(),
         savedOrganisers.refresh(),
         myReviews.refresh(),
+        publisherEvents.refresh(),
+        publisherProfile.refresh(),
+        insights.refresh(),
       ]);
     } finally {
       setRefreshing(false);
@@ -156,13 +172,6 @@ export default function ProfileScreen() {
   }
 
   const { user, accountType } = profile;
-  const publisherProps = {
-    publishedEvents: profile.publishedEvents,
-    eventsLoading: profile.eventsLoading,
-    eventsError: profile.eventsError,
-    onRetryEvents: () => void profile.refreshEvents(),
-    canManage: capabilities.canManageEvents,
-  };
 
   const moreCard = (
     <ProfileSection title="More">
@@ -197,8 +206,24 @@ export default function ProfileScreen() {
       case "overview":
         return (
           <>
-            {capabilities.isPublisher ? (
-              <PublisherOverview organisation={profile.organisation} onSelectTab={selectTab} {...publisherProps} />
+            {accountType !== "customer" ? (
+              <PublisherOverviewTab
+                user={user}
+                accountType={accountType}
+                organisation={profile.organisation}
+                publisherProfile={publisherProfile.profile}
+                profileLoading={publisherProfile.isLoading}
+                profileError={publisherProfile.error}
+                onRetryProfile={() => void publisherProfile.refresh()}
+                events={publisherEvents}
+                canManage={capabilities.canManageEvents}
+                verification={capabilities.verification}
+                verificationStatus={capabilities.businessVerification}
+                canPublishPaidEvents={capabilities.canPublishPaidEvents}
+                paidEventsBlockedReason={capabilities.paidEventsBlockedReason}
+                onSelectTab={selectTab}
+                onEditProfile={openEditProfile}
+              />
             ) : (
               <CustomerOverview
                 upcomingTickets={profile.upcomingTickets}
@@ -214,17 +239,17 @@ export default function ProfileScreen() {
           </>
         );
       case "published":
+        return <PublishedEventsTab events={publisherEvents} canManage={capabilities.canManageEvents} />;
+      case "manage":
         return (
-          <PublishedEventsList
-            events={profile.publishedEvents}
-            isLoading={profile.eventsLoading}
-            error={profile.eventsError}
-            onRetry={publisherProps.onRetryEvents}
-            canManage={capabilities.canManageEvents}
+          <EventManagementTab
+            events={publisherEvents}
+            isBusiness={accountType === "business"}
+            paidEventsBlockedReason={capabilities.paidEventsBlockedReason}
           />
         );
-      case "manage":
-        return <EventManagementActions includeOrganisation={accountType === "business"} />;
+      case "analytics":
+        return <AnalyticsTab insights={insights} events={publisherEvents} />;
       case "bookings":
         return <MyBookingsTab bookings={profile.recentBookings} isLoading={profile.bookingsLoading} />;
       case "tickets":
@@ -240,16 +265,6 @@ export default function ProfileScreen() {
       case "reviews":
         return (
           <MyReviewsTab reviews={myReviews} awaitingReview={awaitingReview} bookingsLoading={profile.bookingsLoading} />
-        );
-      default:
-        // TEMPORARY: the analytics tab is built in subtask 4.
-        return (
-          <SectionState
-            kind="empty"
-            icon="construct-outline"
-            title="Coming next"
-            message="This section is being built."
-          />
         );
     }
   };

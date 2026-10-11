@@ -62,6 +62,29 @@ export interface DiscoveryPreferences {
 
 export const DEFAULT_DISCOVERY_PREFERENCES: DiscoveryPreferences = { categories: [] };
 
+export type SocialPlatform = "instagram" | "facebook" | "x" | "tiktok" | "youtube" | "linkedin";
+
+/**
+ * Public details a publisher shows on their profile, beyond what the user and
+ * organisation records hold. Individuals use the contact, website, category
+ * and social fields; the legal fields apply to businesses only.
+ */
+export interface PublisherProfile {
+  /** Event category names the publisher runs, matching `Event.category`. */
+  categories: string[];
+  contactEmail?: string;
+  contactPhone?: string;
+  website?: string;
+  /** Full URLs keyed by platform. */
+  socialLinks: Partial<Record<SocialPlatform, string>>;
+  legalName?: string;
+  registrationNumber?: string;
+  /** Only the last digits are shown on the profile. */
+  taxId?: string;
+}
+
+export const DEFAULT_PUBLISHER_PROFILE: PublisherProfile = { categories: [], socialLinks: {} };
+
 /**
  * An organiser the user bookmarked. This is a private bookmark list, not a
  * social follow: it has no counts and the organiser is never notified.
@@ -261,6 +284,33 @@ export async function updateDiscoveryPreferences(
     return writeLocal(userId, "preferences", clean);
   }
   return api.put<DiscoveryPreferences>("/api/v1/users/me/preferences", clean);
+}
+
+// ---------------------------------------------------------------------------
+// Publisher profile
+// ---------------------------------------------------------------------------
+
+// INTEGRATION POINT: GET /api/v1/users/me/publisher-profile -> PublisherProfile
+export async function fetchPublisherProfile(userId: string): Promise<PublisherProfile> {
+  if (!USE_PROFILE_API) {
+    await wait(DEMO_LATENCY_MS);
+    const stored = await readLocal<Partial<PublisherProfile>>(userId, "publisher-profile", {});
+    return { ...DEFAULT_PUBLISHER_PROFILE, ...stored, socialLinks: { ...stored.socialLinks } };
+  }
+  return api.get<PublisherProfile>("/api/v1/users/me/publisher-profile");
+}
+
+// INTEGRATION POINT: PATCH /api/v1/users/me/publisher-profile -> PublisherProfile
+export async function updatePublisherProfile(
+  userId: string,
+  patch: Partial<PublisherProfile>,
+): Promise<PublisherProfile> {
+  if (!USE_PROFILE_API) {
+    await wait(DEMO_LATENCY_MS);
+    const current = await fetchPublisherProfile(userId);
+    return writeLocal(userId, "publisher-profile", { ...current, ...patch });
+  }
+  return api.patch<PublisherProfile>("/api/v1/users/me/publisher-profile", patch);
 }
 
 // ---------------------------------------------------------------------------

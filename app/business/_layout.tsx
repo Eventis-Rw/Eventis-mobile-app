@@ -37,6 +37,7 @@ export default function BusinessLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(portal)" />
       <Stack.Screen name="create-event" />
+      <Stack.Screen name="event/[id]" />
       <Stack.Screen name="create-post" />
       <Stack.Screen name="create-story" options={{ presentation: "fullScreenModal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="edit-organisation" />
