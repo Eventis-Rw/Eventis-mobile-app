@@ -265,7 +265,10 @@ export default function EditProfileScreen() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
+        // Android's crop screen hides its confirm button under the status bar
+        // (edge-to-edge), leaving people stuck. The avatar is cropped to a
+        // circle on display anyway, so only iOS gets the crop step.
+        allowsEditing: Platform.OS === "ios",
         aspect: [1, 1],
         quality: 0.5,
       });
@@ -276,6 +279,7 @@ export default function EditProfileScreen() {
   };
 
   const phoneChanged = !samePhone(values.account.phone, user.phone);
+  const photoChanged = values.account.avatarUri !== initial?.account.avatarUri;
 
   const save = async () => {
     setSubmitAttempted(true);
@@ -441,6 +445,14 @@ export default function EditProfileScreen() {
                 </Pressable>
               ) : null}
             </View>
+            {photoChanged ? (
+              <View style={[styles.photoNotice, { backgroundColor: `${colors.primary}14` }]} accessibilityLiveRegion="polite">
+                <Ionicons name="information-circle" size={16} color={colors.primary} />
+                <Text style={[styles.photoNoticeText, { color: colors.foreground }]}>
+                  {values.account.avatarUri ? "New photo selected." : "Photo will be removed."} Tap Save changes to apply it.
+                </Text>
+              </View>
+            ) : null}
             {photoError ? <InlineError message={photoError} /> : null}
           </View>
         )}
@@ -771,6 +783,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   photoActions: { flexDirection: "row", gap: 20 },
+  photoNotice: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  photoNoticeText: { flexShrink: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
   link: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   section: { gap: 8 },
   sectionTitle: { fontSize: 12, letterSpacing: 0.8, fontFamily: "Inter_600SemiBold", paddingHorizontal: 4 },

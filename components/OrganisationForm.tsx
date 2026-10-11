@@ -3,6 +3,7 @@ import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -92,7 +93,8 @@ export function OrganisationFields({
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
+        // Android's crop screen hides its confirm button under the status bar (edge-to-edge).
+        allowsEditing: Platform.OS === "ios",
         aspect: [1, 1],
         quality: 0.5,
       });
