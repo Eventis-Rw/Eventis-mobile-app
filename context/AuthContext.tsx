@@ -20,7 +20,16 @@ import {
   type PaymentMethod,
   type SubscriptionResult,
 } from "@/services/organiserService";
+import { clearLocalProfileData } from "@/services/profileService";
+import { requestAccountDeletion } from "@/services/securityService";
 import { api, ApiError, clearToken, getToken, setToken } from "@/utils/apiClient";
+
+/**
+ * customer   – books and attends events.
+ * individual – a person who publishes their own events (no organisation).
+ * business   – publishes events as an organisation.
+ */
+export type AccountType = "customer" | "individual" | "business";
 
 export interface User {
   id: string;
@@ -30,6 +39,10 @@ export interface User {
   avatarUrl?: string;
   isPhoneVerified: boolean;
   isBusinessAccount: boolean;
+  /** Not returned by the API yet; when absent it is derived by `getAccountType`. */
+  accountType?: AccountType;
+  /** City/area shown on the profile. Businesses fall back to their organisation's location. */
+  location?: string;
   bio?: string;
   businessName?: string;
   businessType?: string;
@@ -63,13 +76,19 @@ interface AuthContextType {
   completeOnboarding: () => Promise<void>;
   exploreDemo: () => Promise<void>;
   logout: () => Promise<void>;
-  deleteAccount: () => Promise<void>;
+  /**
+   * Deletes the account after the identity check (`deletionToken`) and the
+   * typed confirmation. Throws if the server refuses; nothing is cleared then.
+   */
+  deleteAccount: (deletionToken: string, confirmation: string) => Promise<void>;
   signInWithPhoneSession: (phone: string, fullName?: string) => Promise<void>;
   verifyOTP: (code: string, phone?: string, fullName?: string) => Promise<boolean>;
   requestOTP: (purpose: "register" | "payment" | "chat", eventId?: string) => void;
   clearOTPContext: () => void;
   toggleSaveEvent: (eventId: string) => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
+  /** Mirrors a phone number the server just verified; keeps the current session. */
+  markPhoneVerified: (phone: string) => Promise<void>;
   subscribeAsOrganiser: (
     input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string; duration?: number },
     demoOutcome?: DemoOutcome,
@@ -80,9 +99,16 @@ interface AuthContextType {
   deleteOrganisation: (organisationId: string) => Promise<void>;
 }
 
+export function getAccountType(user: User | null): AccountType {
+  if (user?.accountType) return user.accountType;
+  return user?.isBusinessAccount ? "business" : "customer";
+}
+
 const AuthContext = createContext<AuthContextType | null>(null);
 const USER_CACHE_KEY = "@eventis_user_cache";
 const ONBOARDING_KEY = "@eventis_onboarding_complete";
+/** BookingsContext's cache; removed on logout and account deletion. */
+const BOOKINGS_CACHE_KEY = "@eventis_bookings_v2";
 
 function getOrganisations(user: User): Organisation[] {
   if (user.organisations?.length) return user.organisations;
@@ -198,27 +224,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setHasCompletedOnboarding(false);
     await clearToken();
-    await AsyncStorage.removeItem(USER_CACHE_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
+    await AsyncStorage.multiRemove([USER_CACHE_KEY, ONBOARDING_KEY, ONBOARDING_COMPLETE_KEY, BOOKINGS_CACHE_KEY]);
     void Promise.race([
       api.post("/auth/logout").catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, 1500)),
     ]);
   }, []);
 
-  const deleteAccount = useCallback(async () => {
-    setUser(null);
-    setHasCompletedOnboarding(false);
-    await clearToken();
-    await AsyncStorage.removeItem(USER_CACHE_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_KEY);
-    await AsyncStorage.removeItem(ONBOARDING_COMPLETE_KEY);
-    void Promise.race([
-      api.delete("/users/me").catch(() => undefined),
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-    ]);
-  }, []);
+  const deleteAccount = useCallback(
+    async (deletionToken: string, confirmation: string) => {
+      const token = await getToken();
+      const localOnly = !user || user.isDemo || !token || token.startsWith("demo_token_");
+      // Real accounts: the server must confirm first. If it fails, the error
+      // reaches the screen and the user stays signed in.
+      if (!localOnly) await requestAccountDeletion(deletionToken, confirmation);
+
+      const userId = user?.id;
+      setUser(null);
+      setHasCompletedOnboarding(false);
+      await clearToken();
+      await AsyncStorage.multiRemove([USER_CACHE_KEY, ONBOARDING_KEY, ONBOARDING_COMPLETE_KEY, BOOKINGS_CACHE_KEY]);
+      if (userId) await clearLocalProfileData(userId).catch(() => undefined);
+    },
+    [user],
+  );
 
   const signInWithPhoneSession = useCallback(
     async (phone: string, fullName?: string) => {
@@ -308,12 +337,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = useCallback(
     async (data: Partial<User>) => {
       if (!user) return;
-      try {
-        const resp = await api.put<{ user: User }>("/users/me", data);
-        await persistUser(resp.user);
-      } catch {
+      // Demo and offline phone sessions have no server account, so they save on
+      // the device. Real sessions surface API errors instead of faking success.
+      const token = await getToken();
+      if (user.isDemo || !token || token.startsWith("demo_token_")) {
         await persistUser({ ...user, ...data });
+        return;
       }
+      // INTEGRATION POINT: a new photo is a local file URI; upload it through the
+      // presigned upload endpoint and send the returned URL once that exists.
+      const resp = await api.put<{ user: User }>("/users/me", data);
+      await persistUser(resp.user);
+    },
+    [user, persistUser]
+  );
+
+  const markPhoneVerified = useCallback(
+    async (phone: string) => {
+      if (!user) return;
+      await persistUser({ ...user, phone, isPhoneVerified: true });
     },
     [user, persistUser]
   );
@@ -423,6 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearOTPContext,
         toggleSaveEvent,
         updateProfile,
+        markPhoneVerified,
         subscribeAsOrganiser,
         setupOrganisation,
         updateOrganisation,

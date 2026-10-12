@@ -410,6 +410,12 @@ function TabLayout() {
             href: null,
           }}
         />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            href: null,
+          }}
+        />
       </Tabs>
 
       {/* Become an organizer to create post modal */}

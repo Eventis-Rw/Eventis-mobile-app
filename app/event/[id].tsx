@@ -24,13 +24,15 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { GlassSurface } from "@/components/GlassSurface";
 import { getEventImage } from "@/constants/eventImages";
 import { getEventPalette, getEventTiming } from "@/constants/eventPresentation";
-import { useAuth } from "@/context/AuthContext";
+import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
 import { useChat } from "@/context/ChatContext";
 import { useEvents } from "@/context/EventsContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
+import { organiserIdFromName } from "@/services/profileService";
 import { shareEvent } from "@/utils/shareEvent";
 
 export default function EventDetailScreen() {
@@ -40,7 +42,7 @@ export default function EventDetailScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
-  const { user, toggleSaveEvent, requestOTP } = useAuth();
+  const { user, toggleSaveEvent } = useAuth();
   const { hasBookedEvent, addBooking } = useBookings();
   const { getEventById, isLoading } = useEvents();
   const { conversations, getContact, sendMessage } = useChat();
@@ -61,6 +63,27 @@ export default function EventDetailScreen() {
   const isSaved = user?.savedEvents.includes(id ?? "") ?? false;
   const palette = getEventPalette(event?.category ?? "Business");
   const timing = useMemo(() => (event ? getEventTiming(event) : null), [event]);
+
+  // Saving organisers is a customer feature; publishers have no list to save into.
+  const savedOrganisers = useSavedOrganisers({ active: getAccountType(user) === "customer" });
+  const [saveOrganiserError, setSaveOrganiserError] = useState<string | null>(null);
+  const organiserId = event ? organiserIdFromName(event.organizer) : "";
+  const isOrganiserSaved = savedOrganisers.isSaved(organiserId);
+
+  const openOrganiser = useCallback(() => {
+    if (!event) return;
+    router.push({ pathname: "/organiser-profile/[id]", params: { id: organiserId, name: event.organizer } } as never);
+  }, [event, organiserId, router]);
+
+  const toggleSaveOrganiser = useCallback(async () => {
+    if (!event) return;
+    if (!user) {
+      router.push("/auth/login" as never);
+      return;
+    }
+    Haptics.selectionAsync();
+    setSaveOrganiserError(await savedOrganisers.toggle({ id: organiserId, name: event.organizer, location: event.city }));
+  }, [event, user, router, savedOrganisers, organiserId]);
 
   // Dynamic metrics
   const viewsCount = useMemo(() => {
@@ -87,10 +110,11 @@ export default function EventDetailScreen() {
       router.push("/auth/register" as never);
       return;
     }
+    // Journey rule: paid bookings need a verified phone. This verifies the
+    // current account (the sign-up OTP screen would replace the session).
     if (event.isPaid && !user.isPhoneVerified) {
-      requestOTP("payment", event.id);
       router.push({
-        pathname: "/auth/otp",
+        pathname: "/verify-phone",
         params: { purpose: "payment", eventId: event.id },
       } as never);
       return;
@@ -116,7 +140,7 @@ export default function EventDetailScreen() {
     });
     setBookingLoading(false);
     router.push("/(tabs)/tickets" as never);
-  }, [addBooking, event, requestOTP, router, timing?.kind, user]);
+  }, [addBooking, event, router, timing?.kind, user]);
 
   const handleSave = useCallback(() => {
     if (!event) return;
@@ -528,7 +552,12 @@ export default function EventDetailScreen() {
           </View>
 
           <GlassSurface style={styles.organizerCard} intensity={45}>
-            <View style={styles.organizerHeaderRow}>
+            <Pressable
+              style={({ pressed }) => [styles.organizerHeaderRow, { opacity: pressed ? 0.75 : 1 }]}
+              onPress={openOrganiser}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${event.organizer}'s organiser page`}
+            >
               <View style={[styles.organizerAvatar, { backgroundColor: palette.accent }]}>
                 <Text style={styles.organizerAvatarLetter}>
                   {event.organizer.charAt(0).toUpperCase()}
@@ -539,11 +568,12 @@ export default function EventDetailScreen() {
                   <Text style={styles.organizerName} numberOfLines={1}>
                     {event.organizer}
                   </Text>
-                  <Ionicons name="checkmark-circle" size={17} color="#38BDF8" style={{ marginLeft: 5 }} />
                 </View>
-                <Text style={styles.organizerRole}>Verified Host · Event Organizer</Text>
+                {/* Events don't carry the organiser's verification status yet, so no badge is claimed. */}
+                <Text style={styles.organizerRole}>Event organiser · View profile</Text>
               </View>
-            </View>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+            </Pressable>
 
             {/* Organizer Quick Actions */}
             <View style={styles.organizerActionsRow}>
@@ -557,6 +587,22 @@ export default function EventDetailScreen() {
                 <Text style={styles.organizerBtnText}>Message Host</Text>
               </Pressable>
 
+              {savedOrganisers.enabled || !user ? (
+                <Pressable
+                  style={[styles.organizerBtn, styles.organizerBtnOutline]}
+                  onPress={toggleSaveOrganiser}
+                  disabled={savedOrganisers.isPending(organiserId)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isOrganiserSaved }}
+                  accessibilityLabel={isOrganiserSaved ? "Remove organiser from saved" : "Save organiser"}
+                >
+                  <Ionicons name={isOrganiserSaved ? "bookmark" : "bookmark-outline"} size={16} color="#38BDF8" />
+                  <Text style={[styles.organizerBtnText, { color: "#38BDF8" }]}>
+                    {isOrganiserSaved ? "Saved" : "Save"}
+                  </Text>
+                </Pressable>
+              ) : null}
+
               {event.organizerWebsite && (
                 <Pressable
                   style={[styles.organizerBtn, styles.organizerBtnOutline]}
@@ -569,6 +615,11 @@ export default function EventDetailScreen() {
                 </Pressable>
               )}
             </View>
+            {saveOrganiserError ? (
+              <Text style={styles.organizerError} accessibilityLiveRegion="polite">
+                {saveOrganiserError}
+              </Text>
+            ) : null}
           </GlassSurface>
 
           {/* SECTION: ABOUT THIS EVENT */}
@@ -1487,6 +1538,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
+  organizerError: { color: "#FCA5A5", fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 10 },
   organizerActionsRow: {
     flexDirection: "row",
     alignItems: "center",

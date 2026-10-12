@@ -2,6 +2,7 @@ import type { Event } from "@/constants/events";
 import { MOCK_EVENTS } from "@/constants/mockData";
 import { FEATURED_DEMO_POSTS } from "@/constants/featuredDemoPosts";
 import { getEventTiming } from "@/constants/eventPresentation";
+import { fetchDemoPublishedEvents } from "@/services/publisherService";
 import { api } from "@/utils/apiClient";
 
 // Mock data stays the default until the backend's events endpoint ships.
@@ -11,7 +12,12 @@ export const USE_EVENTS_API = process.env.EXPO_PUBLIC_USE_EVENTS_API === "true";
 // Screens read events through EventsContext only, so this is the single place to change.
 export async function fetchEvents(): Promise<Event[]> {
   const events = !USE_EVENTS_API
-    ? [...scheduleFlyerDemoEvents(FEATURED_DEMO_POSTS), ...scheduleGenericDemoEvents(MOCK_EVENTS)]
+    ? [
+        ...scheduleFlyerDemoEvents(FEATURED_DEMO_POSTS),
+        ...scheduleGenericDemoEvents(MOCK_EVENTS),
+        // Events created by publishers on this device (demo store); empty when the profile API is on.
+        ...(await fetchDemoPublishedEvents().catch(() => [])),
+      ]
     : await api.get<Event[]>("/api/v1/events");
 
   // Expired events remain the organizer's historical data, but never appear in public discovery.

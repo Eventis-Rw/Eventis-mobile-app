@@ -45,7 +45,6 @@ export interface Organizer {
   type: "business" | "individual";
   avatar: string;
   eventsCount: number;
-  followersCount: number;
   verified: boolean;
 }
 

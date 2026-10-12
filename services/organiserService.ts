@@ -66,6 +66,8 @@ export interface Organisation {
   location: string;
   website?: string;
   logoUrl?: string;
+  /** Set by the API once verification exists; the profile hides the badge when absent. */
+  verificationStatus?: "verified" | "pending" | "rejected";
 }
 
 /** Only used by the local demo so failure/cancel screens can be reviewed without a backend. */

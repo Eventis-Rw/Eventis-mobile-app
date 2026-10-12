@@ -471,7 +471,7 @@ export default function CreatePostScreen() {
             <View style={styles.previewNotice}>
               <Ionicons name="information-circle-outline" size={18} color="#38BDF8" />
               <Text style={[styles.previewNoticeText, { color: colors.mutedForeground }]}>
-                This is how attendees and followers will see your post in their feed:
+                This is how people will see your post in their feed:
               </Text>
             </View>
 
@@ -534,16 +534,8 @@ export default function CreatePostScreen() {
                 </View>
               )}
 
-              {/* Card Footer Interactions */}
+              {/* Card Footer Interactions: the same actions the real feed card offers (no likes or comments). */}
               <View style={[styles.previewEngagementRow, { borderTopColor: colors.border }]}>
-                <View style={styles.previewActionItem}>
-                  <Ionicons name="heart-outline" size={18} color={colors.mutedForeground} />
-                  <Text style={[styles.previewActionText, { color: colors.mutedForeground }]}>Like</Text>
-                </View>
-                <View style={styles.previewActionItem}>
-                  <Ionicons name="chatbubble-outline" size={18} color={colors.mutedForeground} />
-                  <Text style={[styles.previewActionText, { color: colors.mutedForeground }]}>Comment</Text>
-                </View>
                 <View style={styles.previewActionItem}>
                   <Ionicons name="paper-plane-outline" size={18} color={colors.mutedForeground} />
                   <Text style={[styles.previewActionText, { color: colors.mutedForeground }]}>Share</Text>
