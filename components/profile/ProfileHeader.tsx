@@ -143,7 +143,7 @@ export function ProfileHeader({
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 16, gap: 12 },
+  card: { padding: 16, gap: 12, borderRadius: 22 },
   topRow: { flexDirection: "row", alignItems: "center", gap: 14 },
   avatar: {
     width: 72,

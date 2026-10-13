@@ -11,10 +11,12 @@ export function PortalScreenHeader({
   title,
   icon = "chevron-back",
   disabled,
+  compact = false,
 }: {
   title: string;
   icon?: "chevron-back" | "close";
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
@@ -22,7 +24,7 @@ export function PortalScreenHeader({
   const topPad = insets.top;
 
   return (
-    <View style={[styles.header, { paddingTop: topPad + 8, backgroundColor: palette.canvas, borderBottomColor: palette.line }]}>
+    <View style={[styles.header, { paddingTop: topPad + (compact ? 4 : 8), paddingBottom: compact ? 6 : 12, backgroundColor: palette.canvas, borderBottomColor: palette.line }]}>
       <Pressable
         onPress={() => (router.canGoBack() ? router.back() : router.replace("/business/dashboard" as any))}
         disabled={disabled}
@@ -33,7 +35,7 @@ export function PortalScreenHeader({
         <Ionicons name={icon} size={21} color={disabled ? palette.muted : palette.text} />
       </Pressable>
       <View style={styles.copy}>
-        <Text style={[styles.eyebrow, { color: palette.accent }]}>ORGANISER</Text>
+        {!compact ? <Text style={[styles.eyebrow, { color: palette.accent }]}>ORGANISER</Text> : null}
         <Text style={[styles.title, { color: palette.text }]} numberOfLines={1}>{title}</Text>
       </View>
       <View style={[styles.mark, { backgroundColor: palette.blueSoft }]}>

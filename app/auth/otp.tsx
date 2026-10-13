@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -21,15 +21,14 @@ export default function OTPScreen() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
-  const { purpose, eventId, phone, fullName } = useLocalSearchParams<{
+  const { purpose, phone, fullName } = useLocalSearchParams<{
     purpose?: string;
-    eventId?: string;
     phone?: string;
     fullName?: string;
   }>();
-  const { verifyOTP, completeOnboarding, signInWithPhoneSession, user } = useAuth();
+  const { completeOnboarding, signInWithPhoneSession, user } = useAuth();
+  const isCompleting = useRef(false);
   const [error, setError] = useState(false);
-  const [verified, setVerified] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [canResend, setCanResend] = useState(false);
 
@@ -51,32 +50,25 @@ export default function OTPScreen() {
 
   const handleComplete = useCallback(
     async (code: string) => {
-      let success = await verifyOTP(code, phone, fullName);
-      if (!success && code.length === 4) {
-        // Frontend demo mode: accept 4 digits and establish session
-        await signInWithPhoneSession(phone || "+250 7XX XXX XXX", fullName);
-        success = true;
-      }
-      if (success) {
+      if (code.length !== 4 || isCompleting.current) return;
+      isCompleting.current = true;
+      setError(false);
+
+      try {
+        // Demo flow: any four digits create a local session immediately. Avoid
+        // waiting on the verification API, which can strand an offline user.
+        await signInWithPhoneSession(phone || user?.phone || "+250 7XX XXX XXX", fullName);
         await completeOnboarding();
-        setVerified(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setTimeout(() => {
-          if (purpose === "payment" && eventId) {
-            router.replace(`/booking/${eventId}` as any);
-          } else if (purpose === "chat") {
-            router.back();
-          } else {
-            router.replace("/(tabs)" as any);
-          }
-        }, 1000);
-      } else {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        router.replace("/(tabs)" as any);
+      } catch {
+        isCompleting.current = false;
         setError(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         setTimeout(() => setError(false), 1000);
       }
     },
-    [verifyOTP, completeOnboarding, purpose, eventId, router, phone, fullName, signInWithPhoneSession]
+    [completeOnboarding, fullName, phone, router, signInWithPhoneSession, user?.phone]
   );
 
   const purposeLabels: Record<string, { title: string; subtitle: string }> = {
@@ -127,70 +119,45 @@ export default function OTPScreen() {
         entering={Platform.OS !== "web" ? FadeInDown.delay(80).springify() : undefined}
         style={styles.content}
       >
-        {verified ? (
-          <View style={[styles.verifiedCircle, { backgroundColor: colors.success }]}>
-            <Ionicons name="checkmark-circle-outline" size={38} color="#fff" />
-          </View>
-        ) : (
-          <Logo style={styles.brandLogo} variant="primary" />
-        )}
+        <Logo style={styles.brandLogo} variant="primary" />
 
         <Text style={[styles.title, { color: colors.foreground }]}>
-          {verified ? "Verified!" : label.title}
+          {label.title}
         </Text>
 
-        {!verified && (
-          <>
-            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              {label.subtitle}
-            </Text>
-            <Text style={[styles.contact, { color: colors.foreground }]}>
-              {contact}
-            </Text>
-          </>
-        )}
+        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+          {label.subtitle}
+        </Text>
+        <Text style={[styles.contact, { color: colors.foreground }]}>
+          {contact}
+        </Text>
       </Animated.View>
 
-      {!verified && (
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(200).springify() : undefined}
-          style={styles.otpSection}
-        >
-          <OTPInput onComplete={handleComplete} error={error} />
+      <Animated.View
+        entering={Platform.OS !== "web" ? FadeInDown.delay(200).springify() : undefined}
+        style={styles.otpSection}
+      >
+        <OTPInput onComplete={handleComplete} error={error} />
 
-          <Text style={[styles.hintText, { color: colors.mutedForeground }]}>
-            For demo purposes, any 4 digit code works
-          </Text>
+        <Text style={[styles.hintText, { color: colors.mutedForeground }]}>
+          Enter any 4 digit code to continue to Home
+        </Text>
 
-          <View style={styles.resendRow}>
-            {canResend ? (
-              <Pressable onPress={handleResend}>
-                <Text style={[styles.resendLink, { color: colors.primary }]}>
-                  Resend code
-                </Text>
-              </Pressable>
-            ) : (
-              <Text style={[styles.resendTimer, { color: colors.mutedForeground }]}>
-                Resend in{" "}
-                <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
-                  {countdown}s
-                </Text>
+        <View style={styles.resendRow}>
+          {canResend ? (
+            <Pressable onPress={handleResend}>
+              <Text style={[styles.resendLink, { color: colors.primary }]}>Resend code</Text>
+            </Pressable>
+          ) : (
+            <Text style={[styles.resendTimer, { color: colors.mutedForeground }]}>
+              Resend in{" "}
+              <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
+                {countdown}s
               </Text>
-            )}
-          </View>
-        </Animated.View>
-      )}
-
-      {verified && (
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.springify() : undefined}
-          style={styles.successNote}
-        >
-          <Text style={[styles.successText, { color: colors.success }]}>
-            Identity verified successfully
-          </Text>
-        </Animated.View>
-      )}
+            </Text>
+          )}
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -202,14 +169,6 @@ const styles = StyleSheet.create({
   brandLogo: {
     width: 68,
     height: 68,
-    marginBottom: 6,
-  },
-  verifiedCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    alignItems: "center",
-    justifyContent: "center",
     marginBottom: 6,
   },
   title: { fontSize: 26, fontFamily: "Inter_700Bold", textAlign: "center" },
@@ -230,6 +189,4 @@ const styles = StyleSheet.create({
   resendRow: { alignItems: "center" },
   resendLink: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   resendTimer: { fontSize: 14, fontFamily: "Inter_400Regular" },
-  successNote: { alignItems: "center", marginTop: 32 },
-  successText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
 });

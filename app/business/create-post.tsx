@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -18,6 +17,12 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import {
+  KeyboardAwareScrollView,
+  KeyboardStickyView,
+  useKeyboardState,
+  type KeyboardAwareScrollViewRef,
+} from "react-native-keyboard-controller";
 
 import { OrganiserSurface } from "@/components/OrganiserSurface";
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
@@ -72,6 +77,8 @@ const POST_STEPS = [
 ] as const;
 
 type PostStep = 0 | 1 | 2;
+const PostScrollView = Platform.OS === "web" ? ScrollView : KeyboardAwareScrollView;
+const PostFooter = Platform.OS === "web" ? View : KeyboardStickyView;
 
 export default function CreatePostScreen() {
   const colors = useOrganiserColors();
@@ -83,7 +90,9 @@ export default function CreatePostScreen() {
 
   const orgName = user?.organisation?.name ?? user?.businessName ?? "Eventis Organiser";
 
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
+  const [footerHeight, setFooterHeight] = useState(80);
   const [step, setStep] = useState<PostStep>(0);
   const [caption, setCaption] = useState("");
   const [captionError, setCaptionError] = useState<string | undefined>();
@@ -147,13 +156,23 @@ export default function CreatePostScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
+    <View
       style={[styles.root, { backgroundColor: palette.canvas }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <OrganiserAtmosphere />
-      <PortalScreenHeader title="Create Post" disabled={publishing} />
+      <PortalScreenHeader title="Create Post" compact={keyboardVisible} disabled={publishing} />
 
+      <PostScrollView
+        ref={scrollRef}
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        bottomOffset={footerHeight + 24}
+        extraKeyboardSpace={footerHeight}
+        disableScrollOnKeyboardHide
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
       <View style={[styles.progressHeader, { backgroundColor: palette.surface, borderColor: colors.border }]}>
         <View style={styles.progressMetaRow}>
           <Text style={styles.progressEyebrow}>
@@ -182,13 +201,6 @@ export default function CreatePostScreen() {
         </View>
       </View>
 
-      <ScrollView
-        ref={scrollRef}
-        style={styles.flex}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
         {step === 0 && (
           <Animated.View entering={Platform.OS !== "web" ? FadeInDown.duration(260) : undefined} style={styles.stepContent}>
             <OrganiserSurface style={styles.identityCard}>
@@ -500,9 +512,13 @@ export default function CreatePostScreen() {
             </OrganiserSurface>
           </Animated.View>
         )}
-      </ScrollView>
+      </PostScrollView>
 
-      <View style={[styles.footer, { backgroundColor: palette.canvas, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <PostFooter offset={{ closed: 0, opened: insets.bottom }}>
+      <View
+        onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)}
+        style={[styles.footer, { backgroundColor: palette.canvas, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }]}
+      >
         {step > 0 ? (
           <Pressable onPress={goBack} disabled={publishing} style={[styles.backBtn, { borderColor: colors.border, backgroundColor: palette.surface }]} accessibilityRole="button">
             <Ionicons name="arrow-back" size={19} color={colors.foreground} />
@@ -512,7 +528,7 @@ export default function CreatePostScreen() {
         <Pressable
           onPress={step === 2 ? publish : continueFlow}
           disabled={step === 2 && !canPublish}
-          style={({ pressed }) => [styles.primaryBtn, { backgroundColor: palette.accent, opacity: pressed || publishing ? 0.78 : 1 }]}
+          style={({ pressed }) => [styles.primaryBtn, { backgroundColor: palette.blue, opacity: pressed || publishing ? 0.78 : 1 }]}
           accessibilityRole="button"
           accessibilityLabel={step === 2 ? "Publish post" : `Continue to step ${step + 2}`}
           accessibilityState={{ disabled: step === 2 && !canPublish, busy: publishing }}
@@ -525,7 +541,8 @@ export default function CreatePostScreen() {
           )}
         </Pressable>
       </View>
-    </KeyboardAvoidingView>
+      </PostFooter>
+    </View>
   );
 }
 
@@ -533,10 +550,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   fill: { width: "100%", height: "100%" },
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28 },
+  content: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 28, gap: 22 },
   progressHeader: {
-    marginHorizontal: 20,
-    marginTop: 14,
     borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 18,

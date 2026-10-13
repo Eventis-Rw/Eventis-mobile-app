@@ -101,7 +101,7 @@ export function AccountSettings({ capabilities }: { capabilities: AccountCapabil
 }
 
 const styles = StyleSheet.create({
-  summary: { flexDirection: "row", alignItems: "center", gap: 14, padding: 14 },
+  summary: { flexDirection: "row", alignItems: "center", gap: 14, padding: 14, borderRadius: 20 },
   avatar: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   logo: { borderRadius: 14 },
   avatarImg: { width: "100%", height: "100%", borderRadius: 26 },

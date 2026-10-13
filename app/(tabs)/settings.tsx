@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   iconSpacer: { width: 44 },
   title: { fontSize: 18, fontFamily: "Inter_700Bold" },
   content: { padding: 16, gap: 22 },
-  guest: { alignItems: "center", padding: 20, gap: 8 },
+  guest: { alignItems: "center", padding: 20, gap: 8, borderRadius: 22 },
   guestTitle: { fontSize: 17, fontFamily: "Inter_700Bold", textAlign: "center" },
   guestText: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular", textAlign: "center" },
   signIn: { marginTop: 6, paddingHorizontal: 24, minHeight: 48, justifyContent: "center", borderRadius: 14 },

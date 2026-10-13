@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   },
   rateBtnText: { color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_600SemiBold" },
   reviewList: { gap: 10 },
-  reviewCard: { padding: 14, gap: 6 },
+  reviewCard: { padding: 14, gap: 6, borderRadius: 18 },
   reviewMetaRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   reviewComment: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular" },
   reviewActions: { flexDirection: "row", gap: 18, marginTop: 4 },
