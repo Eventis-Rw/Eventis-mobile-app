@@ -15,14 +15,16 @@ import {
   View,
 } from "react-native";
 
-import { GlassSurface } from "@/components/GlassSurface";
+import { OrganiserSurface } from "@/components/OrganiserSurface";
 import { FormField } from "@/components/OrganisationForm";
+import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { InlineError, SectionState } from "@/components/profile/ProfileSection";
 import { useAuth } from "@/context/AuthContext";
 import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import {
   demoReviewBusinessVerification,
   describeProfileError,
@@ -76,7 +78,8 @@ const EMPTY: BusinessVerificationInput = {
 
 /** Business verification: requirements, status, the submission form and next steps. */
 export default function BusinessVerificationScreen() {
-  const colors = useColors();
+  const colors = useOrganiserColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
@@ -116,7 +119,8 @@ export default function BusinessVerificationScreen() {
 
   if (!user || !organisation) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+        <OrganiserAtmosphere />
         <PortalScreenHeader title="Verification" />
         <View style={styles.content}>
           <SectionState
@@ -197,9 +201,10 @@ export default function BusinessVerificationScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { backgroundColor: colors.background }]}
+      style={[styles.root, { backgroundColor: palette.canvas }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <OrganiserAtmosphere />
       <PortalScreenHeader title="Verification" disabled={submitting} />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
@@ -211,7 +216,7 @@ export default function BusinessVerificationScreen() {
           <SectionState kind="error" message={verificationError} onRetry={() => void refreshVerification()} />
         ) : (
           <>
-            <GlassSurface style={styles.statusCard}>
+            <OrganiserSurface style={styles.statusCard}>
               <Ionicons name={copy.icon} size={28} color={colors[copy.tone]} />
               <View style={styles.flex}>
                 <Text style={[styles.statusTitle, { color: colors.foreground }]}>{copy.title}</Text>
@@ -224,11 +229,11 @@ export default function BusinessVerificationScreen() {
                   </Text>
                 ) : null}
               </View>
-            </GlassSurface>
+            </OrganiserSurface>
 
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>WHAT WE NEED</Text>
-              <GlassSurface style={styles.card}>
+              <OrganiserSurface style={styles.card}>
                 {requirements.map((r) => {
                   const actionable = r.id === "phone" && !r.completed;
                   return (
@@ -255,7 +260,7 @@ export default function BusinessVerificationScreen() {
                     </Pressable>
                   );
                 })}
-              </GlassSurface>
+              </OrganiserSurface>
             </View>
 
             {canSubmit ? (

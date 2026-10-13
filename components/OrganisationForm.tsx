@@ -12,7 +12,8 @@ import {
   type TextInputProps,
 } from "react-native";
 
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import type { Organisation, OrganisationInput } from "@/services/organiserService";
 
 export interface OrganisationFormValues {
@@ -85,7 +86,8 @@ export function OrganisationFields({
   logoUri?: string;
   onLogoChange: (uri: string | undefined) => void;
 }) {
-  const colors = useColors();
+  const colors = useOrganiserColors();
+  const palette = useOrganiserPalette();
   const [logoError, setLogoError] = useState<string | undefined>();
 
   const pickLogo = async () => {
@@ -112,31 +114,31 @@ export function OrganisationFields({
   });
 
   return (
-    <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View style={[styles.section, { backgroundColor: palette.surface, borderColor: palette.line }]}>
       <View style={styles.logoRow}>
         <Pressable
           onPress={pickLogo}
-          style={[styles.logo, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+          style={[styles.logo, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}
           accessibilityRole="button"
           accessibilityLabel={logoUri ? "Change organisation logo" : "Add organisation logo"}
         >
           {logoUri ? (
             <Image source={{ uri: logoUri }} style={styles.logoImg} />
           ) : (
-            <Ionicons name="camera-outline" size={26} color={colors.mutedForeground} />
+            <Ionicons name="camera-outline" size={26} color={palette.muted} />
           )}
         </Pressable>
         <View style={styles.logoCopy}>
-          <Text style={[styles.label, { color: colors.foreground }]}>
-            Logo / profile image <Text style={{ color: colors.mutedForeground }}>(optional)</Text>
+          <Text style={[styles.label, { color: palette.text }]}>
+            Brand image <Text style={{ color: palette.muted }}>(optional)</Text>
           </Text>
-          <Text style={[styles.hint, { color: colors.mutedForeground }]}>Square images work best.</Text>
+          <Text style={[styles.hint, { color: palette.muted }]}>Shown on events, posts and your public profile.</Text>
           <View style={styles.logoActions}>
-            <Pressable onPress={pickLogo} hitSlop={6}>
-              <Text style={[styles.link, { color: colors.primary }]}>{logoUri ? "Change" : "Upload image"}</Text>
+            <Pressable onPress={pickLogo} hitSlop={6} accessibilityRole="button">
+              <Text style={[styles.link, { color: palette.accent }]}>{logoUri ? "Change" : "Choose image"}</Text>
             </Pressable>
             {logoUri && (
-              <Pressable onPress={() => onLogoChange(undefined)} hitSlop={6}>
+              <Pressable onPress={() => onLogoChange(undefined)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Remove organisation image">
                 <Text style={[styles.link, { color: colors.destructive }]}>Remove</Text>
               </Pressable>
             )}
@@ -200,6 +202,8 @@ export function FormField({
   showCount,
   value,
   maxLength,
+  onFocus,
+  onBlur,
   ...input
 }: {
   label: string;
@@ -208,29 +212,42 @@ export function FormField({
   error?: string;
   showCount?: boolean;
 } & TextInputProps) {
-  const colors = useColors();
+  const colors = useOrganiserColors();
+  const palette = useOrganiserPalette();
+  const [focused, setFocused] = useState(false);
   return (
     <View style={styles.field}>
-      <Text style={[styles.label, { color: colors.foreground }]}>
+      <Text style={[styles.label, { color: palette.text }]}>
         {label}
-        {required && <Text style={{ color: colors.primary }}> *</Text>}
+        {required && <Text style={{ color: palette.accent }}> *</Text>}
       </Text>
       <View
         style={[
           styles.inputWrap,
           multiline && styles.inputWrapMulti,
-          { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border },
+          {
+            backgroundColor: focused ? palette.surface : palette.surfaceRaised,
+            borderColor: error ? palette.danger : focused ? palette.blue : palette.line,
+          },
         ]}
       >
-        {icon && <Ionicons name={icon} size={18} color={colors.mutedForeground} />}
+        {icon && <Ionicons name={icon} size={18} color={focused ? palette.blue : palette.muted} />}
         <TextInput
           {...input}
           value={value}
           maxLength={maxLength}
+          onFocus={(event) => {
+            setFocused(true);
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false);
+            onBlur?.(event);
+          }}
           multiline={multiline}
           textAlignVertical={multiline ? "top" : "center"}
-          placeholderTextColor={colors.mutedForeground}
-          style={[styles.input, multiline && styles.inputMulti, { color: colors.foreground }]}
+          placeholderTextColor={palette.muted}
+          style={[styles.input, multiline && styles.inputMulti, { color: palette.text }]}
           accessibilityLabel={label}
           accessibilityHint={error}
         />
@@ -242,7 +259,7 @@ export function FormField({
           <View style={styles.flex} />
         )}
         {showCount && maxLength && (
-          <Text style={[styles.hint, { color: colors.mutedForeground }]}>
+          <Text style={[styles.hint, { color: palette.muted }]}>
             {(value ?? "").length}/{maxLength}
           </Text>
         )}
@@ -253,7 +270,12 @@ export function FormField({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  section: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 14 },
+  section: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 18,
+    gap: 20,
+  },
   logoRow: { flexDirection: "row", alignItems: "center", gap: 14 },
   logo: {
     width: 76,
@@ -273,14 +295,15 @@ const styles = StyleSheet.create({
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 12,
+    minHeight: 52,
+    borderRadius: 15,
     borderWidth: 1,
     paddingHorizontal: 14,
     gap: 10,
   },
   inputWrapMulti: { alignItems: "flex-start" },
-  input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", paddingVertical: 12 },
-  inputMulti: { height: 110 },
+  input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", paddingVertical: 13 },
+  inputMulti: { minHeight: 120 },
   fieldFooter: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   hint: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
   error: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17 },

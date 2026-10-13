@@ -17,12 +17,14 @@ import {
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 
-import { GlassSurface } from "@/components/GlassSurface";
+import { OrganiserSurface } from "@/components/OrganiserSurface";
 import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
+import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { COUNTRIES, PhoneInput, type Country } from "@/components/PhoneInput";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import {
   describeError,
   fetchSubscriptionPlans,
@@ -73,7 +75,8 @@ function computeExpiry(interval: SubscriptionInterval, duration: number): Date {
 }
 
 export default function OrganiserSubscribeScreen() {
-  const colors = useColors();
+  const colors = useOrganiserColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
@@ -215,14 +218,15 @@ export default function OrganiserSubscribeScreen() {
 
   if (phase !== "form") {
     return (
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+        <OrganiserAtmosphere />
         <Stack.Screen options={{ gestureEnabled: phase !== "processing" }} />
         <OrganiserFlowHeader
-          title="Subscription"
+          title="Choose access"
           step={2}
           canGoBack={phase !== "processing" && phase !== "succeeded"}
         />
-        <View style={[styles.statusWrap, { paddingBottom: insets.bottom + 24 }]}>
+        <ScrollView contentContainerStyle={[styles.statusWrap, { paddingBottom: insets.bottom + 24 }]}>
           {phase === "processing" ? (
             <Animated.View entering={FadeIn} style={styles.status}>
               <View style={styles.pulseContainer}>
@@ -230,12 +234,12 @@ export default function OrganiserSubscribeScreen() {
               </View>
               <Text style={[styles.statusTitle, { color: colors.foreground }]}>Waiting for Payment</Text>
               <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-                A prompt for FRw {totalAmount.toLocaleString()} has been sent to{" "}
+                A prompt for RWF {totalAmount.toLocaleString()} has been sent to{" "}
                 <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>{payerPhone}</Text> via{" "}
                 {METHODS.find((m) => m.id === method)?.label}.
               </Text>
               <View style={[styles.promptTip, { backgroundColor: colors.glass, borderColor: colors.border }]}>
-                <Ionicons name="shield-checkmark-outline" size={18} color="#38BDF8" />
+                <Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />
                 <Text style={[styles.promptTipText, { color: colors.mutedForeground }]}>
                   Authorize on your handset. Keep this screen open until confirmed.
                 </Text>
@@ -246,7 +250,7 @@ export default function OrganiserSubscribeScreen() {
               phase={phase}
               planLabel={
                 activePlan
-                  ? `${activePlan.name} (${selectedDuration} ${selectedInterval}${selectedDuration > 1 ? "s" : ""}) · FRw ${totalAmount.toLocaleString()}`
+                  ? `${activePlan.name} (${selectedDuration} ${selectedInterval}${selectedDuration > 1 ? "s" : ""}) · RWF ${totalAmount.toLocaleString()}`
                   : ""
               }
               renewsAt={user?.organiserSubscription?.renewsAt}
@@ -256,7 +260,7 @@ export default function OrganiserSubscribeScreen() {
               onLeave={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
             />
           )}
-        </View>
+        </ScrollView>
       </View>
     );
   }
@@ -265,10 +269,11 @@ export default function OrganiserSubscribeScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { backgroundColor: colors.background }]}
+      style={[styles.root, { backgroundColor: palette.canvas }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <OrganiserFlowHeader title="Subscription" step={2} />
+      <OrganiserAtmosphere />
+      <OrganiserFlowHeader title="Choose access" step={2} />
 
       <ScrollView
         style={styles.scroll}
@@ -280,17 +285,17 @@ export default function OrganiserSubscribeScreen() {
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(50).springify() : undefined}>
           <View style={styles.kickerRow}>
             <View style={styles.kickerDot} />
-            <Text style={styles.kickerText}>EVENTIS ORGANISER PASS</Text>
+            <Text style={[styles.kickerText, { color: palette.accent }]}>EVENTIS ORGANISER PASS</Text>
           </View>
-          <Text style={[styles.title, { color: colors.foreground }]}>Flexible Organiser Plans</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            Publish events, manage ticket sales, and track live attendee RSVPs with zero hassle.
+          <Text style={[styles.title, { color: palette.text }]}>Choose your organiser access</Text>
+          <Text style={[styles.subtitle, { color: palette.muted }]}>
+            Select how long you need the workspace, then complete payment with Mobile Money.
           </Text>
         </Animated.View>
 
         {/* INTERVAL SELECTOR TABS (DAILY / WEEKLY / MONTHLY) */}
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(90).springify() : undefined}>
-          <View style={[styles.tabSegmentContainer, { backgroundColor: "rgba(255,255,255,0.04)", borderColor: colors.border }]}>
+          <View style={[styles.tabSegmentContainer, { backgroundColor: palette.surface, borderColor: palette.line }]}>
             {INTERVAL_TABS.map((tab) => {
               const active = selectedInterval === tab.id;
               return (
@@ -313,12 +318,12 @@ export default function OrganiserSubscribeScreen() {
                   <Ionicons
                     name={tab.icon}
                     size={16}
-                    color={active ? colors.primary : colors.mutedForeground}
+                    color={active ? palette.accent : palette.muted}
                   />
                   <Text
                     style={[
                       styles.tabSegmentText,
-                      { color: active ? colors.foreground : colors.mutedForeground },
+                      { color: active ? palette.text : palette.muted },
                       active && styles.tabSegmentTextActive,
                     ]}
                   >
@@ -336,7 +341,7 @@ export default function OrganiserSubscribeScreen() {
             <Text style={[styles.statusText, { color: colors.mutedForeground }]}>Loading plans…</Text>
           </View>
         ) : plansError ? (
-          <GlassSurface style={styles.errorCard}>
+          <OrganiserSurface style={[styles.errorCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
             <Ionicons name="cloud-offline-outline" size={36} color={colors.destructive} />
             <Text style={[styles.statusText, { color: colors.mutedForeground }]}>{plansError}</Text>
             <Pressable
@@ -346,32 +351,28 @@ export default function OrganiserSubscribeScreen() {
             >
               <Text style={styles.smallBtnText}>Try again</Text>
             </Pressable>
-          </GlassSurface>
+          </OrganiserSurface>
         ) : activePlan ? (
           <>
             {/* MAIN GLASSMORPHIC PLAN CARD */}
             <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(120).springify() : undefined}>
-              <GlassSurface style={styles.mainPlanCard}>
-                <LinearGradient
-                  colors={["rgba(56,189,248,0.08)", "rgba(139,92,246,0.03)", "transparent"]}
-                  style={StyleSheet.absoluteFill}
-                />
+              <OrganiserSurface style={[styles.mainPlanCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
 
                 {/* Card Header & Badge */}
                 <View style={styles.planCardHeader}>
-                  <View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <View style={styles.planTitleRow}>
-                      <Text style={[styles.planCardTitle, { color: colors.foreground }]}>
-                        {activePlan.name} Plan
+                      <Text style={[styles.planCardTitle, { color: palette.text }]}>
+                        {activePlan.name} access
                       </Text>
                       {activePlan.badge ? (
                         <View style={styles.planBadgeWrap}>
-                          <Text style={styles.planBadgeText}>{activePlan.badge}</Text>
+                          <Text style={[styles.planBadgeText, { color: palette.accent }]}>{activePlan.badge}</Text>
                         </View>
                       ) : null}
                     </View>
                     {activePlan.description ? (
-                      <Text style={[styles.planCardDesc, { color: colors.mutedForeground }]}>
+                      <Text style={[styles.planCardDesc, { color: palette.muted }]}>
                         {activePlan.description}
                       </Text>
                     ) : null}
@@ -381,23 +382,23 @@ export default function OrganiserSubscribeScreen() {
                 {/* Dynamic Price Display */}
                 <View style={styles.priceContainer}>
                   <View style={styles.priceRow}>
-                    <Text style={[styles.priceCurrency, { color: colors.primary }]}>FRw</Text>
-                    <Text style={[styles.priceNumber, { color: colors.foreground }]}>
+                    <Text style={[styles.priceCurrency, { color: palette.accent }]}>RWF</Text>
+                    <Text style={[styles.priceNumber, { color: palette.text }]}>
                       {totalAmount.toLocaleString()}
                     </Text>
                   </View>
-                  <Text style={[styles.priceSubtext, { color: colors.mutedForeground }]}>
-                    FRw {activePlan.price.toLocaleString()} / {activePlan.interval} · for {selectedDuration} {durationUnit}
+                  <Text style={[styles.priceSubtext, { color: palette.muted }]}>
+                    RWF {activePlan.price.toLocaleString()} per {activePlan.interval} · {selectedDuration} {durationUnit}
                   </Text>
                 </View>
 
                 {/* DURATION SELECTOR CHIPS */}
                 <View style={styles.durationSection}>
                   <View style={styles.durationHeaderRow}>
-                    <Text style={[styles.durationSectionLabel, { color: colors.foreground }]}>
-                      Select Duration
+                    <Text style={[styles.durationSectionLabel, { color: palette.text }]}>
+                      Access duration
                     </Text>
-                    <Text style={[styles.durationHint, { color: colors.primary }]}>
+                    <Text style={[styles.durationHint, { color: palette.accent }]}>
                       {selectedDuration} {durationUnit} selected
                     </Text>
                   </View>
@@ -406,8 +407,7 @@ export default function OrganiserSubscribeScreen() {
                     {availableDurations.map((dur) => {
                       const isSelected = selectedDuration === dur;
                       const unitLabel = dur === 1 ? activePlan.interval : `${activePlan.interval}s`;
-                      const durSavings =
-                        dur >= 6 ? "Save 15%" : dur >= 3 && selectedInterval === "month" ? "Popular" : undefined;
+                      const durSavings = dur === 3 && selectedInterval === "month" ? "Popular" : undefined;
 
                       return (
                         <Pressable
@@ -416,8 +416,8 @@ export default function OrganiserSubscribeScreen() {
                           style={[
                             styles.durationChip,
                             {
-                              backgroundColor: isSelected ? "rgba(56,189,248,0.18)" : "rgba(255,255,255,0.05)",
-                              borderColor: isSelected ? "#38BDF8" : "rgba(255,255,255,0.1)",
+                              backgroundColor: isSelected ? palette.blueSoft : palette.surfaceRaised,
+                              borderColor: isSelected ? palette.blue : palette.line,
                             },
                           ]}
                           accessibilityRole="button"
@@ -431,14 +431,14 @@ export default function OrganiserSubscribeScreen() {
                           <Text
                             style={[
                               styles.durationChipText,
-                              { color: isSelected ? "#38BDF8" : colors.foreground },
+                              { color: isSelected ? palette.blue : palette.text },
                               isSelected && styles.durationChipTextActive,
                             ]}
                           >
                             {dur} {unitLabel}
                           </Text>
-                          <Text style={[styles.durationChipPrice, { color: colors.mutedForeground }]}>
-                            FRw {(activePlan.price * dur).toLocaleString()}
+                          <Text style={[styles.durationChipPrice, { color: palette.muted }]}>
+                            RWF {(activePlan.price * dur).toLocaleString()}
                           </Text>
                         </Pressable>
                       );
@@ -447,35 +447,35 @@ export default function OrganiserSubscribeScreen() {
                 </View>
 
                 {/* DIVIDER */}
-                <View style={[styles.cardDivider, { backgroundColor: colors.border }]} />
+                <View style={[styles.cardDivider, { backgroundColor: palette.line }]} />
 
                 {/* FEATURES LIST */}
                 <View style={styles.featuresList}>
-                  <Text style={[styles.featuresHeader, { color: colors.foreground }]}>
-                    What's included:
+                  <Text style={[styles.featuresHeader, { color: palette.text }]}>
+                    Workspace access includes
                   </Text>
                   {activePlan.features.map((feature) => (
                     <View key={feature} style={styles.featureItem}>
                       <View style={styles.featureCheckWrap}>
-                        <Ionicons name="checkmark" size={13} color="#38BDF8" />
+                        <Ionicons name="checkmark" size={13} color={colors.primary} />
                       </View>
-                      <Text style={[styles.featureText, { color: colors.foreground }]}>
+                      <Text style={[styles.featureText, { color: palette.text }]}>
                         {feature}
                       </Text>
                     </View>
                   ))}
                 </View>
-              </GlassSurface>
+              </OrganiserSurface>
             </Animated.View>
 
             {/* PAYMENT METHOD SECTION */}
             <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(160).springify() : undefined}>
-              <GlassSurface style={styles.sectionCard}>
-                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                  Payment Method
+              <OrganiserSurface style={[styles.sectionCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+                <Text style={[styles.sectionTitle, { color: palette.text }]}>
+                  Pay with Mobile Money
                 </Text>
-                <Text style={[styles.sectionSub, { color: colors.mutedForeground }]}>
-                  Select your preferred Mobile Money provider:
+                <Text style={[styles.sectionSub, { color: palette.muted }]}>
+                  Choose the provider linked to your phone number.
                 </Text>
 
                 {/* Method selector buttons */}
@@ -492,22 +492,22 @@ export default function OrganiserSubscribeScreen() {
                         style={[
                           styles.methodCard,
                           {
-                            backgroundColor: isSelected ? m.bg : "rgba(255,255,255,0.03)",
-                            borderColor: isSelected ? m.color : colors.border,
+                            backgroundColor: isSelected ? m.bg : palette.surfaceRaised,
+                            borderColor: isSelected ? m.color : palette.line,
                           },
                         ]}
                         accessibilityRole="radio"
                         accessibilityState={{ selected: isSelected }}
                       >
                         <View style={styles.methodHeader}>
-                          <View style={[styles.methodRadioDot, { borderColor: isSelected ? m.color : colors.border }]}>
+                          <View style={[styles.methodRadioDot, { borderColor: isSelected ? m.color : palette.line }]}>
                             {isSelected ? <View style={[styles.methodRadioInner, { backgroundColor: m.color }]} /> : null}
                           </View>
                           <View style={[styles.methodBadge, { backgroundColor: m.color + "22" }]}>
                             <Text style={[styles.methodBadgeText, { color: m.color }]}>{m.badge}</Text>
                           </View>
                         </View>
-                        <Text style={[styles.methodLabel, { color: colors.foreground }]}>{m.label}</Text>
+                        <Text style={[styles.methodLabel, { color: palette.text }]}>{m.label}</Text>
                       </Pressable>
                     );
                   })}
@@ -515,7 +515,7 @@ export default function OrganiserSubscribeScreen() {
 
                 {/* Phone Number Input */}
                 <View style={styles.phoneInputWrap}>
-                  <Text style={[styles.inputLabel, { color: colors.foreground }]}>
+                  <Text style={[styles.inputLabel, { color: palette.text }]}>
                     Mobile Money Number
                   </Text>
                   <PhoneInput
@@ -528,11 +528,11 @@ export default function OrganiserSubscribeScreen() {
                     onSelectCountry={setCountry}
                     error={phoneError}
                   />
-                  <Text style={[styles.phoneHint, { color: colors.mutedForeground }]}>
+                  <Text style={[styles.phoneHint, { color: palette.muted }]}>
                     You will receive an instant payment prompt on this handset.
                   </Text>
                 </View>
-              </GlassSurface>
+              </OrganiserSurface>
             </Animated.View>
 
             {/* DEMO SWITCHER IN DEV */}
@@ -572,7 +572,7 @@ export default function OrganiserSubscribeScreen() {
 
             {/* ORDER SUMMARY STRIP */}
             <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(200).springify() : undefined}>
-              <GlassSurface style={styles.summaryBox}>
+              <OrganiserSurface style={[styles.summaryBox, { backgroundColor: palette.surface, borderColor: palette.line }]}>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryItemLabel, { color: colors.mutedForeground }]}>
                     Plan
@@ -599,10 +599,10 @@ export default function OrganiserSubscribeScreen() {
                     Total Due
                   </Text>
                   <Text style={[styles.summaryTotalValue, { color: colors.primary }]}>
-                    FRw {totalAmount.toLocaleString()}
+                    RWF {totalAmount.toLocaleString()}
                   </Text>
                 </View>
-              </GlassSurface>
+              </OrganiserSurface>
             </Animated.View>
 
             {/* CTA ACTION BUTTON */}
@@ -621,13 +621,13 @@ export default function OrganiserSubscribeScreen() {
                 />
                 <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
                 <Text style={styles.primaryPayBtnText}>
-                  Pay FRw {totalAmount.toLocaleString()} via{" "}
+                  Pay RWF {totalAmount.toLocaleString()} via{" "}
                   {METHODS.find((m) => m.id === method)?.label}
                 </Text>
               </Pressable>
 
-              <Text style={[styles.guaranteeText, { color: colors.mutedForeground }]}>
-                🔒 Safe 256-bit encrypted checkout. No recurring charges without your explicit consent.
+              <Text style={[styles.guaranteeText, { color: palette.muted }]}>
+                You will confirm the payment on the selected Mobile Money number.
               </Text>
             </Animated.View>
           </>
@@ -648,11 +648,12 @@ export default function OrganiserSubscribeScreen() {
           <Pressable
             style={[
               styles.sheet,
-              { backgroundColor: "#0F172A", borderColor: "rgba(255,255,255,0.12)", paddingBottom: insets.bottom + 28 },
+              { backgroundColor: palette.surface, borderColor: palette.line },
             ]}
             onPress={(e) => e.stopPropagation()}
           >
-            <View style={[styles.handle, { backgroundColor: "rgba(255,255,255,0.25)" }]} />
+            <View style={[styles.handle, { backgroundColor: palette.line }]} />
+            <ScrollView contentContainerStyle={[styles.sheetContent, { paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
 
             <View style={styles.sheetHeader}>
               <View style={[styles.sheetIconWrap, { backgroundColor: `${colors.primary}22` }]}>
@@ -667,7 +668,7 @@ export default function OrganiserSubscribeScreen() {
             </View>
 
             {activePlan && (
-              <View style={[styles.sheetSummaryCard, { backgroundColor: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.08)" }]}>
+              <View style={[styles.sheetSummaryCard, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
                 <SummaryRow label="Plan" value={`${activePlan.name} Organiser Pass`} />
                 <SummaryRow label="Duration" value={`${selectedDuration} ${durationUnit}`} />
                 <SummaryRow
@@ -683,13 +684,14 @@ export default function OrganiserSubscribeScreen() {
                 <View style={[styles.summaryDivider, { backgroundColor: "rgba(255,255,255,0.1)" }]} />
                 <SummaryRow
                   label="Total Amount"
-                  value={`FRw ${totalAmount.toLocaleString()}`}
+                  value={`RWF ${totalAmount.toLocaleString()}`}
                   isBold
                 />
               </View>
             )}
 
             <Pressable
+              accessibilityRole="button"
               style={[styles.primaryPayBtn, { backgroundColor: colors.primary, marginTop: 16 }]}
               onPress={pay}
             >
@@ -698,14 +700,15 @@ export default function OrganiserSubscribeScreen() {
             </Pressable>
 
             <Pressable
-              onPress={cancelBeforePaying}
+              onPress={() => setConfirmOpen(false)}
               style={styles.cancelSheetBtn}
               accessibilityRole="button"
             >
               <Text style={[styles.cancelSheetText, { color: colors.mutedForeground }]}>
-                Cancel & Review
+                Review details
               </Text>
             </Pressable>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -722,7 +725,7 @@ function SummaryRow({
   value: string;
   isBold?: boolean;
 }) {
-  const colors = useColors();
+  const colors = useOrganiserColors();
   return (
     <View style={styles.summaryRow}>
       <Text style={[styles.summaryLabel, { color: colors.mutedForeground }, isBold && { fontFamily: "Inter_600SemiBold", color: colors.foreground }]}>
@@ -758,12 +761,12 @@ function StatusResult({
   onRetry: () => void;
   onLeave: () => void;
 }) {
-  const colors = useColors();
+  const colors = useOrganiserColors();
   const config = {
     succeeded: {
       icon: "checkmark-circle" as const,
       tint: "#10B981",
-      title: "Subscription Activated!",
+      title: "Organiser access activated",
       text: `${planLabel}${renewsAt ? `\nActive through ${new Date(renewsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}\n\nYou now have full organiser capabilities. Set up your organisation details to start creating events.`,
     },
     failed: {
@@ -849,7 +852,6 @@ const styles = StyleSheet.create({
   },
   tabSegmentTextActive: {
     fontFamily: "Inter_700Bold",
-    color: "#38BDF8",
   },
 
   // Main plan card
@@ -865,6 +867,7 @@ const styles = StyleSheet.create({
   },
   planTitleRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 8,
     marginBottom: 4,
@@ -901,8 +904,9 @@ const styles = StyleSheet.create({
   },
   priceRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "baseline",
-    gap: 6,
+    gap: 8,
   },
   priceCurrency: {
     fontSize: 18,
@@ -925,6 +929,8 @@ const styles = StyleSheet.create({
   },
   durationHeaderRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 10,
@@ -1095,6 +1101,8 @@ const styles = StyleSheet.create({
   },
   summaryItem: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     justifyContent: "space-between",
     alignItems: "center",
   },
@@ -1103,6 +1111,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   summaryItemValue: {
+    flexShrink: 1,
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
@@ -1131,6 +1140,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   primaryPayBtnText: {
+    flexShrink: 1,
+    textAlign: "center",
     fontSize: 15,
     fontFamily: "Inter_700Bold",
     color: "#FFFFFF",
@@ -1177,7 +1188,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
   },
+  sheetContent: { gap: 18 },
   sheet: {
+    maxHeight: "90%",
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderWidth: 1,
@@ -1223,6 +1236,8 @@ const styles = StyleSheet.create({
   },
   summaryRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     justifyContent: "space-between",
     alignItems: "center",
   },
@@ -1231,6 +1246,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   summaryValue: {
+    flexShrink: 1,
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
@@ -1245,7 +1261,8 @@ const styles = StyleSheet.create({
 
   // Status screens
   statusWrap: {
-    flex: 1,
+    flexGrow: 1,
+    paddingTop: 24,
     justifyContent: "center",
     paddingHorizontal: 24,
   },

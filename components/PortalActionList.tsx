@@ -5,16 +5,15 @@ import React from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { PortalAction } from "@/constants/organiserPortal";
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
-/** Card list of organiser portal actions. Actions without an `href` show as "Soon". */
 export function PortalActionList({ actions, prominent }: { actions: PortalAction[]; prominent?: boolean }) {
-  const colors = useColors();
+  const palette = useOrganiserPalette();
   const router = useRouter();
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      {actions.map((action, i) => {
+    <View style={styles.list}>
+      {actions.map((action) => {
         const available = Boolean(action.href);
         return (
           <Pressable
@@ -26,41 +25,30 @@ export function PortalActionList({ actions, prominent }: { actions: PortalAction
               router.push(action.href as any);
             }}
             style={({ pressed }) => [
-              styles.row,
-              prominent && styles.rowProminent,
-              i < actions.length - 1 && { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
-              pressed && { backgroundColor: colors.secondary },
+              styles.card,
+              prominent && styles.prominent,
+              { backgroundColor: palette.surface, borderColor: palette.line },
+              pressed && { backgroundColor: palette.surfacePressed },
+              !available && styles.unavailable,
             ]}
             accessibilityRole="button"
             accessibilityLabel={available ? action.title : `${action.title}, coming soon`}
             accessibilityHint={action.description}
             accessibilityState={{ disabled: !available }}
           >
-            <View
-              style={[
-                styles.icon,
-                prominent && styles.iconProminent,
-                { backgroundColor: available ? colors.primary + "1F" : colors.secondary },
-              ]}
-            >
-              <Ionicons
-                name={action.icon}
-                size={prominent ? 24 : 20}
-                color={available ? colors.primary : colors.mutedForeground}
-              />
+            <View style={[styles.icon, prominent && styles.iconProminent, { backgroundColor: available ? palette.blueSoft : palette.surfaceRaised }]}>
+              <Ionicons name={action.icon} size={prominent ? 23 : 20} color={available ? palette.blue : palette.muted} />
             </View>
             <View style={styles.copy}>
-              <Text style={[styles.title, { color: available ? colors.foreground : colors.mutedForeground }]}>
-                {action.title}
-              </Text>
-              <Text style={[styles.description, { color: colors.mutedForeground }]}>{action.description}</Text>
+              <Text style={[styles.title, prominent && styles.titleProminent, { color: available ? palette.text : palette.muted }]}>{action.title}</Text>
+              <Text style={[styles.description, { color: palette.muted }]}>{action.description}</Text>
             </View>
             {available ? (
-              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-            ) : (
-              <View style={[styles.soon, { backgroundColor: colors.secondary }]}>
-                <Text style={[styles.soonText, { color: colors.mutedForeground }]}>Soon</Text>
+              <View style={[styles.arrow, { backgroundColor: palette.surfaceRaised }]}>
+                <Ionicons name="arrow-forward" size={16} color={palette.text} />
               </View>
+            ) : (
+              <View style={[styles.soon, { backgroundColor: palette.surfaceRaised }]}><Text style={[styles.soonText, { color: palette.muted }]}>SOON</Text></View>
             )}
           </Pressable>
         );
@@ -70,14 +58,17 @@ export function PortalActionList({ actions, prominent }: { actions: PortalAction
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 16, borderWidth: 1, overflow: "hidden" },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
-  rowProminent: { paddingVertical: 18 },
-  icon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  iconProminent: { width: 48, height: 48, borderRadius: 14 },
-  copy: { flex: 1, gap: 2 },
+  list: { gap: 10 },
+  card: { minHeight: 78, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 18, borderWidth: 1, padding: 13 },
+  prominent: { minHeight: 96, padding: 15 },
+  unavailable: { opacity: 0.85 },
+  icon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  iconProminent: { width: 48, height: 48, borderRadius: 15 },
+  copy: { flex: 1, gap: 3 },
   title: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  description: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
-  soon: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  soonText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  titleProminent: { fontSize: 16 },
+  description: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
+  arrow: { width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  soon: { paddingHorizontal: 7, paddingVertical: 4, borderRadius: 7 },
+  soonText: { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8 },
 });

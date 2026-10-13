@@ -206,7 +206,7 @@ function mostCommon(values: string[]): string | undefined {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { padding: 16, gap: 22 },
-  hero: { alignItems: "center", padding: 20, gap: 8 },
+  hero: { alignItems: "center", padding: 20, gap: 8, borderRadius: 22 },
   name: { fontSize: 22, fontFamily: "Inter_700Bold", textAlign: "center", marginTop: 4 },
   meta: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center" },
   heroActions: { flexDirection: "row", gap: 10, marginTop: 8, flexWrap: "wrap", justifyContent: "center" },

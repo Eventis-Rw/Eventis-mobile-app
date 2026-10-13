@@ -4,89 +4,62 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-import { useColors } from "@/hooks/useColors";
-import { GlassSurface } from "@/components/GlassSurface";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
-const STEPS = ["About", "Subscription", "Organisation"];
+const STEPS = ["Discover", "Choose plan", "Create profile"];
 
-/** Header for the Become an Organiser flow: back button, title and step progress. */
 export function OrganiserFlowHeader({
   title,
   step,
   canGoBack = true,
 }: {
   title: string;
-  /** 1-based index into STEPS. */
   step: number;
   canGoBack?: boolean;
 }) {
-  const colors = useColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
   return (
-    <GlassSurface
-      style={[
-        styles.header,
-        {
-          paddingTop: insets.top + 8,
-          borderWidth: 0,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: colors.border,
-          borderRadius: 0,
-        },
-      ]}
-    >
+    <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: palette.canvas, borderBottomColor: palette.line }]}>
       <View style={styles.row}>
         {canGoBack ? (
           <Pressable
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
+            style={({ pressed }) => [styles.back, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }, pressed && { backgroundColor: palette.surfacePressed }]}
             accessibilityRole="button"
             accessibilityLabel="Go back"
-            hitSlop={8}
           >
-            <Ionicons name="chevron-back" size={24} color={colors.foreground} />
+            <Ionicons name="chevron-back" size={21} color={palette.text} />
           </Pressable>
-        ) : (
-          <View style={styles.spacer} />
-        )}
-        <Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>
-        <View style={styles.spacer} />
+        ) : <View style={styles.back} />}
+        <View style={styles.copy}>
+          <Text style={[styles.title, { color: palette.text }]} >{title}</Text>
+          <Text style={[styles.meta, { color: palette.muted }]}>{STEPS[step - 1]} · {step} of {STEPS.length}</Text>
+        </View>
+        <View style={[styles.step, { backgroundColor: palette.blueSoft }]}>
+          <Text style={[styles.stepText, { color: palette.accent }]}>{step}</Text>
+        </View>
       </View>
-      <View
-        style={styles.progress}
-        accessibilityRole="progressbar"
-        accessibilityLabel={`Step ${step} of ${STEPS.length}: ${STEPS[step - 1]}`}
-      >
-        {STEPS.map((label, i) => (
-          <View
-            key={label}
-            style={[styles.segment, { backgroundColor: i < step ? colors.primary : colors.border }]}
-          />
+      <View style={styles.progress}>
+        {STEPS.map((label, index) => (
+          <View key={label} style={[styles.segment, { backgroundColor: index < step ? palette.blue : palette.line }]} />
         ))}
       </View>
-      <Text style={[styles.stepText, { color: colors.mutedForeground }]}>
-        Step {step} of {STEPS.length} · {STEPS[step - 1]}
-      </Text>
-    </GlassSurface>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 10,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  spacer: { width: 24 },
-  title: { fontSize: 17, fontFamily: "Inter_600SemiBold" },
+  header: { paddingHorizontal: 18, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 11 },
+  row: { flexDirection: "row", alignItems: "center", gap: 11 },
+  back: { width: 44, height: 44, borderRadius: 13, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  copy: { flex: 1, minWidth: 0, gap: 2 },
+  title: { fontSize: 18, fontFamily: "Inter_700Bold", letterSpacing: -0.25 },
+  meta: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_500Medium" },
+  step: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  stepText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   progress: { flexDirection: "row", gap: 6 },
-  segment: { flex: 1, height: 4, borderRadius: 2 },
-  stepText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  segment: { height: 3, flex: 1, borderRadius: 2 },
 });

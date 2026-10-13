@@ -221,7 +221,7 @@ export function AppearanceRow() {
 const styles = StyleSheet.create({
   group: { gap: 8 },
   groupTitle: { fontSize: 12, letterSpacing: 0.8, fontFamily: "Inter_600SemiBold", paddingHorizontal: 4 },
-  card: { paddingHorizontal: 14, paddingVertical: 2 },
+  card: { paddingHorizontal: 14, paddingVertical: 2, borderRadius: 20 },
   divider: { height: StyleSheet.hairlineWidth },
   footer: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular", paddingHorizontal: 4 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingVertical: 10 },
