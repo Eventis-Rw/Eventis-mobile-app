@@ -25,14 +25,14 @@ import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { describeError, USE_ORGANISER_API } from "@/services/organiserService";
 
 const SHOW_DEMO_CONTROLS = __DEV__ && !USE_ORGANISER_API;
 
 export default function EditOrganisationScreen() {
-  const colors = useColors();
+  const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();

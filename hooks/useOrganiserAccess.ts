@@ -40,9 +40,9 @@ export function useOrganiserAccess() {
     [router, step],
   );
 
-  // Opens the portal's Create tab. Non-organisers are sent into onboarding instead.
+  // Quick create lives on Overview. Non-organisers start with onboarding.
   const openCreatePost = useCallback(() => {
-    if (step === "ready") router.push("/business/create" as any);
+    if (step === "ready") router.push("/business/dashboard" as any);
     else openOrganiserFlow("create-post");
   }, [router, step, openOrganiserFlow]);
 

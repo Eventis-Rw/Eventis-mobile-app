@@ -73,7 +73,7 @@ export default function BecomeOrganiserScreen() {
         {from === "create-post" && step !== "ready" ? (
           <View style={[styles.contextCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
             <View style={[styles.contextIcon, { backgroundColor: palette.blueSoft }]}>
-              <Ionicons name="lock-closed-outline" size={18} color={palette.blue} />
+              <Ionicons name="lock-closed-outline" size={18} color={palette.accent} />
             </View>
             <View style={styles.flex}>
               <Text style={[styles.contextTitle, { color: palette.text }]}>Organiser access required</Text>
@@ -84,7 +84,7 @@ export default function BecomeOrganiserScreen() {
 
         {step === "setup" ? (
           <View style={[styles.resumeCard, { backgroundColor: palette.blueSoft, borderColor: palette.blue }]}>
-            <Ionicons name="checkmark-circle" size={23} color={palette.blue} />
+            <Ionicons name="checkmark-circle" size={23} color={palette.accent} />
             <View style={styles.flex}>
               <Text style={[styles.resumeTitle, { color: palette.text }]}>Your pass is active</Text>
               <Text style={[styles.resumeText, { color: palette.muted }]}>Your payment step is complete. Finish your public organiser profile to open the workspace.</Text>
@@ -128,7 +128,7 @@ export default function BecomeOrganiserScreen() {
             {TOOLS.map((tool) => (
               <View key={tool.title} style={[styles.toolCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
                 <View style={[styles.toolIcon, { backgroundColor: palette.blueSoft }]}>
-                  <Ionicons name={tool.icon} size={21} color={palette.blue} />
+                  <Ionicons name={tool.icon} size={21} color={palette.accent} />
                 </View>
                 <View style={styles.flex}>
                   <Text style={[styles.toolTitle, { color: palette.text }]}>{tool.title}</Text>
@@ -163,7 +163,7 @@ export default function BecomeOrganiserScreen() {
         </Animated.View>
 
         <View style={[styles.note, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
-          <Ionicons name="swap-horizontal-outline" size={20} color={palette.blue} />
+          <Ionicons name="swap-horizontal-outline" size={20} color={palette.accent} />
           <Text style={[styles.noteText, { color: palette.muted }]}>Your personal Eventis account stays available. Switch between personal and organiser without signing out.</Text>
         </View>
 
@@ -203,13 +203,13 @@ const styles = StyleSheet.create({
   resumeText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 2 },
   hero: { borderRadius: 28, padding: 22, overflow: "hidden" },
   heroRing: { position: "absolute", width: 260, height: 260, borderRadius: 130, right: -95, top: -90, borderWidth: 42, borderColor: "rgba(255,255,255,0.07)" },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 82 },
+  heroTop: { flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 36 },
   heroMark: { width: 42, height: 42, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  heroLabel: { color: "rgba(255,255,255,0.78)", fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 1.25 },
+  heroLabel: { flex: 1, color: "rgba(255,255,255,0.88)", fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 1.25 },
   heroTitle: { color: "#FFFFFF", fontSize: 34, lineHeight: 40, fontFamily: "Inter_700Bold", letterSpacing: -0.9 },
   heroText: { color: "rgba(255,255,255,0.76)", fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: 10 },
   heroButton: { minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 16, paddingHorizontal: 16, marginTop: 22 },
-  heroButtonText: { color: "#087EC1", fontSize: 14, fontFamily: "Inter_700Bold" },
+  heroButtonText: { flexShrink: 1, paddingVertical: 14, color: "#087EC1", fontSize: 14, fontFamily: "Inter_700Bold" },
   section: { gap: 13 },
   sectionHeading: { gap: 4 },
   sectionTitle: { fontSize: 21, lineHeight: 26, fontFamily: "Inter_700Bold", letterSpacing: -0.35 },
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   note: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 14, borderRadius: 17, borderWidth: 1 },
   noteText: { flex: 1, fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
   primaryButton: { minHeight: 54, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, borderRadius: 17 },
-  primaryButtonText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  primaryButtonText: { flexShrink: 1, paddingVertical: 14, textAlign: "center", color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
   later: { minHeight: 44, alignItems: "center", justifyContent: "center", marginTop: -10 },
   laterText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   pressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },

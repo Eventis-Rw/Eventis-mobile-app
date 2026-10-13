@@ -120,7 +120,7 @@ export default function PortalOrganisationScreen() {
                   </Text>
                 </View>
                 {switching ? (
-                  <ActivityIndicator size="small" color={palette.blue} />
+                  <ActivityIndicator size="small" color={palette.accent} />
                 ) : (
                   <Ionicons name={active ? "checkmark-circle" : "swap-horizontal"} size={21} color={active ? palette.blue : palette.muted} />
                 )}
@@ -173,7 +173,7 @@ export default function PortalOrganisationScreen() {
 
         {subscription && (
           <View style={[styles.card, styles.subRow, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-            <View style={[styles.subIcon, { backgroundColor: palette.blueSoft }]}><Ionicons name="card-outline" size={19} color={palette.blue} /></View>
+            <View style={[styles.subIcon, { backgroundColor: palette.blueSoft }]}><Ionicons name="card-outline" size={19} color={palette.accent} /></View>
             <View style={styles.flex}>
               <Text style={[styles.subTitle, { color: palette.text }]}>Organiser access active</Text>
               <Text style={[styles.muted, { color: palette.muted }]}>
@@ -234,8 +234,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   center: { textAlign: "center" },
-  content: { padding: 20, gap: 16, paddingBottom: 110 },
-  sectionHeadingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  content: { padding: 20, gap: 22, paddingBottom: 32 },
+  sectionHeadingRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   addButton: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 13, paddingHorizontal: 14 },
   addButtonText: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
   organisationList: { gap: 9 },
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   optionLetter: { fontSize: 17, fontFamily: "Inter_700Bold" },
   optionName: { fontSize: 15, fontFamily: "Inter_700Bold" },
   optionMeta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  card: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },
+  card: { borderRadius: 22, borderWidth: 1, padding: 18, gap: 14 },
   identity: { flexDirection: "row", alignItems: "center", gap: 14 },
   logo: {
     width: 56,

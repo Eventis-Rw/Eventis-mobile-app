@@ -15,7 +15,7 @@ export default function BusinessLayout() {
   if (isLoading) {
     return (
       <View style={[styles.loading, { backgroundColor: palette.canvas }]}>
-        <ActivityIndicator color={palette.blue} accessibilityLabel="Loading organiser portal" />
+        <ActivityIndicator color={palette.accent} accessibilityLabel="Loading organiser portal" />
       </View>
     );
   }

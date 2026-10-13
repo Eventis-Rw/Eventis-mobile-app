@@ -24,7 +24,7 @@ import { CATEGORIES, type EventCategory } from "@/constants/events";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { describeProfileError } from "@/services/profileService";
 import {
@@ -115,7 +115,7 @@ function Field({
   label: string;
   children: React.ReactNode;
   required?: boolean;
-  colors: ReturnType<typeof useColors>;
+  colors: ReturnType<typeof useOrganiserColors>;
 }) {
   return (
     <View style={styles.field}>
@@ -129,7 +129,7 @@ function Field({
 }
 
 export default function CreateEventScreen() {
-  const colors = useColors();
+  const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
@@ -193,7 +193,7 @@ export default function CreateEventScreen() {
       else await createPublisherEvent(user.id, user.organisation?.name ?? user.username, input);
       void refreshEvents();
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Back to wherever it was opened from (profile, portal Overview or Create tab).
+      // Back to wherever it was opened from (profile or organiser Overview).
       if (router.canGoBack()) router.back();
       else router.replace("/business/dashboard" as any);
     } catch (err) {
@@ -231,7 +231,7 @@ export default function CreateEventScreen() {
               entering={Platform.OS !== "web" ? FadeInDown.delay(80).springify() : undefined}
               style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Basic Info</Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>01  Event details</Text>
 
               <Field label="Event Title" required colors={colors}>
                 <TextInput
@@ -313,7 +313,7 @@ export default function CreateEventScreen() {
               </Field>
 
               <View style={styles.row}>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 120 }}>
                   <Field label="Date" required colors={colors}>
                     <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
                       <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
@@ -328,7 +328,7 @@ export default function CreateEventScreen() {
                     </View>
                   </Field>
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 120 }}>
                   <Field label="Start Time" required colors={colors}>
                     <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
                       <Ionicons name="time-outline" size={18} color={colors.mutedForeground} />
@@ -365,7 +365,7 @@ export default function CreateEventScreen() {
               entering={Platform.OS !== "web" ? FadeInDown.delay(200).springify() : undefined}
               style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Ticketing</Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>03  Tickets & entry</Text>
 
               <View style={styles.switchRow}>
                 <View style={styles.switchLabel}>
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
   submitBlock: { gap: 10 },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 20, gap: 16 },
+  content: { paddingHorizontal: 20, paddingTop: 24, gap: 20 },
 
   section: {
     borderRadius: 20,
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 16,
   },
-  sectionTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
 
   field: { gap: 8 },
   label: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   textarea: {
-    height: 100,
+    minHeight: 120,
     paddingTop: 12,
   },
   iconInput: {
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   currencySymbol: { fontSize: 16, fontFamily: "Inter_500Medium" },
-  row: { flexDirection: "row", gap: 10 },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
 
   catRow: { gap: 8, paddingVertical: 2 },
   catChip: {

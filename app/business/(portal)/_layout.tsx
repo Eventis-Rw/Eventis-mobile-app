@@ -12,7 +12,6 @@ type TabIconName = React.ComponentProps<typeof Feather>["name"];
 // for new organiser management areas.
 const PORTAL_TABS: { name: string; title: string; icon: TabIconName }[] = [
   { name: "dashboard", title: "Overview", icon: "grid" },
-  { name: "create", title: "Create", icon: "plus-square" },
   { name: "organisation", title: "Organisation", icon: "briefcase" },
 ];
 
@@ -20,7 +19,7 @@ export default function OrganiserPortalLayout() {
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const isWeb = Platform.OS === "web";
-  const tabSurface = palette.surface;
+  const tabSurface = palette.canvas;
 
   return (
     <Tabs
@@ -28,21 +27,22 @@ export default function OrganiserPortalLayout() {
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: palette.canvas },
-        tabBarActiveTintColor: palette.blue,
+        tabBarActiveTintColor: palette.accent,
         tabBarInactiveTintColor: palette.muted,
         tabBarHideOnKeyboard: true,
         tabBarLabelStyle: styles.label,
+        tabBarLabelPosition: "below-icon",
         tabBarItemStyle: styles.item,
         tabBarStyle: {
           backgroundColor: tabSurface,
           borderTopWidth: StyleSheet.hairlineWidth,
           borderTopColor: palette.line,
-          elevation: 18,
+          elevation: 0,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: palette.dark ? 0.3 : 0.1,
+          shadowOpacity: 0,
           shadowRadius: 12,
-          height: isWeb ? 72 : 58 + insets.bottom,
+          height: 66 + (isWeb ? 0 : insets.bottom),
           paddingBottom: isWeb ? 0 : insets.bottom,
           paddingTop: 4,
         },
@@ -62,12 +62,13 @@ export default function OrganiserPortalLayout() {
           }}
         />
       ))}
+      <Tabs.Screen name="create" options={{ href: null }} />
     </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
   item: { paddingTop: 2 },
-  iconWrap: { width: 36, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  label: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 1 },
+  iconWrap: { width: 52, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
 });

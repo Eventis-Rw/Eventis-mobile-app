@@ -18,14 +18,14 @@ import {
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
 const CAPTION_LIMIT = 100;
 
 // UI only: there is no stories API yet, so sharing is simulated (same as create-event).
 export default function CreateStoryScreen() {
-  const colors = useColors();
+  const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();

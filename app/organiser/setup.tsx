@@ -27,7 +27,7 @@ import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { getOrganiserStep } from "@/hooks/useOrganiserAccess";
 import { describeError, USE_ORGANISER_API } from "@/services/organiserService";
@@ -35,7 +35,7 @@ import { describeError, USE_ORGANISER_API } from "@/services/organiserService";
 const SHOW_DEMO_CONTROLS = __DEV__ && !USE_ORGANISER_API;
 
 export default function OrganisationSetupScreen() {
-  const colors = useColors();
+  const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
@@ -89,19 +89,12 @@ export default function OrganisationSetupScreen() {
 
   if (completed) {
     // replace() swaps the whole onboarding stack out, so Back doesn't return into it.
-    const toCreate = () => router.replace("/business/create" as any);
     const toPortal = () => router.replace("/business/dashboard" as any);
-    const primary = from === "create-post"
-      ? { label: "Start creating", icon: "create-outline" as const, onPress: toCreate }
-      : { label: "Open organiser portal", icon: "grid-outline" as const, onPress: toPortal };
-    const secondary = from === "create-post"
-      ? { label: "Open organiser portal", onPress: toPortal }
-      : { label: "Start creating", onPress: toCreate };
 
     return (
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
         <OrganiserAtmosphere />
-        <View style={[styles.doneWrap, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
+        <ScrollView contentContainerStyle={[styles.doneWrap, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
           <Animated.View entering={FadeIn} style={styles.done}>
             <View style={styles.doneHalo}>
               <View style={[styles.doneLogo, { backgroundColor: palette.blue }]}>
@@ -122,25 +115,19 @@ export default function OrganisationSetupScreen() {
             <Text style={[styles.doneTitle, { color: palette.text }]}>Your workspace is ready</Text>
             <Text style={[styles.doneText, { color: palette.muted }]}>
               {values.name.trim()} is set up on your account. Manage it and create events, posts and
-              stories from the organiser portal, and keep browsing Eventis as usual.
+              stories using Quick create on Overview.
             </Text>
             <View style={styles.doneActions}>
-              <Pressable style={[styles.primaryBtn, { backgroundColor: palette.blue }]} onPress={primary.onPress}>
-                <Ionicons name={primary.icon} size={18} color="#fff" />
-                <Text style={styles.primaryBtnText}>{primary.label}</Text>
+              <Pressable style={[styles.primaryBtn, { backgroundColor: palette.blue }]} onPress={toPortal} accessibilityRole="button">
+                <Ionicons name="grid-outline" size={18} color="#fff" />
+                <Text style={styles.primaryBtnText}>Open organiser overview</Text>
               </Pressable>
-              <Pressable
-                style={[styles.outlineBtn, { borderColor: palette.line }]}
-                onPress={secondary.onPress}
-              >
-                <Text style={[styles.outlineBtnText, { color: palette.text }]}>{secondary.label}</Text>
-              </Pressable>
-              <Pressable onPress={() => router.dismissTo("/(tabs)" as any)} style={styles.secondaryBtn}>
+              <Pressable onPress={() => router.dismissTo("/(tabs)" as any)} style={styles.secondaryBtn} accessibilityRole="button">
                 <Text style={[styles.secondaryBtnText, { color: palette.muted }]}>Back to Eventis</Text>
               </Pressable>
             </View>
           </Animated.View>
-        </View>
+        </ScrollView>
       </View>
     );
   }
@@ -165,8 +152,8 @@ export default function OrganisationSetupScreen() {
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(60).springify() : undefined}>
           <View style={styles.setupIntro}>
             <View style={[styles.setupPill, { backgroundColor: palette.blueSoft }]}>
-              <Ionicons name="sparkles" size={13} color={palette.blue} />
-              <Text style={[styles.setupPillText, { color: palette.blue }]}>FINAL STEP</Text>
+              <Ionicons name="sparkles" size={13} color={palette.accent} />
+              <Text style={[styles.setupPillText, { color: palette.accent }]}>FINAL STEP</Text>
             </View>
             <Text style={[styles.title, { color: palette.text }]}>Create your public organiser profile</Text>
             <Text style={[styles.subtitle, { color: palette.muted }]}>
@@ -287,12 +274,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 16,
   },
-  primaryBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
-  outlineBtn: { alignItems: "center", paddingVertical: 15, borderRadius: 16, borderWidth: 1 },
-  outlineBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  primaryBtnText: { flexShrink: 1, textAlign: "center", color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
   secondaryBtn: { alignItems: "center", paddingVertical: 12 },
   secondaryBtnText: { fontSize: 14, fontFamily: "Inter_500Medium" },
-  doneWrap: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
+  doneWrap: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 24 },
   done: { alignItems: "center", gap: 14 },
   doneHalo: {
     padding: 12,

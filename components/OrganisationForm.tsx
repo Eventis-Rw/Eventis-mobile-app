@@ -12,7 +12,7 @@ import {
   type TextInputProps,
 } from "react-native";
 
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import type { Organisation, OrganisationInput } from "@/services/organiserService";
 
@@ -86,7 +86,7 @@ export function OrganisationFields({
   logoUri?: string;
   onLogoChange: (uri: string | undefined) => void;
 }) {
-  const colors = useColors();
+  const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
   const [logoError, setLogoError] = useState<string | undefined>();
 
@@ -134,11 +134,11 @@ export function OrganisationFields({
           </Text>
           <Text style={[styles.hint, { color: palette.muted }]}>Shown on events, posts and your public profile.</Text>
           <View style={styles.logoActions}>
-            <Pressable onPress={pickLogo} hitSlop={6}>
-              <Text style={[styles.link, { color: palette.blue }]}>{logoUri ? "Change" : "Choose image"}</Text>
+            <Pressable onPress={pickLogo} hitSlop={6} accessibilityRole="button">
+              <Text style={[styles.link, { color: palette.accent }]}>{logoUri ? "Change" : "Choose image"}</Text>
             </Pressable>
             {logoUri && (
-              <Pressable onPress={() => onLogoChange(undefined)} hitSlop={6}>
+              <Pressable onPress={() => onLogoChange(undefined)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Remove organisation image">
                 <Text style={[styles.link, { color: colors.destructive }]}>Remove</Text>
               </Pressable>
             )}
@@ -212,14 +212,14 @@ export function FormField({
   error?: string;
   showCount?: boolean;
 } & TextInputProps) {
-  const colors = useColors();
+  const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
   const [focused, setFocused] = useState(false);
   return (
     <View style={styles.field}>
       <Text style={[styles.label, { color: palette.text }]}>
         {label}
-        {required && <Text style={{ color: palette.blue }}> *</Text>}
+        {required && <Text style={{ color: palette.accent }}> *</Text>}
       </Text>
       <View
         style={[
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     padding: 18,
-    gap: 16,
+    gap: 20,
   },
   logoRow: { flexDirection: "row", alignItems: "center", gap: 14 },
   logo: {
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
   },
   inputWrapMulti: { alignItems: "flex-start" },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", paddingVertical: 13 },
-  inputMulti: { height: 110 },
+  inputMulti: { minHeight: 120 },
   fieldFooter: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   hint: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
   error: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17 },

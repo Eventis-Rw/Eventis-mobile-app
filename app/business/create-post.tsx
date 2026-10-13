@@ -3,10 +3,11 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,13 +19,13 @@ import {
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 
-import { GlassSurface } from "@/components/GlassSurface";
+import { OrganiserSurface } from "@/components/OrganiserSurface";
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
 const CAPTION_LIMIT = 2200;
@@ -52,8 +53,28 @@ const CTA_OPTIONS = [
   { id: "event", label: "View Event" },
 ];
 
+const POST_STEPS = [
+  {
+    title: "Write your update",
+    eyebrow: "Content",
+    description: "Choose a topic and tell your audience what they need to know.",
+  },
+  {
+    title: "Add useful details",
+    eyebrow: "Details",
+    description: "Add a photo, event, location or action. Everything here is optional.",
+  },
+  {
+    title: "Review and publish",
+    eyebrow: "Preview",
+    description: "Check how your post will appear in the community feed.",
+  },
+] as const;
+
+type PostStep = 0 | 1 | 2;
+
 export default function CreatePostScreen() {
-  const colors = useColors();
+  const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
@@ -62,8 +83,10 @@ export default function CreatePostScreen() {
 
   const orgName = user?.organisation?.name ?? user?.businessName ?? "Eventis Organiser";
 
-  const [activeTab, setActiveTab] = useState<"compose" | "preview">("compose");
+  const scrollRef = useRef<ScrollView>(null);
+  const [step, setStep] = useState<PostStep>(0);
   const [caption, setCaption] = useState("");
+  const [captionError, setCaptionError] = useState<string | undefined>();
   const [postType, setPostType] = useState<string>("announcement");
   const [imageUri, setImageUri] = useState<string | undefined>();
   const [imageError, setImageError] = useState<string | undefined>();
@@ -76,6 +99,27 @@ export default function CreatePostScreen() {
 
   const attachedEvent = events.find((e) => e.id === attachedEventId);
   const canPublish = caption.trim().length > 0 && !publishing;
+
+  const moveToStep = (nextStep: PostStep) => {
+    if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+    Keyboard.dismiss();
+    setStep(nextStep);
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
+  };
+
+  const continueFlow = () => {
+    if (step === 0 && !caption.trim()) {
+      setCaptionError("Add a caption before continuing.");
+      return;
+    }
+
+    setCaptionError(undefined);
+    if (step < 2) moveToStep((step + 1) as PostStep);
+  };
+
+  const goBack = () => {
+    if (step > 0) moveToStep((step - 1) as PostStep);
+  };
 
   const pickImage = async () => {
     setImageError(undefined);
@@ -110,68 +154,44 @@ export default function CreatePostScreen() {
       <OrganiserAtmosphere />
       <PortalScreenHeader title="Create Post" disabled={publishing} />
 
-      {/* TOP SEGMENT: COMPOSE vs AUDIENCE PREVIEW */}
-      <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
-        <Pressable
-          style={[styles.tabBtn, activeTab === "compose" && styles.tabBtnActive]}
-          onPress={() => {
-            if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
-            setActiveTab("compose");
-          }}
-        >
-          <Ionicons
-            name="create-outline"
-            size={16}
-            color={activeTab === "compose" ? "#38BDF8" : colors.mutedForeground}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === "compose" ? colors.foreground : colors.mutedForeground },
-              activeTab === "compose" && styles.tabTextActive,
-            ]}
-          >
-            Compose
+      <View style={[styles.progressHeader, { backgroundColor: palette.surface, borderColor: colors.border }]}>
+        <View style={styles.progressMetaRow}>
+          <Text style={styles.progressEyebrow}>
+            STEP {step + 1} OF {POST_STEPS.length} · {POST_STEPS[step].eyebrow.toUpperCase()}
           </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.tabBtn, activeTab === "preview" && styles.tabBtnActive]}
-          onPress={() => {
-            if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
-            setActiveTab("preview");
-          }}
-        >
-          <Ionicons
-            name="eye-outline"
-            size={16}
-            color={activeTab === "preview" ? "#38BDF8" : colors.mutedForeground}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === "preview" ? colors.foreground : colors.mutedForeground },
-              activeTab === "preview" && styles.tabTextActive,
-            ]}
-          >
-            Audience Preview
+          <Text style={[styles.progressCount, { color: colors.mutedForeground }]}>
+            {Math.round(((step + 1) / POST_STEPS.length) * 100)}%
           </Text>
-        </Pressable>
+        </View>
+        <Text accessibilityRole="header" style={[styles.progressTitle, { color: colors.foreground }]}>
+          {POST_STEPS[step].title}
+        </Text>
+        <Text style={[styles.progressDescription, { color: colors.mutedForeground }]}>
+          {POST_STEPS[step].description}
+        </Text>
+        <View style={styles.progressTrack} accessibilityLabel={`Step ${step + 1} of ${POST_STEPS.length}`}>
+          {POST_STEPS.map((item, index) => (
+            <View
+              key={item.title}
+              style={[
+                styles.progressSegment,
+                { backgroundColor: index <= step ? palette.accent : palette.surfaceRaised },
+              ]}
+            />
+          ))}
+        </View>
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.flex}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 48 }]}
+        contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {activeTab === "compose" ? (
-          <>
-            {/* ORGANISER IDENTITY ROW */}
-            <Animated.View
-              entering={Platform.OS !== "web" ? FadeInDown.delay(40).springify() : undefined}
-              style={styles.authorRow}
-            >
+        {step === 0 && (
+          <Animated.View entering={Platform.OS !== "web" ? FadeInDown.duration(260) : undefined} style={styles.stepContent}>
+            <OrganiserSurface style={styles.identityCard}>
               <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
                 {user?.organisation?.logoUrl ? (
                   <Image source={{ uri: user.organisation.logoUrl }} style={styles.fill} />
@@ -182,263 +202,206 @@ export default function CreatePostScreen() {
               <View style={styles.authorMeta}>
                 <View style={styles.authorNameRow}>
                   <Text style={[styles.authorName, { color: colors.foreground }]}>{orgName}</Text>
-                  <Ionicons name="checkmark-circle" size={15} color="#38BDF8" />
+                  <Ionicons name="checkmark-circle" size={16} color={palette.accent} />
                 </View>
-                <Text style={[styles.hint, { color: colors.mutedForeground }]}>
-                  Posting to the Eventis Community Feed
-                </Text>
+                <Text style={[styles.hint, { color: colors.mutedForeground }]}>Publishing as your organisation</Text>
               </View>
-            </Animated.View>
+            </OrganiserSurface>
 
-            {/* POST TOPIC / TAG PILLS */}
-            <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(70).springify() : undefined}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-                POST TOPIC
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.postTypeRow}
-              >
-                {POST_TYPES.map((t) => {
-                  const isSelected = postType === t.id;
+            <View>
+              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>WHAT KIND OF UPDATE IS THIS?</Text>
+              <View style={styles.postTypeGrid}>
+                {POST_TYPES.map((type) => {
+                  const isSelected = postType === type.id;
                   return (
                     <Pressable
-                      key={t.id}
+                      key={type.id}
                       onPress={() => {
                         if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
-                        setPostType(t.id);
+                        setPostType(type.id);
                       }}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
                       style={[
                         styles.postTypeChip,
                         {
-                          backgroundColor: isSelected ? "rgba(56,189,248,0.18)" : "rgba(255,255,255,0.04)",
-                          borderColor: isSelected ? "#38BDF8" : colors.border,
+                          backgroundColor: isSelected ? palette.blueSoft : palette.surface,
+                          borderColor: isSelected ? palette.accent : colors.border,
                         },
                       ]}
                     >
-                      <Ionicons
-                        name={t.icon}
-                        size={14}
-                        color={isSelected ? "#38BDF8" : colors.mutedForeground}
-                      />
-                      <Text
-                        style={[
-                          styles.postTypeChipText,
-                          { color: isSelected ? "#38BDF8" : colors.foreground },
-                          isSelected && styles.postTypeChipTextActive,
-                        ]}
-                      >
-                        {t.label}
+                      <View style={[styles.topicIcon, { backgroundColor: isSelected ? palette.accent : palette.surfaceRaised }]}>
+                        <Ionicons name={type.icon} size={17} color={isSelected ? "#FFFFFF" : colors.mutedForeground} />
+                      </View>
+                      <Text style={[styles.postTypeChipText, { color: isSelected ? palette.accent : colors.foreground }]}>
+                        {type.label}
                       </Text>
                     </Pressable>
                   );
                 })}
-              </ScrollView>
-            </Animated.View>
+              </View>
+            </View>
 
-            {/* CAPTION INPUT WITH GLASSMORPHISM */}
-            <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(100).springify() : undefined}>
-              <GlassSurface style={styles.captionCard}>
+            <View>
+              <View style={styles.labelRow}>
+                <Text style={[styles.sectionLabel, styles.labelWithoutMargin, { color: colors.mutedForeground }]}>CAPTION</Text>
+                <Text style={[styles.captionLimit, { color: colors.mutedForeground }]}>{caption.length}/{CAPTION_LIMIT}</Text>
+              </View>
+              <OrganiserSurface style={[styles.captionCard, captionError ? { borderColor: colors.destructive } : undefined]}>
                 <TextInput
                   value={caption}
-                  onChangeText={setCaption}
-                  placeholder="What's happening? Share lineup drops, door times, behind-the-scenes teasers, or announcements with Kigali…"
+                  onChangeText={(value) => {
+                    setCaption(value);
+                    if (value.trim()) setCaptionError(undefined);
+                  }}
+                  placeholder="Share the announcement, key detail, or story behind this update…"
                   placeholderTextColor={colors.mutedForeground}
                   multiline
                   maxLength={CAPTION_LIMIT}
                   textAlignVertical="top"
                   style={[styles.captionInput, { color: colors.foreground }]}
                   accessibilityLabel="Post caption"
+                  accessibilityHint="Required before moving to the next step"
                 />
+              </OrganiserSurface>
+              {captionError ? <Text style={[styles.fieldError, { color: colors.destructive }]}>{captionError}</Text> : null}
+              <View style={styles.writingHintRow}>
+                <Ionicons name="sparkles-outline" size={15} color={palette.accent} />
+                <Text style={[styles.writingHint, { color: colors.mutedForeground }]}>Lead with the detail your audience should remember.</Text>
+              </View>
+            </View>
+          </Animated.View>
+        )}
 
-                <View style={[styles.captionFooter, { borderTopColor: colors.border }]}>
-                  <Text style={[styles.captionLimit, { color: colors.mutedForeground }]}>
-                    {caption.length}/{CAPTION_LIMIT} characters
-                  </Text>
-                </View>
-              </GlassSurface>
-            </Animated.View>
-
-            {/* MEDIA ATTACHMENT */}
-            <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(130).springify() : undefined}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-                PHOTO / POSTER
-              </Text>
-
+        {step === 1 && (
+          <Animated.View entering={Platform.OS !== "web" ? FadeInDown.duration(260) : undefined} style={styles.stepContent}>
+            <View>
+              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>PHOTO OR POSTER</Text>
               {imageUri ? (
-                <GlassSurface style={styles.imageCard}>
+                <OrganiserSurface style={styles.imageCard}>
                   <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
-                  <LinearGradient
-                    colors={["rgba(0,0,0,0.6)", "transparent"]}
-                    style={styles.imageGradientOverlay}
-                  />
+                  <LinearGradient colors={["rgba(0,0,0,0.68)", "transparent"]} style={styles.imageGradientOverlay} />
                   <View style={styles.imageTopActions}>
-                    <Pressable
-                      onPress={pickImage}
-                      style={[styles.imageActionBtn, { backgroundColor: "rgba(0,0,0,0.6)" }]}
-                    >
+                    <Pressable onPress={pickImage} style={styles.imageActionBtn} accessibilityRole="button">
                       <Ionicons name="camera-reverse" size={16} color="#FFFFFF" />
                       <Text style={styles.imageActionText}>Change</Text>
                     </Pressable>
-                    <Pressable
-                      onPress={() => setImageUri(undefined)}
-                      style={[styles.imageActionBtn, { backgroundColor: "rgba(239,68,68,0.7)" }]}
-                    >
-                      <Ionicons name="trash" size={16} color="#FFFFFF" />
+                    <Pressable onPress={() => setImageUri(undefined)} style={[styles.imageActionBtn, styles.removeImageBtn]} accessibilityRole="button">
+                      <Ionicons name="trash-outline" size={16} color="#FFFFFF" />
                       <Text style={styles.imageActionText}>Remove</Text>
                     </Pressable>
                   </View>
-                </GlassSurface>
+                </OrganiserSurface>
               ) : (
                 <Pressable
                   onPress={pickImage}
-                  style={[
-                    styles.uploadDropzone,
-                    { borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.03)" },
-                  ]}
+                  style={[styles.uploadDropzone, { borderColor: colors.border, backgroundColor: palette.surface }]}
                   accessibilityRole="button"
+                  accessibilityHint="Opens your photo library"
                 >
-                  <View style={[styles.uploadIconWrap, { backgroundColor: "rgba(56,189,248,0.15)" }]}>
-                    <Ionicons name="image-outline" size={24} color="#38BDF8" />
+                  <View style={[styles.uploadIconWrap, { backgroundColor: palette.blueSoft }]}>
+                    <Ionicons name="images-outline" size={25} color={palette.accent} />
                   </View>
-                  <Text style={[styles.uploadTitle, { color: colors.foreground }]}>
-                    Upload High-Res Cover or Photo
-                  </Text>
-                  <Text style={[styles.uploadSub, { color: colors.mutedForeground }]}>
-                    PNG, JPG or WEBP up to 10MB
-                  </Text>
+                  <View style={styles.uploadCopy}>
+                    <Text style={[styles.uploadTitle, { color: colors.foreground }]}>Add a strong visual</Text>
+                    <Text style={[styles.uploadSub, { color: colors.mutedForeground }]}>Choose a poster or photo from your library</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
                 </Pressable>
               )}
-              {imageError && <Text style={[styles.error, { color: colors.destructive }]}>{imageError}</Text>}
-            </Animated.View>
+              {imageError ? <Text style={[styles.fieldError, { color: colors.destructive }]}>{imageError}</Text> : null}
+            </View>
 
-            {/* ATTACH TO EVENT (LUMA / PARTIFUL STYLE) */}
-            <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(160).springify() : undefined}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-                ATTACH TO AN EVENT (OPTIONAL)
-              </Text>
-
+            <View>
+              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>LINK AN EVENT</Text>
               {attachedEvent ? (
-                <GlassSurface style={styles.attachedEventCard}>
+                <OrganiserSurface style={styles.attachedEventCard}>
                   <Image source={{ uri: attachedEvent.image }} style={styles.attachedEventThumb} />
                   <View style={styles.attachedEventMeta}>
-                    <Text style={[styles.attachedEventTitle, { color: colors.foreground }]} numberOfLines={1}>
-                      {attachedEvent.title}
-                    </Text>
-                    <Text style={[styles.attachedEventSub, { color: colors.mutedForeground }]} numberOfLines={1}>
-                      📍 {attachedEvent.location} · 📅 {attachedEvent.date}
-                    </Text>
+                    <Text style={[styles.attachedEventTitle, { color: colors.foreground }]} numberOfLines={1}>{attachedEvent.title}</Text>
+                    <Text style={[styles.attachedEventSub, { color: colors.mutedForeground }]} numberOfLines={1}>{attachedEvent.date} · {attachedEvent.location}</Text>
                   </View>
-                  <Pressable
-                    onPress={() => setAttachedEventId(undefined)}
-                    style={styles.detachBtn}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="close-circle" size={20} color={colors.mutedForeground} />
+                  <Pressable onPress={() => setAttachedEventId(undefined)} style={styles.detachBtn} accessibilityRole="button" accessibilityLabel="Remove attached event">
+                    <Ionicons name="close" size={19} color={colors.mutedForeground} />
                   </Pressable>
-                </GlassSurface>
+                </OrganiserSurface>
               ) : (
                 <Pressable
-                  onPress={() => setShowEventPicker(!showEventPicker)}
-                  style={[styles.attachEventBtn, { borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.03)" }]}
+                  onPress={() => setShowEventPicker((current) => !current)}
+                  style={[styles.optionRow, { borderColor: colors.border, backgroundColor: palette.surface }]}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showEventPicker }}
                 >
-                  <Ionicons name="calendar-outline" size={18} color="#38BDF8" />
-                  <Text style={[styles.attachEventBtnText, { color: colors.foreground }]}>
-                    Link an upcoming event to this post
-                  </Text>
-                  <Ionicons
-                    name={showEventPicker ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={colors.mutedForeground}
-                  />
+                  <View style={[styles.optionIcon, { backgroundColor: palette.blueSoft }]}><Ionicons name="calendar-outline" size={20} color={palette.accent} /></View>
+                  <View style={styles.optionCopy}>
+                    <Text style={[styles.optionTitle, { color: colors.foreground }]}>Attach an upcoming event</Text>
+                    <Text style={[styles.optionDescription, { color: colors.mutedForeground }]}>Give people a direct path to event details</Text>
+                  </View>
+                  <Ionicons name={showEventPicker ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedForeground} />
                 </Pressable>
               )}
 
-              {/* Event Picker Dropdown */}
-              {showEventPicker && !attachedEvent && (
-                <GlassSurface style={styles.eventPickerList}>
-                  {events.slice(0, 5).map((ev) => (
+              {showEventPicker && !attachedEvent ? (
+                <OrganiserSurface style={styles.eventPickerList}>
+                  {events.length > 0 ? events.slice(0, 5).map((event) => (
                     <Pressable
-                      key={ev.id}
+                      key={event.id}
                       style={[styles.eventPickerItem, { borderBottomColor: colors.border }]}
                       onPress={() => {
-                        setAttachedEventId(ev.id);
+                        setAttachedEventId(event.id);
                         setShowEventPicker(false);
                       }}
                     >
-                      <Image source={{ uri: ev.image }} style={styles.eventPickerThumb} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.eventPickerTitle, { color: colors.foreground }]} numberOfLines={1}>
-                          {ev.title}
-                        </Text>
-                        <Text style={[styles.eventPickerSub, { color: colors.mutedForeground }]}>
-                          {ev.date} · {ev.location}
-                        </Text>
+                      <Image source={{ uri: event.image }} style={styles.eventPickerThumb} />
+                      <View style={styles.eventPickerCopy}>
+                        <Text style={[styles.eventPickerTitle, { color: colors.foreground }]} numberOfLines={1}>{event.title}</Text>
+                        <Text style={[styles.eventPickerSub, { color: colors.mutedForeground }]} numberOfLines={1}>{event.date} · {event.location}</Text>
                       </View>
+                      <Ionicons name="add-circle-outline" size={20} color={palette.accent} />
                     </Pressable>
-                  ))}
-                </GlassSurface>
-              )}
-            </Animated.View>
+                  )) : (
+                    <Text style={[styles.emptyPickerText, { color: colors.mutedForeground }]}>Create an event first, then you can link it here.</Text>
+                  )}
+                </OrganiserSurface>
+              ) : null}
+            </View>
 
-            {/* LOCATION TAGGING */}
-            <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(190).springify() : undefined}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-                LOCATION TAG (OPTIONAL)
-              </Text>
-              <GlassSurface style={styles.locationInputRow}>
-                <Ionicons name="location-outline" size={18} color="#38BDF8" />
+            <View>
+              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>LOCATION</Text>
+              <OrganiserSurface style={styles.locationInputRow}>
+                <Ionicons name="location-outline" size={19} color={palette.accent} />
                 <TextInput
                   value={locationTag}
                   onChangeText={setLocationTag}
-                  placeholder="e.g. Kigali Convention Centre or rooftop"
+                  placeholder="Venue or neighbourhood"
                   placeholderTextColor={colors.mutedForeground}
                   style={[styles.locationInput, { color: colors.foreground }]}
+                  accessibilityLabel="Post location"
                 />
-                {locationTag.length > 0 && (
-                  <Pressable onPress={() => setLocationTag("")}>
-                    <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
+                {locationTag.length > 0 ? (
+                  <Pressable onPress={() => setLocationTag("")} accessibilityRole="button" accessibilityLabel="Clear location">
+                    <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
                   </Pressable>
-                )}
-              </GlassSurface>
-
-              {/* Quick location chips */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.quickLocationsRow}
-              >
-                {QUICK_LOCATIONS.map((loc) => (
-                  <Pressable
-                    key={loc}
-                    onPress={() => setLocationTag(loc)}
-                    style={[
-                      styles.quickLocChip,
-                      {
-                        backgroundColor: locationTag === loc ? "rgba(56,189,248,0.18)" : "rgba(255,255,255,0.04)",
-                        borderColor: locationTag === loc ? "#38BDF8" : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.quickLocText,
-                        { color: locationTag === loc ? "#38BDF8" : colors.mutedForeground },
-                      ]}
+                ) : null}
+              </OrganiserSurface>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickLocationsRow}>
+                {QUICK_LOCATIONS.map((location) => {
+                  const isSelected = locationTag === location;
+                  return (
+                    <Pressable
+                      key={location}
+                      onPress={() => setLocationTag(location)}
+                      style={[styles.quickLocChip, { backgroundColor: isSelected ? palette.blueSoft : palette.surface, borderColor: isSelected ? palette.accent : colors.border }]}
                     >
-                      {loc}
-                    </Text>
-                  </Pressable>
-                ))}
+                      <Text style={[styles.quickLocText, { color: isSelected ? palette.accent : colors.mutedForeground }]}>{location}</Text>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
-            </Animated.View>
+            </View>
 
-            {/* CALL TO ACTION BUTTON SELECTOR */}
-            <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(220).springify() : undefined}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-                ACTION BUTTON FOR ATTENDEES
-              </Text>
+            <View>
+              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>CALL TO ACTION</Text>
               <View style={styles.ctaGrid}>
                 {CTA_OPTIONS.map((cta) => {
                   const isSelected = selectedCta === cta.id;
@@ -446,145 +409,122 @@ export default function CreatePostScreen() {
                     <Pressable
                       key={cta.id}
                       onPress={() => setSelectedCta(cta.id)}
-                      style={[
-                        styles.ctaChip,
-                        {
-                          backgroundColor: isSelected ? "rgba(56,189,248,0.18)" : "rgba(255,255,255,0.04)",
-                          borderColor: isSelected ? "#38BDF8" : colors.border,
-                        },
-                      ]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
+                      style={[styles.ctaChip, { backgroundColor: isSelected ? palette.blueSoft : palette.surface, borderColor: isSelected ? palette.accent : colors.border }]}
                     >
-                      <Text
-                        style={[
-                          styles.ctaChipText,
-                          { color: isSelected ? "#38BDF8" : colors.foreground },
-                          isSelected && styles.ctaChipTextActive,
-                        ]}
-                      >
-                        {cta.label}
-                      </Text>
+                      <Ionicons name={isSelected ? "checkmark-circle" : "ellipse-outline"} size={17} color={isSelected ? palette.accent : colors.mutedForeground} />
+                      <Text style={[styles.ctaChipText, { color: isSelected ? palette.accent : colors.foreground }]}>{cta.label}</Text>
                     </Pressable>
                   );
                 })}
               </View>
-            </Animated.View>
-          </>
-        ) : (
-          /* AUDIENCE PREVIEW SCREEN */
-          <Animated.View entering={FadeIn} style={styles.previewContainer}>
-            <View style={styles.previewNotice}>
-              <Ionicons name="information-circle-outline" size={18} color="#38BDF8" />
-              <Text style={[styles.previewNoticeText, { color: colors.mutedForeground }]}>
-                This is how people will see your post in their feed:
-              </Text>
+              <OrganiserSurface style={styles.linkInputRow}>
+                <Ionicons name="link-outline" size={19} color={palette.accent} />
+                <TextInput
+                  value={externalLink}
+                  onChangeText={setExternalLink}
+                  placeholder="Optional link, e.g. ticket page"
+                  placeholderTextColor={colors.mutedForeground}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  style={[styles.locationInput, { color: colors.foreground }]}
+                  accessibilityLabel="Call to action link"
+                />
+              </OrganiserSurface>
             </View>
-
-            {/* PREVIEW POST CARD */}
-            <GlassSurface style={styles.feedCardPreview}>
-              {/* Card Header */}
-              <View style={styles.previewCardHeader}>
-                <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-                  {user?.organisation?.logoUrl ? (
-                    <Image source={{ uri: user.organisation.logoUrl }} style={styles.fill} />
-                  ) : (
-                    <Text style={styles.avatarLetter}>{orgName.charAt(0).toUpperCase()}</Text>
-                  )}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.authorNameRow}>
-                    <Text style={[styles.authorName, { color: colors.foreground }]}>{orgName}</Text>
-                    <Ionicons name="checkmark-circle" size={15} color="#38BDF8" />
-                  </View>
-                  <Text style={[styles.previewTimestamp, { color: colors.mutedForeground }]}>
-                    Just now · {locationTag || "Kigali, Rwanda"}
-                  </Text>
-                </View>
-                <View style={[styles.previewTopicPill, { backgroundColor: "rgba(56,189,248,0.15)" }]}>
-                  <Text style={styles.previewTopicText}>
-                    {POST_TYPES.find((t) => t.id === postType)?.label}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Caption */}
-              <Text style={[styles.previewCaptionText, { color: colors.foreground }]}>
-                {caption.trim() || "What's happening? Share an update with your audience…"}
-              </Text>
-
-              {/* Photo */}
-              {imageUri && (
-                <View style={styles.previewImageWrap}>
-                  <Image source={{ uri: imageUri }} style={styles.previewPostImage} resizeMode="cover" />
-                </View>
-              )}
-
-              {/* Attached Event Card in Preview */}
-              {attachedEvent && (
-                <View style={[styles.previewEventAttachment, { backgroundColor: "rgba(255,255,255,0.06)", borderColor: colors.border }]}>
-                  <Image source={{ uri: attachedEvent.image }} style={styles.previewEventThumb} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={[styles.previewEventTitle, { color: colors.foreground }]} numberOfLines={1}>
-                      {attachedEvent.title}
-                    </Text>
-                    <Text style={[styles.previewEventDetails, { color: colors.mutedForeground }]}>
-                      📅 {attachedEvent.date} · 📍 {attachedEvent.location}
-                    </Text>
-                  </View>
-                  <View style={styles.previewEventActionBadge}>
-                    <Text style={styles.previewEventActionText}>
-                      {CTA_OPTIONS.find((c) => c.id === selectedCta)?.label}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Card Footer Interactions: the same actions the real feed card offers (no likes or comments). */}
-              <View style={[styles.previewEngagementRow, { borderTopColor: colors.border }]}>
-                <View style={styles.previewActionItem}>
-                  <Ionicons name="paper-plane-outline" size={18} color={colors.mutedForeground} />
-                  <Text style={[styles.previewActionText, { color: colors.mutedForeground }]}>Share</Text>
-                </View>
-                <View style={styles.previewActionItem}>
-                  <Ionicons name="bookmark-outline" size={18} color={colors.mutedForeground} />
-                  <Text style={[styles.previewActionText, { color: colors.mutedForeground }]}>Save</Text>
-                </View>
-              </View>
-            </GlassSurface>
           </Animated.View>
         )}
 
-        {/* PUBLISH ACTION BUTTON */}
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(250).springify() : undefined}>
-          <Pressable
-            style={[
-              styles.primaryBtn,
-              { backgroundColor: canPublish ? colors.primary : "rgba(255,255,255,0.1)" },
-            ]}
-            onPress={publish}
-            disabled={!canPublish}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canPublish, busy: publishing }}
-          >
-            <LinearGradient
-              colors={canPublish ? ["rgba(255,255,255,0.2)", "transparent"] : ["transparent", "transparent"]}
-              style={StyleSheet.absoluteFill}
-            />
-            {publishing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Ionicons name="paper-plane" size={18} color={canPublish ? "#fff" : colors.mutedForeground} />
-            )}
-            <Text
-              style={[
-                styles.primaryBtnText,
-                { color: canPublish ? "#fff" : colors.mutedForeground },
-              ]}
-            >
-              {publishing ? "Publishing to Feed…" : "Publish Post"}
-            </Text>
-          </Pressable>
-        </Animated.View>
+        {step === 2 && (
+          <Animated.View entering={FadeIn.duration(220)} style={styles.stepContent}>
+            <View style={styles.previewNotice}>
+              <View style={[styles.previewNoticeIcon, { backgroundColor: palette.blueSoft }]}><Ionicons name="eye-outline" size={18} color={palette.accent} /></View>
+              <View style={styles.optionCopy}>
+                <Text style={[styles.previewNoticeTitle, { color: colors.foreground }]}>Audience preview</Text>
+                <Text style={[styles.previewNoticeText, { color: colors.mutedForeground }]}>This is how the post will appear in the feed.</Text>
+              </View>
+            </View>
+
+            <OrganiserSurface style={styles.feedCardPreview}>
+              <View style={styles.previewCardHeader}>
+                <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+                  {user?.organisation?.logoUrl ? <Image source={{ uri: user.organisation.logoUrl }} style={styles.fill} /> : <Text style={styles.avatarLetter}>{orgName.charAt(0).toUpperCase()}</Text>}
+                </View>
+                <View style={styles.previewAuthorCopy}>
+                  <View style={styles.authorNameRow}>
+                    <Text style={[styles.authorName, { color: colors.foreground }]}>{orgName}</Text>
+                    <Ionicons name="checkmark-circle" size={15} color={palette.accent} />
+                  </View>
+                  <Text style={[styles.previewTimestamp, { color: colors.mutedForeground }]}>Just now{locationTag ? ` · ${locationTag}` : ""}</Text>
+                </View>
+                <View style={[styles.previewTopicPill, { backgroundColor: palette.blueSoft }]}>
+                  <Text style={[styles.previewTopicText, { color: palette.accent }]}>{POST_TYPES.find((type) => type.id === postType)?.label}</Text>
+                </View>
+              </View>
+
+              <Text style={[styles.previewCaptionText, { color: colors.foreground }]}>{caption.trim()}</Text>
+              {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewPostImage} resizeMode="cover" /> : null}
+
+              {attachedEvent ? (
+                <View style={[styles.previewEventAttachment, { backgroundColor: palette.surfaceRaised, borderColor: colors.border }]}>
+                  <Image source={{ uri: attachedEvent.image }} style={styles.previewEventThumb} />
+                  <View style={styles.eventPickerCopy}>
+                    <Text style={[styles.previewEventTitle, { color: colors.foreground }]} numberOfLines={1}>{attachedEvent.title}</Text>
+                    <Text style={[styles.previewEventDetails, { color: colors.mutedForeground }]} numberOfLines={1}>{attachedEvent.date} · {attachedEvent.location}</Text>
+                  </View>
+                  <View style={[styles.previewEventActionBadge, { backgroundColor: palette.accent }]}><Text style={styles.previewEventActionText}>{CTA_OPTIONS.find((cta) => cta.id === selectedCta)?.label}</Text></View>
+                </View>
+              ) : null}
+
+              {externalLink && !attachedEvent ? (
+                <View style={[styles.linkPreview, { backgroundColor: palette.surfaceRaised }]}>
+                  <Ionicons name="link-outline" size={17} color={palette.accent} />
+                  <Text style={[styles.linkPreviewText, { color: colors.foreground }]} numberOfLines={1}>{externalLink}</Text>
+                  <Text style={[styles.linkPreviewAction, { color: palette.accent }]}>{CTA_OPTIONS.find((cta) => cta.id === selectedCta)?.label}</Text>
+                </View>
+              ) : null}
+
+              <View style={[styles.previewEngagementRow, { borderTopColor: colors.border }]}>
+                <View style={styles.previewActionItem}><Ionicons name="paper-plane-outline" size={19} color={colors.mutedForeground} /><Text style={[styles.previewActionText, { color: colors.mutedForeground }]}>Share</Text></View>
+                <View style={styles.previewActionItem}><Ionicons name="bookmark-outline" size={19} color={colors.mutedForeground} /><Text style={[styles.previewActionText, { color: colors.mutedForeground }]}>Save</Text></View>
+              </View>
+            </OrganiserSurface>
+
+            <OrganiserSurface style={styles.reviewSummary}>
+              <View style={styles.reviewRow}><Ionicons name="images-outline" size={18} color={imageUri ? palette.accent : colors.mutedForeground} /><Text style={[styles.reviewLabel, { color: colors.foreground }]}>Visual</Text><Text style={[styles.reviewValue, { color: imageUri ? palette.accent : colors.mutedForeground }]}>{imageUri ? "Added" : "None"}</Text></View>
+              <View style={[styles.reviewDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.reviewRow}><Ionicons name="calendar-outline" size={18} color={attachedEvent ? palette.accent : colors.mutedForeground} /><Text style={[styles.reviewLabel, { color: colors.foreground }]}>Linked event</Text><Text style={[styles.reviewValue, { color: attachedEvent ? palette.accent : colors.mutedForeground }]} numberOfLines={1}>{attachedEvent?.title ?? "None"}</Text></View>
+              <View style={[styles.reviewDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.reviewRow}><Ionicons name="location-outline" size={18} color={locationTag ? palette.accent : colors.mutedForeground} /><Text style={[styles.reviewLabel, { color: colors.foreground }]}>Location</Text><Text style={[styles.reviewValue, { color: locationTag ? palette.accent : colors.mutedForeground }]} numberOfLines={1}>{locationTag || "None"}</Text></View>
+            </OrganiserSurface>
+          </Animated.View>
+        )}
       </ScrollView>
+
+      <View style={[styles.footer, { backgroundColor: palette.canvas, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
+        {step > 0 ? (
+          <Pressable onPress={goBack} disabled={publishing} style={[styles.backBtn, { borderColor: colors.border, backgroundColor: palette.surface }]} accessibilityRole="button">
+            <Ionicons name="arrow-back" size={19} color={colors.foreground} />
+            <Text style={[styles.backBtnText, { color: colors.foreground }]}>Back</Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={step === 2 ? publish : continueFlow}
+          disabled={step === 2 && !canPublish}
+          style={({ pressed }) => [styles.primaryBtn, { backgroundColor: palette.accent, opacity: pressed || publishing ? 0.78 : 1 }]}
+          accessibilityRole="button"
+          accessibilityLabel={step === 2 ? "Publish post" : `Continue to step ${step + 2}`}
+          accessibilityState={{ disabled: step === 2 && !canPublish, busy: publishing }}
+        >
+          {publishing ? <ActivityIndicator color="#FFFFFF" /> : (
+            <>
+              <Text style={styles.primaryBtnText}>{step === 2 ? "Publish post" : step === 1 ? "Review post" : "Continue"}</Text>
+              <Ionicons name={step === 2 ? "paper-plane" : "arrow-forward"} size={18} color="#FFFFFF" />
+            </>
+          )}
+        </Pressable>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -593,39 +533,61 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   fill: { width: "100%", height: "100%" },
-  content: { padding: 20, gap: 18 },
-
-  // Tabs
-  tabBar: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
+  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28 },
+  progressHeader: {
+    marginHorizontal: 20,
+    marginTop: 14,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
-  tabBtn: {
-    flex: 1,
+  progressMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    gap: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
+    justifyContent: "space-between",
+    marginBottom: 7,
   },
-  tabBtnActive: {
-    borderBottomColor: "#38BDF8",
+  progressEyebrow: {
+    color: "#38BDF8",
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 1,
   },
-  tabText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+  progressCount: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
-  tabTextActive: {
+  progressTitle: {
+    fontSize: 21,
+    lineHeight: 27,
     fontFamily: "Inter_700Bold",
   },
-
-  // Author Row
-  authorRow: {
+  progressDescription: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Inter_500Medium",
+    marginTop: 4,
+  },
+  progressTrack: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 14,
+  },
+  progressSegment: {
+    height: 4,
+    flex: 1,
+    borderRadius: 2,
+  },
+  stepContent: {
+    gap: 22,
+  },
+  identityCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    padding: 14,
+    borderRadius: 18,
   },
   avatar: {
     width: 46,
@@ -638,71 +600,93 @@ const styles = StyleSheet.create({
   avatarLetter: { color: "#fff", fontSize: 18, fontFamily: "Inter_700Bold" },
   authorMeta: { flex: 1, gap: 2 },
   authorNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  authorName: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  authorName: { flexShrink: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
   hint: { fontSize: 12, fontFamily: "Inter_400Regular" },
-
-  // Section label
   sectionLabel: {
     fontSize: 11,
     fontFamily: "Inter_700Bold",
     letterSpacing: 0.9,
-    marginBottom: 8,
+    marginBottom: 10,
   },
-
-  // Post Type pills
-  postTypeRow: {
+  labelWithoutMargin: {
+    marginBottom: 0,
+  },
+  labelRow: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  postTypeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
   },
   postTypeChip: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    width: "48.5%",
+    minHeight: 52,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 15,
     borderWidth: 1,
-    gap: 6,
+    gap: 9,
+  },
+  topicIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   postTypeChipText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_600SemiBold",
+    flexShrink: 1,
   },
-  postTypeChipTextActive: {
-    fontFamily: "Inter_700Bold",
-  },
-
-  // Caption card
   captionCard: {
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   captionInput: {
-    minHeight: 120,
+    minHeight: 160,
     fontSize: 15,
     fontFamily: "Inter_400Regular",
-    lineHeight: 22,
-  },
-  captionFooter: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    borderTopWidth: 1,
-    paddingTop: 10,
-    marginTop: 8,
+    lineHeight: 23,
   },
   captionLimit: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_600SemiBold",
   },
-
-  // Image upload
+  fieldError: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: 7,
+  },
+  writingHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginTop: 10,
+    paddingHorizontal: 2,
+  },
+  writingHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+  },
   imageCard: {
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: "hidden",
     position: "relative",
   },
   previewImage: {
     width: "100%",
-    aspectRatio: 16 / 9,
+    aspectRatio: 4 / 3,
   },
   imageGradientOverlay: {
     position: "absolute",
@@ -722,9 +706,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+    minHeight: 36,
+    paddingHorizontal: 11,
+    borderRadius: 18,
+    backgroundColor: "rgba(4,8,14,0.82)",
+  },
+  removeImageBtn: {
+    backgroundColor: "rgba(173,36,55,0.9)",
   },
   imageActionText: {
     fontSize: 12,
@@ -732,21 +720,25 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   uploadDropzone: {
+    minHeight: 92,
     borderRadius: 18,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    paddingVertical: 24,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
+    gap: 12,
   },
   uploadIconWrap: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+  },
+  uploadCopy: {
+    flex: 1,
+    gap: 3,
   },
   uploadTitle: {
     fontSize: 14,
@@ -754,20 +746,14 @@ const styles = StyleSheet.create({
   },
   uploadSub: {
     fontSize: 12,
+    lineHeight: 17,
     fontFamily: "Inter_400Regular",
   },
-  error: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    marginTop: 4,
-  },
-
-  // Event attachment
   attachedEventCard: {
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
-    borderRadius: 16,
+    borderRadius: 18,
     gap: 12,
   },
   attachedEventThumb: {
@@ -788,20 +774,40 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   detachBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  attachEventBtn: {
+  optionRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    borderRadius: 16,
+    minHeight: 76,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
     borderWidth: 1,
-    gap: 10,
+    gap: 12,
   },
-  attachEventBtnText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+  optionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionCopy: {
     flex: 1,
+    gap: 3,
+  },
+  optionTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  optionDescription: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Inter_400Regular",
   },
   eventPickerList: {
     borderRadius: 16,
@@ -814,6 +820,7 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
     borderBottomWidth: 1,
+    minHeight: 66,
   },
   eventPickerThumb: {
     width: 40,
@@ -829,15 +836,34 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
-
-  // Location
+  eventPickerCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  emptyPickerText: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Inter_400Regular",
+    padding: 16,
+  },
   locationInputRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
+    minHeight: 54,
+    paddingVertical: 11,
+    borderRadius: 16,
     gap: 10,
+  },
+  linkInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 54,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 16,
+    gap: 10,
+    marginTop: 10,
   },
   locationInput: {
     flex: 1,
@@ -851,8 +877,8 @@ const styles = StyleSheet.create({
   },
   quickLocChip: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
     borderWidth: 1,
   },
   quickLocText: {
@@ -860,35 +886,42 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
 
-  // CTA Grid
   ctaGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   ctaChip: {
-    flex: 1,
+    width: "48.5%",
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    borderRadius: 12,
+    justifyContent: "center",
+    gap: 7,
+    minHeight: 46,
+    paddingHorizontal: 8,
+    borderRadius: 14,
     borderWidth: 1,
   },
   ctaChipText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
-  ctaChipTextActive: {
-    fontFamily: "Inter_700Bold",
-  },
-
-  // Preview tab
-  previewContainer: {
-    gap: 14,
-  },
   previewNotice: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 4,
+    gap: 12,
+    paddingHorizontal: 2,
+  },
+  previewNoticeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewNoticeTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
   },
   previewNoticeText: {
     fontSize: 12,
@@ -897,13 +930,19 @@ const styles = StyleSheet.create({
   },
   feedCardPreview: {
     borderRadius: 20,
-    padding: 18,
-    gap: 14,
+    paddingTop: 16,
+    overflow: "hidden",
   },
   previewCardHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+  },
+  previewAuthorCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   previewTimestamp: {
     fontSize: 11,
@@ -914,6 +953,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    maxWidth: 94,
   },
   previewTopicText: {
     fontSize: 11,
@@ -924,19 +964,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     lineHeight: 22,
-  },
-  previewImageWrap: {
-    borderRadius: 14,
-    overflow: "hidden",
+    paddingHorizontal: 16,
+    paddingBottom: 15,
   },
   previewPostImage: {
     width: "100%",
-    aspectRatio: 16 / 9,
+    aspectRatio: 4 / 5,
   },
   previewEventAttachment: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
+    margin: 14,
+    borderRadius: 15,
     borderWidth: 1,
     padding: 10,
     gap: 10,
@@ -955,10 +994,9 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   previewEventActionBadge: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: "#38BDF8",
   },
   previewEventActionText: {
     fontSize: 11,
@@ -969,7 +1007,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     borderTopWidth: 1,
-    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   previewActionItem: {
     flexDirection: "row",
@@ -980,19 +1019,82 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
-
-  // Primary publish
+  linkPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginBottom: 14,
+    padding: 12,
+    borderRadius: 14,
+  },
+  linkPreviewText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  linkPreviewAction: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+  },
+  reviewSummary: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+  },
+  reviewRow: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  reviewLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
+  reviewValue: {
+    maxWidth: "48%",
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  reviewDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 28,
+  },
+  footer: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  backBtn: {
+    minWidth: 108,
+    minHeight: 52,
+    borderWidth: 1,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  backBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
   primaryBtn: {
+    flex: 1,
+    minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    paddingVertical: 17,
     borderRadius: 16,
-    overflow: "hidden",
   },
   primaryBtnText: {
-    fontSize: 16,
+    color: "#FFFFFF",
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
   },
 });
