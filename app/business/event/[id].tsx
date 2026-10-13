@@ -5,6 +5,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
 import { GlassSurface } from "@/components/GlassSurface";
+import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { InlineError, ProfileStatGrid, SectionState } from "@/components/profile/ProfileSection";
 import { PromotionSheet } from "@/components/profile/PromotionSheet";
@@ -14,6 +15,7 @@ import { useEvents } from "@/context/EventsContext";
 import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { describeProfileError } from "@/services/profileService";
 import { localToday } from "@/utils/dates";
 import {
@@ -36,6 +38,7 @@ function formatDate(date: string) {
 export default function ManageEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
@@ -74,7 +77,8 @@ export default function ManageEventScreen() {
 
   if (isLoading || loadError || !event) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+        <OrganiserAtmosphere />
         <PortalScreenHeader title="Manage Event" />
         <View style={styles.state}>
           {isLoading ? (
@@ -87,8 +91,8 @@ export default function ManageEventScreen() {
               icon="calendar-outline"
               title="Event not found"
               message="It may have been deleted, or it isn't one of yours."
-              actionLabel="Back to profile"
-              onAction={() => router.replace({ pathname: "/(tabs)/profile", params: { tab: "manage" } } as any)}
+              actionLabel="Back to organiser overview"
+              onAction={() => router.replace("/business/dashboard" as any)}
             />
           )}
         </View>
@@ -130,7 +134,7 @@ export default function ManageEventScreen() {
       await deletePublisherEvent(user.id, event.id);
       void refreshEvents();
       if (router.canGoBack()) router.back();
-      else router.replace({ pathname: "/(tabs)/profile", params: { tab: "manage" } } as any);
+      else router.replace("/business/dashboard" as any);
     } catch (err) {
       setActionError(describeProfileError(err, "We couldn't delete this event."));
       setBusy(null);
@@ -138,7 +142,8 @@ export default function ManageEventScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+      <OrganiserAtmosphere />
       <PortalScreenHeader title="Manage Event" disabled={!!busy} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
         <GlassSurface style={styles.summary}>

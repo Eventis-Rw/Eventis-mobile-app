@@ -17,12 +17,14 @@ import {
 
 import { GlassSurface } from "@/components/GlassSurface";
 import { FormField } from "@/components/OrganisationForm";
+import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { InlineError, SectionState } from "@/components/profile/ProfileSection";
 import { useAuth } from "@/context/AuthContext";
 import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import {
   demoReviewBusinessVerification,
   describeProfileError,
@@ -77,6 +79,7 @@ const EMPTY: BusinessVerificationInput = {
 /** Business verification: requirements, status, the submission form and next steps. */
 export default function BusinessVerificationScreen() {
   const colors = useColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
@@ -116,7 +119,8 @@ export default function BusinessVerificationScreen() {
 
   if (!user || !organisation) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+        <OrganiserAtmosphere />
         <PortalScreenHeader title="Verification" />
         <View style={styles.content}>
           <SectionState
@@ -197,9 +201,10 @@ export default function BusinessVerificationScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { backgroundColor: colors.background }]}
+      style={[styles.root, { backgroundColor: palette.canvas }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <OrganiserAtmosphere />
       <PortalScreenHeader title="Verification" disabled={submitting} />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}

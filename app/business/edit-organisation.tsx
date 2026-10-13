@@ -21,16 +21,19 @@ import {
   validateOrganisation,
   type OrganisationFormValues,
 } from "@/components/OrganisationForm";
+import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { describeError, USE_ORGANISER_API } from "@/services/organiserService";
 
 const SHOW_DEMO_CONTROLS = __DEV__ && !USE_ORGANISER_API;
 
 export default function EditOrganisationScreen() {
   const colors = useColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
@@ -79,9 +82,10 @@ export default function EditOrganisationScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { backgroundColor: colors.background }]}
+      style={[styles.root, { backgroundColor: palette.canvas }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <OrganiserAtmosphere />
       <PortalScreenHeader title={creating ? "New organisation" : "Edit organisation"} disabled={saving} />
 
       <ScrollView

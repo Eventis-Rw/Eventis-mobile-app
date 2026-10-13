@@ -24,9 +24,11 @@ import {
   type OrganisationFormValues,
 } from "@/components/OrganisationForm";
 import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
+import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { getOrganiserStep } from "@/hooks/useOrganiserAccess";
 import { describeError, USE_ORGANISER_API } from "@/services/organiserService";
 
@@ -34,6 +36,7 @@ const SHOW_DEMO_CONTROLS = __DEV__ && !USE_ORGANISER_API;
 
 export default function OrganisationSetupScreen() {
   const colors = useColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
@@ -96,37 +99,44 @@ export default function OrganisationSetupScreen() {
       : { label: "Start creating", onPress: toCreate };
 
     return (
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+        <OrganiserAtmosphere />
         <View style={[styles.doneWrap, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
           <Animated.View entering={FadeIn} style={styles.done}>
-            <View style={[styles.doneLogo, { backgroundColor: colors.primary }]}>
-              {logoUri ? (
-                <Image source={{ uri: logoUri }} style={[styles.logoImg, { borderRadius: 48 }]} />
-              ) : (
-                <Text style={styles.doneLetter}>{values.name.trim().charAt(0).toUpperCase()}</Text>
-              )}
-              <View style={[styles.doneCheck, { backgroundColor: colors.success, borderColor: colors.background }]}>
-                <Ionicons name="checkmark" size={14} color="#fff" />
+            <View style={styles.doneHalo}>
+              <View style={[styles.doneLogo, { backgroundColor: palette.blue }]}>
+                {logoUri ? (
+                  <Image source={{ uri: logoUri }} style={[styles.logoImg, { borderRadius: 48 }]} />
+                ) : (
+                  <Text style={styles.doneLetter}>{values.name.trim().charAt(0).toUpperCase()}</Text>
+                )}
+                <View style={[styles.doneCheck, { backgroundColor: palette.positive, borderColor: palette.canvas }]}>
+                  <Ionicons name="checkmark" size={14} color="#fff" />
+                </View>
               </View>
             </View>
-            <Text style={[styles.doneTitle, { color: colors.foreground }]}>You're an organiser</Text>
-            <Text style={[styles.doneText, { color: colors.mutedForeground }]}>
+            <View style={styles.successPill}>
+              <Ionicons name="sparkles" size={13} color="#38BDF8" />
+              <Text style={styles.successPillText}>WORKSPACE READY</Text>
+            </View>
+            <Text style={[styles.doneTitle, { color: palette.text }]}>Your workspace is ready</Text>
+            <Text style={[styles.doneText, { color: palette.muted }]}>
               {values.name.trim()} is set up on your account. Manage it and create events, posts and
               stories from the organiser portal, and keep browsing Eventis as usual.
             </Text>
             <View style={styles.doneActions}>
-              <Pressable style={[styles.primaryBtn, { backgroundColor: colors.primary }]} onPress={primary.onPress}>
+              <Pressable style={[styles.primaryBtn, { backgroundColor: palette.blue }]} onPress={primary.onPress}>
                 <Ionicons name={primary.icon} size={18} color="#fff" />
                 <Text style={styles.primaryBtnText}>{primary.label}</Text>
               </Pressable>
               <Pressable
-                style={[styles.outlineBtn, { borderColor: colors.border }]}
+                style={[styles.outlineBtn, { borderColor: palette.line }]}
                 onPress={secondary.onPress}
               >
-                <Text style={[styles.outlineBtnText, { color: colors.foreground }]}>{secondary.label}</Text>
+                <Text style={[styles.outlineBtnText, { color: palette.text }]}>{secondary.label}</Text>
               </Pressable>
               <Pressable onPress={() => router.dismissTo("/(tabs)" as any)} style={styles.secondaryBtn}>
-                <Text style={[styles.secondaryBtnText, { color: colors.mutedForeground }]}>Back to Eventis</Text>
+                <Text style={[styles.secondaryBtnText, { color: palette.muted }]}>Back to Eventis</Text>
               </Pressable>
             </View>
           </Animated.View>
@@ -139,9 +149,10 @@ export default function OrganisationSetupScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { backgroundColor: colors.background }]}
+      style={[styles.root, { backgroundColor: palette.canvas }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <OrganiserAtmosphere />
       <OrganiserFlowHeader title="Organisation setup" step={3} canGoBack={!submitting} />
 
       <ScrollView
@@ -152,11 +163,16 @@ export default function OrganisationSetupScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(60).springify() : undefined}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Tell us about your organisation</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            This is what attendees see on your posts. It's linked to your account, so there's no
-            separate login.
-          </Text>
+          <View style={styles.setupIntro}>
+            <View style={[styles.setupPill, { backgroundColor: palette.blueSoft }]}>
+              <Ionicons name="sparkles" size={13} color={palette.blue} />
+              <Text style={[styles.setupPillText, { color: palette.blue }]}>FINAL STEP</Text>
+            </View>
+            <Text style={[styles.title, { color: palette.text }]}>Create your public organiser profile</Text>
+            <Text style={[styles.subtitle, { color: palette.muted }]}>
+              Add the essentials people need to trust your events. Everything can be edited later from Organisation.
+            </Text>
+          </View>
         </Animated.View>
 
         {errorCount > 0 && (
@@ -207,7 +223,7 @@ export default function OrganisationSetupScreen() {
         )}
 
         <Pressable
-          style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: submitting ? 0.75 : 1 }]}
+          style={[styles.primaryBtn, { backgroundColor: palette.blue, opacity: submitting ? 0.75 : 1 }]}
           onPress={submit}
           disabled={submitting}
           accessibilityRole="button"
@@ -231,8 +247,15 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 20, gap: 16 },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold", marginBottom: 6 },
+  content: { paddingHorizontal: 18, paddingTop: 20, gap: 18 },
+  setupIntro: {
+    gap: 7,
+    paddingHorizontal: 2,
+    paddingBottom: 2,
+  },
+  setupPill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
+  setupPillText: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.9 },
+  title: { fontSize: 24, lineHeight: 30, fontFamily: "Inter_700Bold", letterSpacing: -0.45 },
   subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 21 },
   logoImg: { width: "100%", height: "100%" },
   hint: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
@@ -271,6 +294,13 @@ const styles = StyleSheet.create({
   secondaryBtnText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   doneWrap: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
   done: { alignItems: "center", gap: 14 },
+  doneHalo: {
+    padding: 12,
+    borderRadius: 60,
+    backgroundColor: "rgba(56,189,248,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.22)",
+  },
   doneLogo: {
     width: 96,
     height: 96,
@@ -290,6 +320,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  successPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(56,189,248,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.25)",
+  },
+  successPillText: { color: "#38BDF8", fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 1 },
   doneTitle: { fontSize: 24, fontFamily: "Inter_700Bold", textAlign: "center" },
   doneText: { fontSize: 15, fontFamily: "Inter_400Regular", lineHeight: 22, textAlign: "center" },
   doneActions: { alignSelf: "stretch", gap: 10, marginTop: 12 },

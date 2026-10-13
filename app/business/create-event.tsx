@@ -17,6 +17,7 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { InlineError } from "@/components/profile/ProfileSection";
 import { CATEGORIES, type EventCategory } from "@/constants/events";
@@ -24,6 +25,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
 import { useColors } from "@/hooks/useColors";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { describeProfileError } from "@/services/profileService";
 import {
   createPublisherEvent,
@@ -128,6 +130,7 @@ function Field({
 
 export default function CreateEventScreen() {
   const colors = useColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   // `id` switches the screen to editing one of the publisher's own events.
@@ -203,7 +206,8 @@ export default function CreateEventScreen() {
   const inputStyle = [styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }];
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+      <OrganiserAtmosphere />
       <PortalScreenHeader title={editId ? "Edit Event" : "Create Event"} disabled={submitting} />
 
       {loadingEvent ? (

@@ -1,10 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform, StyleSheet } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-import { useColors } from "@/hooks/useColors";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
 type TabIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -17,27 +17,34 @@ const PORTAL_TABS: { name: string; title: string; icon: TabIconName }[] = [
 ];
 
 export default function OrganiserPortalLayout() {
-  const colors = useColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const isWeb = Platform.OS === "web";
+  const tabSurface = palette.surface;
 
   return (
     <Tabs
       safeAreaInsets={insets}
       screenOptions={{
         headerShown: false,
-        sceneStyle: { backgroundColor: colors.background },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
+        sceneStyle: { backgroundColor: palette.canvas },
+        tabBarActiveTintColor: palette.blue,
+        tabBarInactiveTintColor: palette.muted,
+        tabBarHideOnKeyboard: true,
         tabBarLabelStyle: styles.label,
         tabBarItemStyle: styles.item,
         tabBarStyle: {
-          backgroundColor: colors.background,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          elevation: 0,
-          height: isWeb ? 84 : (Platform.OS === "ios" ? 58 : 62) + insets.bottom,
+          backgroundColor: tabSurface,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: palette.line,
+          elevation: 18,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: palette.dark ? 0.3 : 0.1,
+          shadowRadius: 12,
+          height: isWeb ? 72 : 58 + insets.bottom,
           paddingBottom: isWeb ? 0 : insets.bottom,
+          paddingTop: 4,
         },
       }}
     >
@@ -47,7 +54,11 @@ export default function OrganiserPortalLayout() {
           name={tab.name}
           options={{
             title: tab.title,
-            tabBarIcon: ({ color }) => <Feather name={tab.icon} size={21} color={color} />,
+            tabBarIcon: ({ color, focused }) => (
+              <View style={[styles.iconWrap, focused && { backgroundColor: palette.blueSoft }]}>
+                <Feather name={tab.icon} size={20} color={color} />
+              </View>
+            ),
           }}
         />
       ))}
@@ -56,6 +67,7 @@ export default function OrganiserPortalLayout() {
 }
 
 const styles = StyleSheet.create({
-  item: { paddingTop: 6 },
-  label: { fontSize: 11, fontWeight: "600", marginTop: 3 },
+  item: { paddingTop: 2 },
+  iconWrap: { width: 36, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  label: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 1 },
 });

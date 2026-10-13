@@ -33,7 +33,7 @@ export function useOrganiserAccess() {
         return;
       }
       router.push({
-        pathname: (step === "setup" ? "/organiser/setup" : "/organiser") as any,
+        pathname: "/organiser" as any,
         params: from ? { from } : {},
       });
     },

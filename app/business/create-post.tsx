@@ -19,11 +19,13 @@ import {
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 
 import { GlassSurface } from "@/components/GlassSurface";
+import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
 const CAPTION_LIMIT = 2200;
 
@@ -52,6 +54,7 @@ const CTA_OPTIONS = [
 
 export default function CreatePostScreen() {
   const colors = useColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
@@ -101,9 +104,10 @@ export default function CreatePostScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { backgroundColor: colors.background }]}
+      style={[styles.root, { backgroundColor: palette.canvas }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <OrganiserAtmosphere />
       <PortalScreenHeader title="Create Post" disabled={publishing} />
 
       {/* TOP SEGMENT: COMPOSE vs AUDIENCE PREVIEW */}

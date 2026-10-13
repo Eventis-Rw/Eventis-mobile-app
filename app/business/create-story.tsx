@@ -15,15 +15,18 @@ import {
   View,
 } from "react-native";
 
+import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
 const CAPTION_LIMIT = 100;
 
 // UI only: there is no stories API yet, so sharing is simulated (same as create-event).
 export default function CreateStoryScreen() {
   const colors = useColors();
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
@@ -58,9 +61,10 @@ export default function CreateStoryScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { backgroundColor: colors.background }]}
+      style={[styles.root, { backgroundColor: palette.canvas }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <OrganiserAtmosphere />
       <PortalScreenHeader title="Create Story" icon="close" disabled={sharing} />
 
       <View style={[styles.body, { paddingBottom: insets.bottom + 20 }]}>
