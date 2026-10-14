@@ -12,6 +12,8 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { PinInput } from "@/components/PinInput";
+import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
 import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
 import { useTheme } from "@/context/ThemeContext";
@@ -23,33 +25,29 @@ export default function LoginScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
+  const { login, completeOnboarding } = useAuth();
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState("");
   const [phone, setPhone] = useState("");
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // Rwanda (+250) default
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (loading) return;
     const cleaned = phone.replace(/\D/g, "");
-    if (!cleaned || cleaned.length < 7) {
-      setError("Please enter a valid phone number");
-      return;
-    }
     setError("");
+    setPinError("");
+    if (cleaned.length < 7) { setError("Please enter a valid phone number"); return; }
+    if (!/^\d{5}$/.test(pin)) { setPinError("Enter exactly 5 digits"); return; }
     setLoading(true);
-
-    const fullPhone = `${selectedCountry.code} ${phone.trim()}`;
-
-    // Frontend flow: transition directly to SMS verification screen
-    setTimeout(() => {
-      setLoading(false);
-      router.push({
-        pathname: "/auth/otp",
-        params: {
-          purpose: "login",
-          phone: fullPhone,
-        },
-      } as any);
-    }, 300);
+    try {
+      await login({ phone: `${selectedCountry.code}${cleaned}`, pin });
+      await completeOnboarding();
+      router.replace("/(tabs)");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not sign in. Please try again.");
+    } finally { setLoading(false); }
   };
 
   return (
@@ -86,9 +84,7 @@ export default function LoginScreen() {
             <Text style={[styles.title, { color: colors.foreground }]}>
               Welcome back
             </Text>
-            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              Your number is enough. We'll text you a code.
-            </Text>
+
           </Animated.View>
 
           {/* Phone Input Field */}
@@ -112,6 +108,8 @@ export default function LoginScreen() {
             />
           </Animated.View>
 
+          <PinInput value={pin} onChangeText={(value) => { setPin(value); setPinError(""); }} error={pinError} />
+
           {/* Submit Button */}
           <Animated.View
             entering={Platform.OS !== "web" ? FadeInDown.delay(240).springify() : undefined}
@@ -122,10 +120,12 @@ export default function LoginScreen() {
                 { backgroundColor: colors.primary, opacity: loading ? 0.75 : 1 },
               ]}
               onPress={handleSubmit}
+              accessibilityRole="button"
+              accessibilityState={{ busy: loading }}
               disabled={loading}
             >
               <Text style={styles.submitBtnText}>
-                {loading ? "Sending code..." : "Continue"}
+                {loading ? "Signing in…" : "Sign in"}
               </Text>
             </Pressable>
           </Animated.View>

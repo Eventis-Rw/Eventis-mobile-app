@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,9 +19,11 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { EventScheduleFields } from "@/components/EventScheduleFields";
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { InlineError } from "@/components/profile/ProfileSection";
+import { getEventImage } from "@/constants/eventImages";
 import { CATEGORIES, type EventCategory } from "@/constants/events";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
@@ -39,6 +43,7 @@ import {
 const NON_ALL_CATEGORIES = CATEGORIES.filter((c) => c !== "All") as Exclude<EventCategory, "All">[];
 
 interface FormState {
+  image: string;
   title: string;
   description: string;
   category: Exclude<EventCategory, "All"> | "";
@@ -52,6 +57,7 @@ interface FormState {
 }
 
 const INITIAL: FormState = {
+  image: "",
   title: "",
   description: "",
   category: "",
@@ -64,25 +70,14 @@ const INITIAL: FormState = {
   websiteUrl: "",
 };
 
-/** The form takes DD/MM/YYYY; the service stores YYYY-MM-DD. */
-function toIsoDate(value: string) {
-  const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!match) return value.trim();
-  return `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
-}
-
-function toFormDate(iso: string) {
-  const [y, m, d] = iso.split("-");
-  return y && m && d ? `${d}/${m}/${y}` : iso;
-}
-
 function toInput(form: FormState): PublisherEventInput {
   return {
+    image: form.image,
     title: form.title,
     description: form.description,
     category: form.category as Exclude<EventCategory, "All">,
     location: form.location,
-    date: toIsoDate(form.date),
+    date: form.date,
     time: form.time.trim(),
     capacity: Number(form.capacity),
     isPaid: form.isPaid,
@@ -93,11 +88,12 @@ function toInput(form: FormState): PublisherEventInput {
 
 function toForm(event: PublisherEvent): FormState {
   return {
+    image: event.image,
     title: event.title,
     description: event.description,
     category: event.category === "All" ? "" : event.category,
     location: event.location,
-    date: toFormDate(event.date),
+    date: event.date,
     time: event.time,
     capacity: String(event.capacity),
     isPaid: event.isPaid,
@@ -142,6 +138,8 @@ export default function CreateEventScreen() {
   const [form, setForm] = useState<FormState>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [pickingImage, setPickingImage] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(!!editId);
 
   useEffect(() => {
@@ -165,14 +163,59 @@ export default function CreateEventScreen() {
     setForm((f) => ({ ...f, [key]: value }));
   };
 
-  const isValid =
+  const isValid = Boolean(
+    form.image.trim() &&
     form.title.trim() &&
     form.description.trim() &&
     form.category &&
     form.location.trim() &&
     form.date.trim() &&
     form.time.trim() &&
-    form.capacity.trim();
+    form.capacity.trim(),
+  );
+
+  async function chooseEventImage(source: "library" | "camera") {
+    if (pickingImage) return;
+    setPickingImage(true);
+    setImageError(null);
+    try {
+      if (Platform.OS !== "web") {
+        const permission = source === "camera"
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          setImageError(
+            source === "camera"
+              ? "Allow camera access in your phone settings, or choose a photo from your gallery."
+              : "Allow photo access in your phone settings so you can choose an event image.",
+          );
+          return;
+        }
+      }
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ["images"],
+        quality: 0.9,
+        allowsEditing: true,
+        aspect: [4, 5],
+      };
+      const result = source === "camera"
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+      const selected = result.canceled ? undefined : result.assets[0];
+      if (selected) {
+        set("image", selected.uri);
+        if (Platform.OS !== "web") void Haptics.selectionAsync();
+      }
+    } catch {
+      setImageError(
+        source === "camera"
+          ? "We couldn't open the camera. Try choosing a photo instead."
+          : "We couldn't open your photos. Check photo access and try again.",
+      );
+    } finally {
+      setPickingImage(false);
+    }
+  }
 
   async function handleSubmit() {
     if (!isValid || submitting || !user) return;
@@ -232,6 +275,83 @@ export default function CreateEventScreen() {
               style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>01  Event details</Text>
+
+              <Field label="Event image" required colors={colors}>
+                {form.image ? (
+                  <View style={[styles.imagePreview, { backgroundColor: colors.input, borderColor: colors.border }]}>
+                    <Image
+                      source={getEventImage(form.image)}
+                      style={styles.imagePreviewMedia}
+                      resizeMode="cover"
+                      accessibilityLabel="Selected event cover"
+                    />
+                    <View style={styles.imageReadyBadge}>
+                      <Ionicons name="checkmark-circle" size={15} color="#FFFFFF" />
+                      <Text style={styles.imageReadyText}>Cover selected</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.imageEmpty,
+                      { backgroundColor: colors.input, borderColor: colors.border, opacity: pressed ? 0.78 : 1 },
+                    ]}
+                    onPress={() => chooseEventImage("library")}
+                    disabled={pickingImage}
+                    accessibilityRole="button"
+                    accessibilityLabel="Choose required event image"
+                  >
+                    <View style={[styles.imageEmptyIcon, { backgroundColor: `${colors.primary}18` }]}>
+                      {pickingImage ? (
+                        <ActivityIndicator color={colors.primary} />
+                      ) : (
+                        <Ionicons name="image-outline" size={28} color={colors.primary} />
+                      )}
+                    </View>
+                    <Text style={[styles.imageEmptyTitle, { color: colors.foreground }]}>Add your event cover</Text>
+                    <Text style={[styles.imageEmptyCopy, { color: colors.mutedForeground }]}>Portrait artwork works best in the feed.</Text>
+                  </Pressable>
+                )}
+
+                <View style={styles.imageActions}>
+                  <Pressable
+                    style={({ pressed }) => [styles.imageAction, { backgroundColor: `${colors.primary}14`, opacity: pressed ? 0.72 : 1 }]}
+                    onPress={() => chooseEventImage("library")}
+                    disabled={pickingImage}
+                    accessibilityRole="button"
+                    accessibilityLabel={form.image ? "Replace event image from gallery" : "Choose event image from gallery"}
+                  >
+                    <Ionicons name="images-outline" size={18} color={colors.primary} />
+                    <Text style={[styles.imageActionText, { color: colors.primary }]}>{form.image ? "Replace" : "Gallery"}</Text>
+                  </Pressable>
+                  {Platform.OS !== "web" ? (
+                    <Pressable
+                      style={({ pressed }) => [styles.imageAction, { backgroundColor: `${colors.primary}14`, opacity: pressed ? 0.72 : 1 }]}
+                      onPress={() => chooseEventImage("camera")}
+                      disabled={pickingImage}
+                      accessibilityRole="button"
+                      accessibilityLabel="Take event image with camera"
+                    >
+                      <Ionicons name="camera-outline" size={18} color={colors.primary} />
+                      <Text style={[styles.imageActionText, { color: colors.primary }]}>Camera</Text>
+                    </Pressable>
+                  ) : null}
+                  {form.image ? (
+                    <Pressable
+                      style={({ pressed }) => [styles.imageRemove, { opacity: pressed ? 0.65 : 1 }]}
+                      onPress={() => set("image", "")}
+                      disabled={pickingImage}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove event image"
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#F87171" />
+                    </Pressable>
+                  ) : null}
+                </View>
+                {imageError ? (
+                  <Text style={styles.imageError} accessibilityLiveRegion="polite">{imageError}</Text>
+                ) : null}
+              </Field>
 
               <Field label="Event Title" required colors={colors}>
                 <TextInput
@@ -312,38 +432,7 @@ export default function CreateEventScreen() {
                 </View>
               </Field>
 
-              <View style={styles.row}>
-                <View style={{ flex: 1, minWidth: 120 }}>
-                  <Field label="Date" required colors={colors}>
-                    <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
-                      <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
-                      <TextInput
-                        style={[styles.iconInputText, { color: colors.foreground }]}
-                        placeholder="DD/MM/YYYY"
-                        placeholderTextColor={colors.mutedForeground}
-                        value={form.date}
-                        onChangeText={(v) => set("date", v)}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  </Field>
-                </View>
-                <View style={{ flex: 1, minWidth: 120 }}>
-                  <Field label="Start Time" required colors={colors}>
-                    <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
-                      <Ionicons name="time-outline" size={18} color={colors.mutedForeground} />
-                      <TextInput
-                        style={[styles.iconInputText, { color: colors.foreground }]}
-                        placeholder="19:00"
-                        placeholderTextColor={colors.mutedForeground}
-                        value={form.time}
-                        onChangeText={(v) => set("time", v)}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  </Field>
-                </View>
-              </View>
+              <EventScheduleFields date={form.date} time={form.time} onDate={(value) => set("date", value)} onTime={(value) => set("time", value)} />
 
               <Field label="Capacity" required colors={colors}>
                 <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
@@ -482,6 +571,74 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+
+  imagePreview: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    overflow: "hidden",
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  imagePreviewMedia: { width: "100%", height: "100%" },
+  imageReadyBadge: {
+    position: "absolute",
+    left: 12,
+    bottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(4, 12, 26, 0.82)",
+  },
+  imageReadyText: { color: "#FFFFFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  imageEmpty: {
+    minHeight: 178,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    padding: 20,
+  },
+  imageEmptyIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  imageEmptyTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  imageEmptyCopy: {
+    marginTop: 5,
+    textAlign: "center",
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+  },
+  imageActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  imageAction: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: 14,
+    borderRadius: 13,
+  },
+  imageActionText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  imageRemove: {
+    width: 42,
+    height: 42,
+    marginLeft: "auto",
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(248, 113, 113, 0.12)",
+  },
+  imageError: { color: "#FCA5A5", fontSize: 12, lineHeight: 18, fontFamily: "Inter_500Medium" },
 
   field: { gap: 8 },
   label: { fontSize: 14, fontFamily: "Inter_600SemiBold" },

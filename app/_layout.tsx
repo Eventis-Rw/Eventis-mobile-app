@@ -25,6 +25,7 @@ import { ChatProvider } from "@/context/ChatContext";
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 import { BookingsProvider } from "@/context/BookingsContext";
 import { EventsProvider } from "@/context/EventsContext";
+import { StoriesProvider } from "@/context/StoriesContext";
 import { FindLoveDemoProvider } from "@/context/FindLoveDemoContext";
 import { LoveProfilesProvider } from "@/context/LoveProfilesContext";
 import { useColors } from "@/hooks/useColors";
@@ -161,7 +162,9 @@ function ThemedAppSurface() {
                     <LoveProfilesProvider>
                       <FindLoveDemoProvider>
                         <BookingsProvider>
-                          <RootLayoutNav />
+                          <StoriesProvider>
+                            <RootLayoutNav />
+                          </StoriesProvider>
                         </BookingsProvider>
                       </FindLoveDemoProvider>
                     </LoveProfilesProvider>

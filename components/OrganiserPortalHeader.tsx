@@ -2,9 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
+import { useStories } from "@/context/StoriesContext";
+import { StoryAvatar } from "@/components/StoryAvatar";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
@@ -20,6 +22,8 @@ export function OrganiserPortalHeader({
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { collections, openStories, loading } = useStories();
+  const mine = collections.find((collection) => collection.ownerId === user?.id);
   const orgName = user?.organisation?.name ?? user?.businessName ?? "Your organisation";
   const logoUrl = user?.organisation?.logoUrl;
   const topPad = insets.top;
@@ -32,11 +36,12 @@ export function OrganiserPortalHeader({
   return (
     <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: palette.canvas, borderBottomColor: palette.line }]}>
       <View style={styles.workspaceRow}>
-        <View style={[styles.avatar, { backgroundColor: palette.blueSoft, borderColor: palette.line }]}>
-          {logoUrl ? <Image source={{ uri: logoUrl }} style={styles.avatarImage} /> : (
-            <Text style={[styles.avatarLetter, { color: palette.accent }]}>{orgName.charAt(0).toUpperCase()}</Text>
-          )}
-        </View>
+        <Pressable disabled={loading} accessibilityRole="button"
+          accessibilityLabel={mine ? `View your stories, ${mine.hasUnwatched ? "unwatched" : "watched"}` : "Add to your story"}
+          onPress={() => mine ? openStories(mine.ownerId, true) : router.push("/business/create-story")}>
+          <StoryAvatar name={orgName} uri={logoUrl || user?.avatarUrl} size={42} surfaceColor={palette.canvas}
+            ring={mine ? mine.hasUnwatched ? "new" : "watched" : undefined} add={!mine && !loading} />
+        </Pressable>
         <View style={styles.identity}>
           <Text style={[styles.workspaceLabel, { color: palette.muted }]}>Organiser workspace</Text>
           <Text style={[styles.orgName, { color: palette.text }]} numberOfLines={1}>{orgName}</Text>
@@ -60,9 +65,6 @@ export function OrganiserPortalHeader({
 const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingBottom: 18, borderBottomWidth: StyleSheet.hairlineWidth, gap: 20 },
   workspaceRow: { flexDirection: "row", alignItems: "center", gap: 11 },
-  avatar: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  avatarImage: { width: "100%", height: "100%" },
-  avatarLetter: { fontSize: 18, fontFamily: "Inter_700Bold" },
   identity: { flex: 1, minWidth: 0, gap: 2 },
   workspaceLabel: { fontSize: 11, fontFamily: "Inter_500Medium", letterSpacing: 0.1 },
   orgName: { fontSize: 15, lineHeight: 21, fontFamily: "Inter_700Bold" },

@@ -132,7 +132,7 @@ export function OrganisationFields({
           <Text style={[styles.label, { color: palette.text }]}>
             Brand image <Text style={{ color: palette.muted }}>(optional)</Text>
           </Text>
-          <Text style={[styles.hint, { color: palette.muted }]}>Shown on events, posts and your public profile.</Text>
+          <Text style={[styles.hint, { color: palette.muted }]}>Shown on events and your public profile.</Text>
           <View style={styles.logoActions}>
             <Pressable onPress={pickLogo} hitSlop={6} accessibilityRole="button">
               <Text style={[styles.link, { color: palette.accent }]}>{logoUri ? "Change" : "Choose image"}</Text>
@@ -167,7 +167,7 @@ export function OrganisationFields({
       <FormField
         label="What your organisation does"
         required
-        icon="sparkles-outline"
+        icon="briefcase-outline"
         {...field("activities")}
         placeholder="e.g. Live music nights, workshops, festivals"
         maxLength={LIMITS.activities}

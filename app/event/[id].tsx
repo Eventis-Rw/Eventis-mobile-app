@@ -21,9 +21,9 @@ import {
 } from "react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 
-import { GlassSurface } from "@/components/GlassSurface";
+import { DetailSurface } from "@/components/DetailSurface";
 import { getEventImage } from "@/constants/eventImages";
-import { getEventPalette, getEventTiming } from "@/constants/eventPresentation";
+import { getEventTiming } from "@/constants/eventPresentation";
 import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
 import { useChat } from "@/context/ChatContext";
@@ -39,6 +39,7 @@ export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const { scheme } = useTheme();
+  const styles = createStyles({ ...colors, card: scheme === "dark" ? "#121827" : "#F4F7FC" });
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
@@ -61,7 +62,7 @@ export default function EventDetailScreen() {
   const event = getEventById(id ?? "");
   const isBooked = hasBookedEvent(id ?? "");
   const isSaved = user?.savedEvents.includes(id ?? "") ?? false;
-  const palette = getEventPalette(event?.category ?? "Business");
+  const palette = { accent: colors.primary };
   const timing = useMemo(() => (event ? getEventTiming(event) : null), [event]);
 
   // Saving organisers is a customer feature; publishers have no list to save into.
@@ -84,24 +85,6 @@ export default function EventDetailScreen() {
     Haptics.selectionAsync();
     setSaveOrganiserError(await savedOrganisers.toggle({ id: organiserId, name: event.organizer, location: event.city }));
   }, [event, user, router, savedOrganisers, organiserId]);
-
-  // Dynamic metrics
-  const viewsCount = useMemo(() => {
-    if (!event) return 180;
-    if (event.viewCount && event.viewCount > 0) return event.viewCount;
-    const seed = event.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return 1800 + (seed % 5400);
-  }, [event]);
-
-  const initialShares = useMemo(() => {
-    return Math.max(16, Math.floor(viewsCount * 0.086));
-  }, [viewsCount]);
-
-  const [shareCount, setShareCount] = useState(initialShares);
-
-  const attendeesCount = useMemo(() => {
-    return Math.max(34, Math.floor(viewsCount * 0.14));
-  }, [viewsCount]);
 
   // Actions
   const handleBook = useCallback(async () => {
@@ -158,7 +141,6 @@ export default function EventDetailScreen() {
     if (!event) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await Clipboard.setStringAsync(`https://eventis.app/event/${event.id}`);
-    setShareCount((prev) => prev + 1);
     setCopyFeedback(true);
     setTimeout(() => setCopyFeedback(false), 2000);
   }, [event]);
@@ -166,7 +148,6 @@ export default function EventDetailScreen() {
   const handleNativeShare = useCallback(async () => {
     if (!event) return;
     setShowShareModal(false);
-    setShareCount((prev) => prev + 1);
     await shareEvent(event);
   }, [event]);
 
@@ -175,7 +156,6 @@ export default function EventDetailScreen() {
       if (!event || sentChatIds[convId]) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSentChatIds((prev) => ({ ...prev, [convId]: true }));
-      setShareCount((prev) => prev + 1);
       const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
       await sendMessage(convId, shareText);
     },
@@ -186,7 +166,6 @@ export default function EventDetailScreen() {
     if (!event || !conversations.length || sendingAll) return;
     setSendingAll(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setShareCount((prev) => prev + conversations.length);
     const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
     const newSent: Record<string, boolean> = { ...sentChatIds };
     for (const conv of conversations) {
@@ -277,14 +256,7 @@ export default function EventDetailScreen() {
       : null;
 
   return (
-    <View style={[styles.root, { backgroundColor: "#060913" }]}>
-      {/* Background ambient gradient */}
-      <LinearGradient
-        colors={scheme === "dark" ? ["#0F172A", "#070B19", "#030712"] : ["#E0E7FF", "#EEF2FF", "#F8FAFC"]}
-        locations={[0, 0.45, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -360,7 +332,7 @@ export default function EventDetailScreen() {
 
               {/* Category Pill */}
               <View style={[styles.categoryBadge, { backgroundColor: palette.accent }]}>
-                <Ionicons name="sparkles" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Ionicons name="pricetag-outline" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
                 <Text style={styles.categoryBadgeText}>{event.category.toUpperCase()}</Text>
               </View>
 
@@ -369,7 +341,7 @@ export default function EventDetailScreen() {
                 <Ionicons
                   name={event.isPaid ? "ticket-outline" : "gift-outline"}
                   size={12}
-                  color="#38BDF8"
+                  color={colors.primary}
                   style={{ marginRight: 4 }}
                 />
                 <Text style={styles.pricePillText}>{price}</Text>
@@ -387,7 +359,7 @@ export default function EventDetailScreen() {
               accessibilityLabel={`View ${event.location} on map`}
             >
               <View style={styles.locationPinCircle}>
-                <Ionicons name="location" size={14} color="#38BDF8" />
+                <Ionicons name="location" size={14} color={colors.primary} />
               </View>
               <Text style={styles.heroLocationText} numberOfLines={1}>
                 {event.location}, {event.city}
@@ -396,89 +368,6 @@ export default function EventDetailScreen() {
             </Pressable>
           </View>
         </ImageBackground>
-
-        {/* FLOATING QUICK STATS & INSIGHTS BAR */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(60).springify() : undefined}
-          style={styles.statsBarContainer}
-        >
-          <GlassSurface style={styles.statsGlassBar} intensity={55}>
-            {/* Views */}
-            <View style={styles.statItem}>
-              <Ionicons name="eye-outline" size={16} color="rgba(255,255,255,0.7)" />
-              <Text style={styles.statValue}>{formatCount(viewsCount)}</Text>
-              <Text style={styles.statLabel}>Views</Text>
-            </View>
-
-            <View style={styles.statDivider} />
-
-            {/* Shares */}
-            <Pressable
-              style={styles.statItem}
-              onPress={handleOpenShare}
-              accessibilityRole="button"
-              accessibilityLabel={`Share event, currently ${shareCount} shares`}
-            >
-              <Ionicons name="paper-plane-outline" size={15} color="#10B981" />
-              <Text style={styles.statValue}>{formatCount(shareCount)}</Text>
-              <Text style={styles.statLabel}>Shares</Text>
-            </Pressable>
-
-            <View style={styles.statDivider} />
-
-            {/* Saves (count hidden, interactive bookmark toggle) */}
-            <Pressable
-              style={styles.statItem}
-              onPress={handleSave}
-              accessibilityRole="button"
-              accessibilityLabel={isSaved ? "Saved event" : "Save event"}
-            >
-              <Ionicons
-                name={isSaved ? "bookmark" : "bookmark-outline"}
-                size={16}
-                color={isSaved ? "#38BDF8" : "rgba(255,255,255,0.75)"}
-              />
-              <Text
-                style={[
-                  styles.statLabel,
-                  {
-                    marginTop: 4,
-                    fontWeight: "600",
-                    color: isSaved ? "#38BDF8" : "rgba(255,255,255,0.85)",
-                  },
-                ]}
-              >
-                {isSaved ? "Saved" : "Save"}
-              </Text>
-            </Pressable>
-          </GlassSurface>
-        </Animated.View>
-
-        {/* SOCIAL PROOF & COMMUNITY STRIP */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(100).springify() : undefined}
-          style={styles.communityStrip}
-        >
-          <View style={styles.avatarStack}>
-            <View style={[styles.stackedAvatar, { backgroundColor: "#8B5CF6", zIndex: 4 }]}>
-              <Text style={styles.avatarInitial}>AK</Text>
-            </View>
-            <View style={[styles.stackedAvatar, { backgroundColor: "#EC4899", zIndex: 3, marginLeft: -10 }]}>
-              <Text style={styles.avatarInitial}>JM</Text>
-            </View>
-            <View style={[styles.stackedAvatar, { backgroundColor: "#3B82F6", zIndex: 2, marginLeft: -10 }]}>
-              <Text style={styles.avatarInitial}>SC</Text>
-            </View>
-            <View style={[styles.stackedAvatar, { backgroundColor: "#10B981", zIndex: 1, marginLeft: -10 }]}>
-              <Text style={styles.avatarInitial}>DK</Text>
-            </View>
-          </View>
-          <View style={styles.communityTextCol}>
-            <Text style={styles.communityHeadline}>
-              <Text style={styles.communityCount}>+{attendeesCount} people</Text> attending & interested
-            </Text>
-          </View>
-        </Animated.View>
 
         {/* MAIN CONTENT BODY */}
         <Animated.View
@@ -492,9 +381,9 @@ export default function EventDetailScreen() {
           </View>
 
           {/* Tile 1: Date & Time Card */}
-          <GlassSurface style={styles.glassInfoCard} intensity={40}>
-            <View style={[styles.cardIconBox, { backgroundColor: "rgba(56, 189, 248, 0.14)" }]}>
-              <Ionicons name="calendar" size={22} color="#38BDF8" />
+          <DetailSurface style={styles.glassInfoCard}>
+            <View style={styles.cardIconBox}>
+              <Ionicons name="calendar-outline" size={22} color={colors.primary} />
             </View>
             <View style={styles.cardInfoCol}>
               <Text style={styles.cardInfoEyebrow}>DATE & SCHEDULE</Text>
@@ -503,7 +392,7 @@ export default function EventDetailScreen() {
                 {event.time} {event.endTime ? `– ${event.endTime}` : "onwards"} · {timing.label}
               </Text>
             </View>
-          </GlassSurface>
+          </DetailSurface>
 
           {/* Tile 2: Venue & Location Card */}
           <Pressable
@@ -511,9 +400,9 @@ export default function EventDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Open ${event.location} in maps`}
           >
-            <GlassSurface style={styles.glassInfoCard} intensity={40}>
-              <View style={[styles.cardIconBox, { backgroundColor: "rgba(16, 185, 129, 0.14)" }]}>
-                <Ionicons name="location" size={22} color="#10B981" />
+            <DetailSurface style={styles.glassInfoCard}>
+              <View style={styles.cardIconBox}>
+                <Ionicons name="location-outline" size={22} color={colors.primary} />
               </View>
               <View style={styles.cardInfoCol}>
                 <Text style={styles.cardInfoEyebrow}>VENUE & LOCATION</Text>
@@ -524,15 +413,15 @@ export default function EventDetailScreen() {
               </View>
               <View style={styles.cardActionPill}>
                 <Text style={styles.cardActionPillText}>Maps</Text>
-                <Ionicons name="open-outline" size={13} color="#10B981" />
+                <Ionicons name="open-outline" size={13} color={colors.primary} />
               </View>
-            </GlassSurface>
+            </DetailSurface>
           </Pressable>
 
           {/* Tile 3: Admission & Pricing Card */}
-          <GlassSurface style={styles.glassInfoCard} intensity={40}>
-            <View style={[styles.cardIconBox, { backgroundColor: "rgba(245, 158, 11, 0.14)" }]}>
-              <Ionicons name="ticket" size={22} color="#F59E0B" />
+          <DetailSurface style={styles.glassInfoCard}>
+            <View style={styles.cardIconBox}>
+              <Ionicons name="ticket-outline" size={22} color={colors.primary} />
             </View>
             <View style={styles.cardInfoCol}>
               <Text style={styles.cardInfoEyebrow}>ADMISSION & TICKETS</Text>
@@ -543,7 +432,7 @@ export default function EventDetailScreen() {
                   : "No reservation needed · Free community access"}
               </Text>
             </View>
-          </GlassSurface>
+          </DetailSurface>
 
           {/* SECTION: HOSTED BY ORGANIZER */}
           <View style={[styles.sectionHeadingRow, { marginTop: 26 }]}>
@@ -551,7 +440,7 @@ export default function EventDetailScreen() {
             <Text style={styles.sectionHeadingTitle}>Hosted by</Text>
           </View>
 
-          <GlassSurface style={styles.organizerCard} intensity={45}>
+          <DetailSurface style={styles.organizerCard}>
             <Pressable
               style={({ pressed }) => [styles.organizerHeaderRow, { opacity: pressed ? 0.75 : 1 }]}
               onPress={openOrganiser}
@@ -572,21 +461,11 @@ export default function EventDetailScreen() {
                 {/* Events don't carry the organiser's verification status yet, so no badge is claimed. */}
                 <Text style={styles.organizerRole}>Event organiser · View profile</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
             </Pressable>
 
-            {/* Organizer Quick Actions */}
+            {/* Organizer actions */}
             <View style={styles.organizerActionsRow}>
-              <Pressable
-                style={styles.organizerBtn}
-                onPress={handleShareToChat}
-                accessibilityRole="button"
-                accessibilityLabel="Message organizer"
-              >
-                <Ionicons name="chatbubbles-outline" size={16} color="#FFFFFF" />
-                <Text style={styles.organizerBtnText}>Message Host</Text>
-              </Pressable>
-
               {savedOrganisers.enabled || !user ? (
                 <Pressable
                   style={[styles.organizerBtn, styles.organizerBtnOutline]}
@@ -596,7 +475,7 @@ export default function EventDetailScreen() {
                   accessibilityState={{ selected: isOrganiserSaved }}
                   accessibilityLabel={isOrganiserSaved ? "Remove organiser from saved" : "Save organiser"}
                 >
-                  <Ionicons name={isOrganiserSaved ? "bookmark" : "bookmark-outline"} size={16} color="#38BDF8" />
+                  <Ionicons name={isOrganiserSaved ? "bookmark" : "bookmark-outline"} size={16} color={colors.primary} />
                   <Text style={[styles.organizerBtnText, { color: "#38BDF8" }]}>
                     {isOrganiserSaved ? "Saved" : "Save"}
                   </Text>
@@ -610,7 +489,7 @@ export default function EventDetailScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Visit organizer website"
                 >
-                  <Ionicons name="globe-outline" size={16} color="#38BDF8" />
+                  <Ionicons name="globe-outline" size={16} color={colors.primary} />
                   <Text style={[styles.organizerBtnText, { color: "#38BDF8" }]}>Website</Text>
                 </Pressable>
               )}
@@ -620,7 +499,7 @@ export default function EventDetailScreen() {
                 {saveOrganiserError}
               </Text>
             ) : null}
-          </GlassSurface>
+          </DetailSurface>
 
           {/* SECTION: ABOUT THIS EVENT */}
           <View style={[styles.sectionHeadingRow, { marginTop: 26 }]}>
@@ -628,7 +507,7 @@ export default function EventDetailScreen() {
             <Text style={styles.sectionHeadingTitle}>About this event</Text>
           </View>
 
-          <GlassSurface style={styles.storyCard} intensity={40}>
+          <DetailSurface style={styles.storyCard}>
             <Text
               style={styles.storyText}
               numberOfLines={descriptionExpanded ? undefined : 4}
@@ -649,7 +528,7 @@ export default function EventDetailScreen() {
                 <Ionicons
                   name={descriptionExpanded ? "chevron-up" : "chevron-down"}
                   size={14}
-                  color="#38BDF8"
+                  color={colors.primary}
                 />
               </Pressable>
             )}
@@ -664,7 +543,7 @@ export default function EventDetailScreen() {
                 ))}
               </View>
             ) : null}
-          </GlassSurface>
+          </DetailSurface>
 
           {/* SECTION: GOOD TO KNOW / BEFORE YOU GO */}
           {instructions.length > 0 && (
@@ -674,7 +553,7 @@ export default function EventDetailScreen() {
                 <Text style={styles.sectionHeadingTitle}>Before you go</Text>
               </View>
 
-              <GlassSurface style={styles.guidelinesCard} intensity={40}>
+              <DetailSurface style={styles.guidelinesCard}>
                 {instructions.map((item, idx) => (
                   <View
                     key={item}
@@ -684,19 +563,19 @@ export default function EventDetailScreen() {
                     ]}
                   >
                     <View style={styles.guidelineCheckCircle}>
-                      <Ionicons name="checkmark" size={13} color="#10B981" />
+                      <Ionicons name="checkmark" size={13} color={colors.primary} />
                     </View>
                     <Text style={styles.guidelineText}>{item}</Text>
                   </View>
                 ))}
-              </GlassSurface>
+              </DetailSurface>
             </>
           )}
         </Animated.View>
       </ScrollView>
 
       {/* FIXED FLOATING GLASS BOTTOM ACTION BAR */}
-      <GlassSurface
+      <DetailSurface
         style={[
           styles.bottomFixedBar,
           {
@@ -707,7 +586,7 @@ export default function EventDetailScreen() {
             borderRadius: 0,
           },
         ]}
-        intensity={60}
+
       >
         <View style={styles.bottomPriceCol}>
           <Text style={styles.bottomPriceLabel}>TICKET ADMISSION</Text>
@@ -760,7 +639,7 @@ export default function EventDetailScreen() {
             </>
           )}
         </Pressable>
-      </GlassSurface>
+      </DetailSurface>
 
       {/* INSTAGRAM-STYLE TRANSPARENT FROSTED SHARE MODAL */}
       <Modal
@@ -779,7 +658,7 @@ export default function EventDetailScreen() {
           >
             {Platform.OS !== "web" ? (
               <BlurView
-                intensity={85}
+
                 tint={scheme === "dark" ? "dark" : "light"}
                 style={StyleSheet.absoluteFill}
                 pointerEvents="none"
@@ -959,7 +838,7 @@ export default function EventDetailScreen() {
           >
             {Platform.OS !== "web" ? (
               <BlurView
-                intensity={85}
+
                 tint={scheme === "dark" ? "dark" : "light"}
                 style={StyleSheet.absoluteFill}
                 pointerEvents="none"
@@ -970,7 +849,7 @@ export default function EventDetailScreen() {
 
             {reportState === "reported" ? (
               <View style={styles.reportFeedbackBox}>
-                <Ionicons name="checkmark-circle" size={44} color="#10B981" />
+                <Ionicons name="checkmark-circle" size={44} color={colors.primary} />
                 <Text style={[styles.reportFeedbackTitle, { color: colors.foreground }]}>
                   Report Submitted
                 </Text>
@@ -1104,6 +983,7 @@ function FrostedIconButton({
   iconColor?: string;
   active?: boolean;
 }) {
+  const styles = createStyles(useColors());
   return (
     <Pressable
       accessibilityRole="button"
@@ -1115,7 +995,7 @@ function FrostedIconButton({
       ]}
     >
       {Platform.OS !== "web" ? (
-        <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <BlurView tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
       ) : null}
       <Ionicons name={icon} size={20} color={iconColor} />
     </Pressable>
@@ -1141,13 +1021,7 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
-  return String(n);
-}
-
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   root: {
     flex: 1,
   },
@@ -1287,132 +1161,6 @@ const styles = StyleSheet.create({
   },
 
   // STATS BAR
-  statsBarContainer: {
-    paddingHorizontal: 16,
-    marginTop: -22,
-    zIndex: 10,
-  },
-  statsGlassBar: {
-    borderRadius: 22,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(13, 20, 42, 0.78)",
-    borderColor: "rgba(255, 255, 255, 0.16)",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 4,
-  },
-  statValue: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    marginTop: 2,
-  },
-  statLabel: {
-    color: "rgba(255, 255, 255, 0.55)",
-    fontSize: 10,
-    fontFamily: "Inter_500Medium",
-    marginTop: 1,
-  },
-  statDivider: {
-    width: 1,
-    height: 26,
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-  },
-  statInsightsBtn: {
-    borderRadius: 14,
-    overflow: "hidden",
-    marginLeft: 4,
-  },
-  statInsightsGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.35)",
-  },
-  statInsightsText: {
-    color: "#38BDF8",
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
-  },
-
-  // COMMUNITY STRIP
-  communityStrip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginHorizontal: 16,
-    marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
-  avatarStack: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  stackedAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#060913",
-  },
-  avatarInitial: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontFamily: "Inter_700Bold",
-  },
-  communityTextCol: {
-    flex: 1,
-  },
-  communityHeadline: {
-    color: "rgba(255, 255, 255, 0.9)",
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  communityCount: {
-    color: "#FFFFFF",
-    fontFamily: "Inter_700Bold",
-  },
-  communitySubRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginTop: 2,
-  },
-  pulseGreenDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#10B981",
-  },
-  communitySubText: {
-    color: "#10B981",
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-  },
-
   // CONTENT CONTAINER
   contentContainer: {
     paddingHorizontal: 16,
@@ -1428,10 +1176,10 @@ const styles = StyleSheet.create({
     width: 3,
     height: 15,
     borderRadius: 2,
-    backgroundColor: "#38BDF8",
+    backgroundColor: colors.primary,
   },
   sectionHeadingTitle: {
-    color: "#FFFFFF",
+    color: colors.foreground,
     fontSize: 16,
     fontFamily: "Inter_700Bold",
     letterSpacing: -0.3,
@@ -1445,12 +1193,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 14,
     marginBottom: 10,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: colors.card,
+    borderColor: colors.border,
   },
   cardIconBox: {
-    width: 46,
-    height: 46,
+    width: 30,
+    height: 36,
     borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
@@ -1459,19 +1207,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardInfoEyebrow: {
-    color: "rgba(255, 255, 255, 0.48)",
+    color: colors.mutedForeground,
     fontSize: 9,
     fontFamily: "Inter_700Bold",
     letterSpacing: 0.8,
   },
   cardInfoMainText: {
-    color: "#FFFFFF",
+    color: colors.foreground,
     fontSize: 14,
     fontFamily: "Inter_700Bold",
     marginTop: 2,
   },
   cardInfoSubText: {
-    color: "rgba(255, 255, 255, 0.65)",
+    color: colors.mutedForeground,
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
@@ -1483,12 +1231,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    backgroundColor: `${colors.primary}14`,
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.28)",
+    borderColor: `${colors.primary}14`,
   },
   cardActionPillText: {
-    color: "#10B981",
+    color: colors.primary,
     fontSize: 11,
     fontFamily: "Inter_700Bold",
   },
@@ -1497,8 +1245,8 @@ const styles = StyleSheet.create({
   organizerCard: {
     borderRadius: 22,
     padding: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: colors.card,
+    borderColor: colors.border,
     gap: 14,
   },
   organizerHeaderRow: {
@@ -1513,7 +1261,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderColor: colors.border,
   },
   organizerAvatarLetter: {
     color: "#FFFFFF",
@@ -1528,12 +1276,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   organizerName: {
-    color: "#FFFFFF",
+    color: colors.foreground,
     fontSize: 15,
     fontFamily: "Inter_700Bold",
   },
   organizerRole: {
-    color: "rgba(255, 255, 255, 0.55)",
+    color: colors.mutedForeground,
     fontSize: 11,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
@@ -1554,14 +1302,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: colors.border,
   },
   organizerBtnOutline: {
-    backgroundColor: "rgba(56, 189, 248, 0.08)",
-    borderColor: "rgba(56, 189, 248, 0.24)",
+    backgroundColor: `${colors.primary}14`,
+    borderColor: `${colors.primary}14`,
   },
   organizerBtnText: {
-    color: "#FFFFFF",
+    color: colors.primary,
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
@@ -1570,11 +1318,11 @@ const styles = StyleSheet.create({
   storyCard: {
     borderRadius: 22,
     padding: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: colors.card,
+    borderColor: colors.border,
   },
   storyText: {
-    color: "rgba(255, 255, 255, 0.8)",
+    color: colors.mutedForeground,
     fontSize: 14,
     lineHeight: 22,
     fontFamily: "Inter_400Regular",
@@ -1587,7 +1335,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   readMoreText: {
-    color: "#38BDF8",
+    color: colors.primary,
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
@@ -1604,12 +1352,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(56, 189, 248, 0.08)",
+    backgroundColor: `${colors.primary}14`,
     borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.2)",
+    borderColor: `${colors.primary}14`,
   },
   tagPillText: {
-    color: "#38BDF8",
+    color: colors.primary,
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
@@ -1618,8 +1366,8 @@ const styles = StyleSheet.create({
   guidelinesCard: {
     borderRadius: 22,
     padding: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: colors.card,
+    borderColor: colors.border,
   },
   guidelineRow: {
     flexDirection: "row",
@@ -1635,13 +1383,13 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "rgba(16, 185, 129, 0.16)",
+    backgroundColor: `${colors.primary}14`,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 2,
   },
   guidelineText: {
-    color: "rgba(255, 255, 255, 0.82)",
+    color: colors.mutedForeground,
     fontSize: 13,
     lineHeight: 19,
     fontFamily: "Inter_400Regular",
@@ -1659,25 +1407,25 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 18,
     paddingTop: 14,
-    backgroundColor: "rgba(6, 9, 19, 0.88)",
+    backgroundColor: colors.card,
   },
   bottomPriceCol: {
     flex: 1,
   },
   bottomPriceLabel: {
-    color: "rgba(255, 255, 255, 0.5)",
+    color: colors.mutedForeground,
     fontSize: 9,
     fontFamily: "Inter_700Bold",
     letterSpacing: 0.8,
   },
   bottomPriceValue: {
-    color: "#FFFFFF",
+    color: colors.foreground,
     fontSize: 17,
     fontFamily: "Inter_800ExtraBold",
     marginTop: 2,
   },
   bottomPriceSub: {
-    color: "rgba(255, 255, 255, 0.55)",
+    color: colors.mutedForeground,
     fontSize: 10,
     fontFamily: "Inter_400Regular",
     marginTop: 1,

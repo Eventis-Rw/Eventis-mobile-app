@@ -14,5 +14,7 @@ export const POSTER_RATIOS: Record<string, number> = {
 };
 
 export function getEventImage(image: string) {
-  return /^https?:\/\//.test(image) ? { uri: image } : EVENT_IMAGES[image] ?? EVENT_IMAGES.concert;
+  return /^(https?|file|content|data|blob):/.test(image)
+    ? { uri: image }
+    : EVENT_IMAGES[image] ?? EVENT_IMAGES.concert;
 }

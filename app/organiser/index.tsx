@@ -20,7 +20,7 @@ const TOOLS = [
   {
     icon: "megaphone-outline" as const,
     title: "Promote every moment",
-    text: "Use feed posts, stories and live sessions to keep your audience interested.",
+    text: "Use stories to keep your audience interested.",
   },
   {
     icon: "analytics-outline" as const,
@@ -32,7 +32,7 @@ const TOOLS = [
 const JOURNEY = [
   { title: "Choose access", text: "Pick a pass that matches how often you publish." },
   { title: "Create your profile", text: "Add the organiser name, identity and public details." },
-  { title: "Launch your event", text: "Create an event first, then promote it with posts and stories." },
+  { title: "Launch your event", text: "Create an event first, then promote it with stories." },
 ];
 
 const enter = (delay: number) =>
@@ -77,7 +77,7 @@ export default function BecomeOrganiserScreen() {
             </View>
             <View style={styles.flex}>
               <Text style={[styles.contextTitle, { color: palette.text }]}>Organiser access required</Text>
-              <Text style={[styles.contextText, { color: palette.muted }]}>Complete this flow to publish events, posts and stories.</Text>
+              <Text style={[styles.contextText, { color: palette.muted }]}>Complete this flow to publish events and stories.</Text>
             </View>
           </View>
         ) : null}
@@ -101,7 +101,7 @@ export default function BecomeOrganiserScreen() {
           >
             <View style={styles.heroRing} />
             <View style={styles.heroTop}>
-              <View style={styles.heroMark}><Ionicons name="sparkles" size={22} color="#FFFFFF" /></View>
+              <View style={styles.heroMark}><Ionicons name="briefcase-outline" size={22} color="#FFFFFF" /></View>
               <Text style={styles.heroLabel}>EVENTIS FOR ORGANISERS</Text>
             </View>
             <Text style={styles.heroTitle}>Give every event a place to grow.</Text>

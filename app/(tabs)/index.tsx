@@ -238,7 +238,7 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Become an organizer"
             >
-              <Ionicons name="sparkles" size={13} color="#FFFFFF" />
+              <Ionicons name="briefcase-outline" size={13} color="#FFFFFF" />
               <Text style={styles.becomeOrganizerHeaderBtnText}>
                 {user?.isBusinessAccount ? "Dashboard" : "Become an organizer"}
               </Text>
@@ -332,7 +332,7 @@ export default function HomeScreen() {
                 { backgroundColor: colors.primary, borderColor: colors.primary + "66" },
               ]}
             >
-              <Ionicons name="megaphone" size={30} color="#fff" />
+              <Ionicons name="briefcase-outline" size={30} color="#fff" />
             </View>
             <Text style={[styles.modalEyebrow, { color: colors.primary }]}>CREATE ON EVENTIS</Text>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>Become an organizer</Text>

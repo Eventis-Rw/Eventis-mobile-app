@@ -85,7 +85,7 @@ export function AccountSettings({ capabilities }: { capabilities: AccountCapabil
         <SettingsRow
           icon="briefcase-outline"
           label="Organiser portal"
-          sublabel="Your events, posts and stories"
+          sublabel="Your events and stories"
           onPress={() => openOrganiserFlow()}
         />
       ) : !capabilities.isPublisher ? (

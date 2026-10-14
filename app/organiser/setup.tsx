@@ -109,12 +109,12 @@ export default function OrganisationSetupScreen() {
               </View>
             </View>
             <View style={styles.successPill}>
-              <Ionicons name="sparkles" size={13} color="#38BDF8" />
+              <Ionicons name="briefcase-outline" size={13} color="#38BDF8" />
               <Text style={styles.successPillText}>WORKSPACE READY</Text>
             </View>
             <Text style={[styles.doneTitle, { color: palette.text }]}>Your workspace is ready</Text>
             <Text style={[styles.doneText, { color: palette.muted }]}>
-              {values.name.trim()} is set up on your account. Manage it and create events, posts and
+              {values.name.trim()} is set up on your account. Manage it and create events and
               stories using Quick create on Overview.
             </Text>
             <View style={styles.doneActions}>
@@ -152,7 +152,7 @@ export default function OrganisationSetupScreen() {
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(60).springify() : undefined}>
           <View style={styles.setupIntro}>
             <View style={[styles.setupPill, { backgroundColor: palette.blueSoft }]}>
-              <Ionicons name="sparkles" size={13} color={palette.accent} />
+              <Ionicons name="briefcase-outline" size={13} color={palette.accent} />
               <Text style={[styles.setupPillText, { color: palette.accent }]}>FINAL STEP</Text>
             </View>
             <Text style={[styles.title, { color: palette.text }]}>Create your public organiser profile</Text>

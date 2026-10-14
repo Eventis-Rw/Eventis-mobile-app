@@ -341,15 +341,11 @@ function TabLayout() {
           listeners={{
             tabPress: (event) => {
               event.preventDefault();
-              if (user?.isBusinessAccount) {
-                router.push("/business/create-post" as any);
-              } else {
-                setShowOrganizerSheet(true);
-              }
+              setShowOrganizerSheet(true);
             },
           }}
           options={{
-            title: "Post",
+            title: "Create",
             tabBarIcon: ({ color, focused }) => (
               <TabIcon
                 isCreate
@@ -432,17 +428,8 @@ function TabLayout() {
           <Pressable
             style={[
               styles.modalSheet,
-              Platform.OS === "web"
-                ? ({
-                    backdropFilter: "blur(28px) saturate(1.5)",
-                    WebkitBackdropFilter: "blur(28px) saturate(1.5)",
-                  } as any)
-                : null,
               {
-                backgroundColor:
-                  scheme === "dark"
-                    ? "rgba(10, 16, 36, 0.78)"
-                    : "rgba(255, 255, 255, 0.82)",
+                backgroundColor: colors.background,
                 borderColor: `${colors.primary}55`,
                 paddingBottom: Math.max(insets.bottom, 16) + 16,
                 overflow: "hidden",
@@ -450,34 +437,45 @@ function TabLayout() {
             ]}
             onPress={(e) => e.stopPropagation()}
           >
-            {Platform.OS !== "web" ? (
-              <BlurView
-                intensity={85}
-                tint={scheme === "dark" ? "dark" : "light"}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
-            ) : null}
             <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+            {user?.isBusinessAccount ? (
+              <>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Create something worth sharing</Text>
+                <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>Publish an event or share a story with your audience.</Text>
+                {([
+                  { title: "Event", description: "Date, venue, event details and tickets", icon: "calendar-outline", route: "/business/create-event" },
+                  { title: "Story", description: "A photo or message that lasts 24 hours", icon: "aperture-outline", route: "/business/create-story" },
+                ] as const).map((item) => (
+                  <Pressable key={item.title} accessibilityRole="button" accessibilityLabel={`Create ${item.title.toLowerCase()}`}
+                    onPress={() => { setShowOrganizerSheet(false); router.push(item.route); }}
+                    style={({ pressed }) => [styles.modalFeatureRow, { marginTop: 12, padding: 18, backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}>
+                    <Ionicons name={item.icon} size={24} color={colors.primary} />
+                    <View style={{ flex: 1, gap: 4 }}><Text style={[styles.modalFeatureText, { color: colors.foreground }]}>{item.title}</Text><Text style={{ color: colors.mutedForeground, fontSize: 13 }}>{item.description}</Text></View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+                  </Pressable>
+                ))}
+                <Pressable onPress={() => setShowOrganizerSheet(false)} accessibilityRole="button" style={styles.modalDismissButton}><Text style={[styles.modalDismiss, { color: colors.foreground }]}>Cancel</Text></Pressable>
+              </>
+            ) : <>
             <View
               style={[
                 styles.modalIconWrap,
                 { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` },
               ]}
             >
-              <Ionicons name="sparkles" size={28} color={colors.primary} />
+              <Ionicons name="briefcase-outline" size={28} color={colors.primary} />
             </View>
             <Text style={[styles.modalEyebrow, { color: colors.primary }]}>ORGANIZER EXCLUSIVE</Text>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-              Become an organizer to create a post
+              Become an organiser
             </Text>
             <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>
-              Publishing event posts, photos, and live story moments is only available to registered organizers on Eventis. Create your organizer workspace to start sharing.
+              Create an organiser workspace to publish events and share stories with your audience.
             </Text>
             <View style={styles.modalFeatures}>
               {[
-                "Publish event posts with photos and captions",
-                "Share real-time moments to event stories",
+                "Publish events with dates, photos and details",
+                "Share photos and updates through stories",
                 "Reach attendees directly across Rwanda",
               ].map((f) => (
                 <View
@@ -500,7 +498,7 @@ function TabLayout() {
               style={[styles.modalCta, { backgroundColor: colors.primary }]}
               onPress={() => {
                 setShowOrganizerSheet(false);
-                router.push("/business/register" as any);
+                router.push("/organiser" as any);
               }}
               accessibilityRole="button"
             >
@@ -514,6 +512,7 @@ function TabLayout() {
             >
               <Text style={[styles.modalDismiss, { color: colors.foreground }]}>Maybe later</Text>
             </Pressable>
+            </>}
           </Pressable>
         </Pressable>
       </Modal>

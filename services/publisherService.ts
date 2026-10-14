@@ -25,6 +25,8 @@ export interface PublisherEvent extends Event {
 }
 
 export interface PublisherEventInput {
+  /** Remote URL, local media URI, or bundled demo image key. */
+  image: string;
   title: string;
   description: string;
   category: Exclude<EventCategory, "All">;
@@ -44,13 +46,14 @@ export const EVENT_TITLE_MAX = 90;
 export const EVENT_DESCRIPTION_MAX = 2000;
 
 export function validateEventInput(input: PublisherEventInput, today = localDate(new Date())): string | null {
+  if (!input.image.trim()) return "Add an event image.";
   if (!input.title.trim()) return "Add an event title.";
   if (input.title.trim().length > EVENT_TITLE_MAX) return `Keep the title under ${EVENT_TITLE_MAX} characters.`;
   if (!input.description.trim()) return "Add a description.";
   if (input.description.length > EVENT_DESCRIPTION_MAX) return "The description is too long.";
   if (!input.category) return "Choose a category.";
   if (!input.location.trim()) return "Add the venue or location.";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || Number.isNaN(new Date(input.date).getTime())) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || Number.isNaN(new Date(input.date).getTime()) || new Date(input.date).toISOString().slice(0, 10) !== input.date) {
     return "Enter the date as YYYY-MM-DD.";
   }
   if (input.date < today) return "The event date can't be in the past.";
@@ -181,8 +184,6 @@ function localDate(value: Date) {
   return `${y}-${m}-${d}`;
 }
 
-const CATEGORY_IMAGE: Partial<Record<EventCategory, string>> = { Tech: "tech", Business: "tech", Food: "food" };
-
 function addHours(time: string, hours: number) {
   const [h, m] = time.split(":").map(Number);
   return `${String(((h || 0) + hours) % 24).padStart(2, "0")}:${String(m || 0).padStart(2, "0")}`;
@@ -191,6 +192,7 @@ function addHours(time: string, hours: number) {
 function toEventFields(input: PublisherEventInput) {
   const price = input.isPaid ? Math.round(input.price) : 0;
   return {
+    image: input.image.trim(),
     title: input.title.trim(),
     description: input.description.trim(),
     category: input.category,
@@ -258,7 +260,6 @@ export async function createPublisherEvent(
       currency: "RWF",
       organizer: organizerName,
       attendees: 0,
-      image: CATEGORY_IMAGE[input.category] ?? "concert",
       tags: [input.category.toLowerCase()],
       isFeatured: false,
       isSponsored: false,
