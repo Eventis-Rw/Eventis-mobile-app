@@ -19,9 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { useChat } from "@/context/ChatContext";
-
-// Change this single flag to true when FindLove is ready to return to navigation.
-const FIND_LOVE_ENABLED = false;
+import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 
 interface TabIconProps {
   color: ColorValue;

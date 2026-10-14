@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import React, { useCallback, useDeferredValue, useMemo, useState } from "react";
 import {
   FlatList,
@@ -22,11 +22,18 @@ import { Skeleton } from "@/components/SkeletonLoader";
 import type { LoveGender, LoveProfile } from "@/constants/loveProfiles";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { useColors } from "@/hooks/useColors";
+import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 
 type GenderFilter = "All" | LoveGender;
 const FILTERS: GenderFilter[] = ["All", "She", "He", "They"];
 
-export default function FindLoveScreen() {
+// The tab stays reachable by link, so it needs its own guard.
+export default function FindLoveTab() {
+  if (!FIND_LOVE_ENABLED) return <Redirect href="/(tabs)" />;
+  return <FindLoveScreen />;
+}
+
+function FindLoveScreen() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
