@@ -1,6 +1,43 @@
-export type LoveGender = "She" | "He" | "They";
+import type { LoveGender } from "@/utils/findLoveProfile";
+
+export type { LoveGender };
 export type LoveConnectionStatus = "none" | "pending" | "connected";
 export type LoveVisibility = "public" | "private";
+
+/**
+ * The signed-in member's own FindLove profile. It belongs to their Eventis
+ * account (same login and phone) but has its own username.
+ */
+export interface MyLoveProfile {
+  username: string;
+  gender: LoveGender;
+  /** ISO date, "YYYY-MM-DD". Age is worked out from it, never stored. */
+  dateOfBirth: string;
+  visibility: LoveVisibility;
+  /** Main photo first; may be empty. Free members can have up to FREE_LOVE_PHOTO_LIMIT. */
+  photoUrls: string[];
+  /** Optional extras, edited after creation. */
+  bio?: string;
+  interests: string[];
+  /** One of LOVE_NEIGHBORHOODS. Never an exact location. */
+  neighborhood?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What the create and edit forms send. */
+export interface MyLoveProfileInput {
+  username: string;
+  gender: LoveGender;
+  dateOfBirth: string;
+  visibility: LoveVisibility;
+  photoUrls: string[];
+  bio?: string;
+  interests?: string[];
+  neighborhood?: string;
+  /** Create only: the member ticked "I confirm I am 18 or older". */
+  confirmedAdult?: boolean;
+}
 
 export interface LoveProfile {
   id: string;
@@ -33,7 +70,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     userId: "user-amara",
     username: "amara.k",
     name: "Amara",
-    gender: "She",
+    gender: "Woman",
     age: 25,
     city: "Kigali",
     occupation: "Creative strategist",
@@ -53,7 +90,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     userId: "user-ethan",
     username: "ethan_m",
     name: "Ethan",
-    gender: "He",
+    gender: "Man",
     age: 28,
     city: "Kigali",
     occupation: "Product designer",
@@ -72,7 +109,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     userId: "user-ineza",
     username: "ineza.lens",
     name: "Ineza",
-    gender: "She",
+    gender: "Woman",
     age: 26,
     city: "Musanze",
     occupation: "Travel photographer",
@@ -91,7 +128,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     userId: "user-noah",
     username: "noah.runs",
     name: "Noah",
-    gender: "He",
+    gender: "Man",
     age: 30,
     city: "Kigali",
     occupation: "Software engineer",
@@ -109,7 +146,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     userId: "user-keza",
     username: "keza_dances",
     name: "Keza",
-    gender: "She",
+    gender: "Woman",
     age: 27,
     city: "Huye",
     occupation: "Event producer",
@@ -127,7 +164,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     userId: "user-samuel",
     username: "sam.builds",
     name: "Samuel",
-    gender: "He",
+    gender: "Man",
     age: 29,
     city: "Rubavu",
     occupation: "Architect",

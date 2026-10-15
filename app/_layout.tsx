@@ -27,6 +27,7 @@ import { BookingsProvider } from "@/context/BookingsContext";
 import { EventsProvider } from "@/context/EventsContext";
 import { FindLoveDemoProvider } from "@/context/FindLoveDemoContext";
 import { LoveProfilesProvider } from "@/context/LoveProfilesContext";
+import { MyLoveProfileProvider } from "@/context/MyLoveProfileContext";
 import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 import { useColors } from "@/hooks/useColors";
 
@@ -142,9 +143,11 @@ export default function RootLayout() {
 function FindLoveProviders({ children }: { children: React.ReactNode }) {
   if (!FIND_LOVE_ENABLED) return <>{children}</>;
   return (
-    <LoveProfilesProvider>
-      <FindLoveDemoProvider>{children}</FindLoveDemoProvider>
-    </LoveProfilesProvider>
+    <MyLoveProfileProvider>
+      <LoveProfilesProvider>
+        <FindLoveDemoProvider>{children}</FindLoveDemoProvider>
+      </LoveProfilesProvider>
+    </MyLoveProfileProvider>
   );
 }
 

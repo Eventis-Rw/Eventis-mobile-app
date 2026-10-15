@@ -18,19 +18,47 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { FindLoveQuickActions } from "@/components/FindLoveQuickActions";
 import { LoveProfileCard } from "@/components/LoveProfileCard";
+import { FindLoveIntro } from "@/components/love/FindLoveIntro";
+import { SectionState } from "@/components/profile/ProfileSection";
 import { Skeleton } from "@/components/SkeletonLoader";
 import type { LoveGender, LoveProfile } from "@/constants/loveProfiles";
+import { useAuth } from "@/context/AuthContext";
+import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { useColors } from "@/hooks/useColors";
 import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 
 type GenderFilter = "All" | LoveGender;
-const FILTERS: GenderFilter[] = ["All", "She", "He", "They"];
+const FILTERS: { value: GenderFilter; label: string }[] = [
+  { value: "All", label: "All" },
+  { value: "Woman", label: "Women" },
+  { value: "Man", label: "Men" },
+];
 
 // The tab stays reachable by link, so it needs its own guard.
 export default function FindLoveTab() {
   if (!FIND_LOVE_ENABLED) return <Redirect href="/(tabs)" />;
-  return <FindLoveScreen />;
+  return <FindLoveGate />;
+}
+
+// Members see the intro until they have a FindLove profile of their own.
+function FindLoveGate() {
+  const colors = useColors();
+  const insets = useAppSafeAreaInsets();
+  const { user } = useAuth();
+  const { myProfile, status, error, reload } = useMyLoveProfile();
+  if (myProfile) return <FindLoveScreen />;
+  // Signed-out visitors also get the intro; "Get started" asks them to sign in.
+  if (status === "ready" || !user) return <FindLoveIntro />;
+  return (
+    <View style={[styles.root, styles.gateState, { backgroundColor: colors.background, paddingTop: (Platform.OS === "web" ? 68 : insets.top) + 24 }]}>
+      {status === "error" ? (
+        <SectionState kind="error" message={error ?? "We couldn't load FindLove."} onRetry={() => void reload()} />
+      ) : (
+        <SectionState kind="loading" message="Opening FindLove…" />
+      )}
+    </View>
+  );
 }
 
 function FindLoveScreen() {
@@ -52,8 +80,9 @@ function FindLoveScreen() {
       if (!matchesGender) return false;
       if (!deferredQuery) return true;
       const searchable = [
+        // Gender is left out on purpose: the Women/Men buttons handle it, and
+        // text matching would let "man" match "Woman".
         profile.name,
-        profile.gender,
         profile.city,
         profile.occupation,
         profile.bio,
@@ -119,9 +148,14 @@ function FindLoveScreen() {
                 <Text style={[styles.eyebrow, { color: colors.primary }]}>FIND YOUR PERSON</Text>
                 <Text style={[styles.title, { color: colors.foreground }]}>Find Love</Text>
               </View>
-              <View style={[styles.heartMark, { backgroundColor: colors.glass }]}>
-                <Ionicons name="heart" size={24} color={colors.primary} />
-              </View>
+              <Pressable
+                onPress={() => router.push("/love/edit" as any)}
+                style={[styles.heartMark, { backgroundColor: colors.glass }]}
+                accessibilityRole="button"
+                accessibilityLabel="My FindLove profile"
+              >
+                <Ionicons name="person-circle-outline" size={26} color={colors.primary} />
+              </Pressable>
             </View>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Meet people who enjoy the same events, places, and moments as you.</Text>
 
@@ -147,7 +181,7 @@ function FindLoveScreen() {
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-              {FILTERS.map((filter) => {
+              {FILTERS.map(({ value: filter, label }) => {
                 const selected = genderFilter === filter;
                 return (
                   <Pressable
@@ -160,7 +194,7 @@ function FindLoveScreen() {
                       { backgroundColor: selected ? colors.primary : colors.card, borderColor: selected ? colors.primary : colors.border },
                     ]}
                   >
-                    <Text style={[styles.filterText, { color: selected ? "#FFFFFF" : colors.foreground }]}>{filter}</Text>
+                    <Text style={[styles.filterText, { color: selected ? "#FFFFFF" : colors.foreground }]}>{label}</Text>
                   </Pressable>
                 );
               })}
@@ -201,6 +235,7 @@ function FindLoveScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  gateState: { paddingHorizontal: 16 },
   listContent: { flexGrow: 1 },
   loadingContent: { width: "100%", maxWidth: 720, alignSelf: "center" },
   loadingGap: { marginTop: 18 },
