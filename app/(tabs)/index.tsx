@@ -134,6 +134,10 @@ export default function HomeScreen() {
           onOpenBecomeOrganizer={() => setShowOrganizerModal(true)}
         />
 
+        {location.status === "undetermined" && (
+          <LocationPrompt onAllow={location.request} onDismiss={location.decline} />
+        )}
+
         {/* Category filters */}
         <ScrollView
           ref={categoryScrollRef}

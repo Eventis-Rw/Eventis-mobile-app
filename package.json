@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:chat": "node scripts/chat-service.test.cjs",
     "test:profile": "node scripts/profile-service.test.cjs",
+    "test:findlove": "node scripts/findlove-service.test.cjs",
     "export": "expo export"
   },
   "dependencies": {

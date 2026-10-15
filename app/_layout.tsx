@@ -28,6 +28,8 @@ import { EventsProvider } from "@/context/EventsContext";
 import { StoriesProvider } from "@/context/StoriesContext";
 import { FindLoveDemoProvider } from "@/context/FindLoveDemoContext";
 import { LoveProfilesProvider } from "@/context/LoveProfilesContext";
+import { MyLoveProfileProvider } from "@/context/MyLoveProfileContext";
+import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 import { useColors } from "@/hooks/useColors";
 
 SplashScreen.preventAutoHideAsync();
@@ -141,6 +143,18 @@ export default function RootLayout() {
   );
 }
 
+// Keep FindLove state out of the app until the launch switch is enabled.
+function FindLoveProviders({ children }: { children: React.ReactNode }) {
+  if (!FIND_LOVE_ENABLED) return <>{children}</>;
+  return (
+    <MyLoveProfileProvider>
+      <LoveProfilesProvider>
+        <FindLoveDemoProvider>{children}</FindLoveDemoProvider>
+      </LoveProfilesProvider>
+    </MyLoveProfileProvider>
+  );
+}
+
 function ThemedAppSurface() {
   const colors = useColors();
   return (
@@ -159,15 +173,13 @@ function ThemedAppSurface() {
               <AuthProvider>
                 <ChatProvider>
                   <EventsProvider>
-                    <LoveProfilesProvider>
-                      <FindLoveDemoProvider>
+                    <FindLoveProviders>
                         <BookingsProvider>
                           <StoriesProvider>
                             <RootLayoutNav />
                           </StoriesProvider>
                         </BookingsProvider>
-                      </FindLoveDemoProvider>
-                    </LoveProfilesProvider>
+                    </FindLoveProviders>
                   </EventsProvider>
                 </ChatProvider>
               </AuthProvider>
