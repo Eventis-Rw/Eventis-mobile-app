@@ -2,15 +2,15 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AppState, Platform } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import { StoryViewer } from "@/components/StoryViewer";
-import { makeDemoStories } from "@/constants/demoStories";
-import { buildStorySession } from "@/utils/storyPlayback";
+import { makeDemoStories, RESET_STORY_VIEWS_ON_RELOAD } from "@/constants/demoStories";
+import { buildStorySession, hydrateStoryViews } from "@/utils/storyPlayback";
 import { resolveStoryMedia } from "@/services/storyMedia";
 import { deleteLocalStory, getDemoStoriesCreatedAt, getStoryFeed, getViewedStories, groupStories, persistStoryView, storyKey, subscribeStories,
   type PublishedStory, type StoryCollection, type ViewedStories } from "@/services/storyService";
 
 type Session = NonNullable<ReturnType<typeof buildStorySession>>;
 type StoriesState = {
-  collections: StoryCollection[]; loading: boolean; error: string | null;
+  collections: StoryCollection[]; loading: boolean; error: string | null; viewerOpen: boolean;
   openStories: (ownerId: string, ownOnly?: boolean) => void;
   refresh: () => Promise<void>;
 };
@@ -34,6 +34,7 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
   const pending = useRef(new Map<string, PublishedStory>());
   const request = useRef(0);
   const mounted = useRef(true);
+  const demoEpoch = useRef(Date.now());
   const refresh = useCallback(async () => {
     const version = ++request.current;
     try {
@@ -44,8 +45,8 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
       const [local, savedViews, epoch] = await Promise.all([getStoryFeed(), getViewedStories(viewerId), getDemoStoriesCreatedAt()]);
       const resolved = await resolveStoryMedia(local);
       if (!mounted.current || version !== request.current) return;
-      setItems([...resolved, ...makeDemoStories(epoch)]);
-      setViewed({ ...savedViews, ...optimistic.current });
+      setItems([...resolved, ...(process.env.EXPO_PUBLIC_USE_EVENTS_API === "true" ? [] : makeDemoStories(RESET_STORY_VIEWS_ON_RELOAD ? demoEpoch.current : epoch))]);
+      setViewed(hydrateStoryViews(savedViews, optimistic.current, ownId, RESET_STORY_VIEWS_ON_RELOAD));
       setNow(Date.now());
       setError(null);
     } catch {
@@ -53,7 +54,7 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
     } finally {
       if (mounted.current && version === request.current) setLoading(false);
     }
-  }, [viewerId]);
+  }, [viewerId, ownId]);
 
   useEffect(() => {
     mounted.current = true;
@@ -114,7 +115,8 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
     await deleteLocalStory(ownId, story.id);
     setItems((previous) => previous.filter((item) => storyKey(item) !== storyKey(story)));
   }, [ownId]);
-  const value = useMemo(() => ({ collections, loading, error, refresh, openStories }), [collections, loading, error, refresh, openStories]);
+  const viewerOpen = session !== null;
+  const value = useMemo(() => ({ collections, loading, error, refresh, openStories, viewerOpen }), [collections, loading, error, refresh, openStories, viewerOpen]);
   return (
     <StoriesContext.Provider value={value}>
       {children}

@@ -40,7 +40,9 @@ export function StoryVideo({ uri, paused, muted = true, fit = "contain", ...call
     player.muted = muted;
     if (paused || !ready) player.pause(); else player.play();
   }, [player, paused, ready, muted]);
-  return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit}
+  // Web videos are replaced elements: edge offsets alone don't override their
+  // intrinsic dimensions. Explicit size also keeps previews and playback aligned.
+  return <VideoView player={player} style={[StyleSheet.absoluteFill, { width: "100%", height: "100%" }]} contentFit={fit}
     nativeControls={false} surfaceType="textureView" allowsPictureInPicture={false} />;
 }
 

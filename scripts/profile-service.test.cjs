@@ -557,6 +557,30 @@ test("today is the local calendar date, not the UTC one", () => {
   assert.equal(dates.localToday(new Date(2026, 0, 5, 23, 59)), "2026-01-05");
 });
 
+test("story testing resets other saved views only, preserving own and current-session views", () => {
+  const saved = { "me:one": 100, "other:old": 100, "me-other:old": 100 };
+  const session = { "other:new": 200 };
+  assert.deepEqual(playback.hydrateStoryViews(saved, session, "me", true), { "me:one": 100, "other:new": 200 });
+  assert.deepEqual(playback.hydrateStoryViews(saved, {}, "me", true), { "me:one": 100 });
+  assert.deepEqual(playback.hydrateStoryViews(saved, {}, undefined, true), {});
+  assert.deepEqual(playback.hydrateStoryViews(saved, session, "me", false), { ...saved, ...session });
+});
+
+test("demo stories group multiple items under nine accounts with real event links and avatars", () => {
+  const demo = load("constants/demoStories.ts", (name) => name.startsWith("../assets/") ? { uri: name } : undefined);
+  const generic = load("constants/mockData.ts", () => undefined);
+  const featured = load("constants/featuredDemoPosts.ts", () => undefined);
+  const validIds = new Set([...generic.MOCK_EVENTS, ...featured.FEATURED_DEMO_POSTS].map((event) => event.id));
+  const now = Date.now();
+  const items = demo.makeDemoStories(now);
+  const groups = stories.groupStories(items, {}, undefined, now);
+  assert.equal(groups.length, 9);
+  assert.equal(items.length, 19);
+  assert.equal(new Set(items.map(stories.storyKey)).size, items.length);
+  assert.ok(groups.every((group) => group.items.length >= 2 && group.hasUnwatched && group.organizerAvatar.startsWith("https://")));
+  assert.ok(items.every((item) => validIds.has(item.eventId) && item.createdAt <= now && item.expiresAt > now));
+});
+
 test("story collections group uploads by owner, deduplicate results and retain chronological items", async () => {
   const draft = { organizerName: "Same name", organizerAvatar: "", storyImage: { uri: "file:///photo.jpg" }, background: "#080B10", fit: "contain", overlays: [] };
   const uploaded = await stories.publishLocalStories("owner-a", [draft, draft, { ...draft, storyImage: undefined, mediaType: "video", mediaUrl: "file:///clip.mp4" }]);

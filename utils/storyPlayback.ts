@@ -1,5 +1,13 @@
 import { storyKey, type StoryCollection, type ViewedStories } from "@/services/storyService";
 
+/** Testing resets apply only to saved state, never views accumulated this session. */
+export function hydrateStoryViews(saved: ViewedStories, session: ViewedStories, ownId: string | undefined, resetOthers: boolean): ViewedStories {
+  const retained = resetOthers
+    ? Object.fromEntries(Object.entries(saved).filter(([key]) => ownId && key.startsWith(`${ownId}:`)))
+    : saved;
+  return { ...retained, ...session };
+}
+
 /** Freeze playback order at opening; ring updates must never reorder an active session. */
 export function buildStorySession(collections: StoryCollection[], ownerId: string, viewed: ViewedStories, ownOnly = false) {
   const selectedIndex = collections.findIndex((group) => group.ownerId === ownerId);
