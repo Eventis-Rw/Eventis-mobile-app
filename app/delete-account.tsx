@@ -197,7 +197,7 @@ export default function DeleteAccountScreen() {
           <>
             <Text style={[styles.title, { color: colors.foreground }]}>Confirm it's you</Text>
             <Text style={[styles.body, { color: colors.mutedForeground }]}>
-              Enter the 4-digit code we sent {challenge.channel === "sms" ? "by SMS to" : "to"} {challenge.destination}.
+              Enter the 6-digit code we sent {challenge.channel === "sms" ? "by SMS to" : "to"} {challenge.destination}.
             </Text>
             <View style={[styles.codeWrap, { opacity: lockedOut ? 0.4 : 1 }]} pointerEvents={lockedOut || busy ? "none" : "auto"}>
               <OTPInput key={codeKey} onComplete={(code) => void verify(code)} error={!!error} />
@@ -206,7 +206,7 @@ export default function DeleteAccountScreen() {
             {error ? <InlineError message={error} /> : null}
             {!USE_PROFILE_API ? (
               <Text style={[styles.note, { color: colors.mutedForeground, textAlign: "center" }]}>
-                Demo: any 4 digits work, except {DEMO_WRONG_CODE}.
+                Demo: any 6 digits work, except {DEMO_WRONG_CODE}.
               </Text>
             ) : null}
             <Pressable

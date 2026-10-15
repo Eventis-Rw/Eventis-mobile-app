@@ -14,6 +14,8 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { PinInput } from "@/components/PinInput";
+import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
 import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
 import { useTheme } from "@/context/ThemeContext";
@@ -25,43 +27,40 @@ export default function RegisterScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
+  const { register } = useAuth();
+  const [pin, setPin] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // Rwanda (+250) default
-  const [errors, setErrors] = useState<{ fullName?: string; phone?: string }>({});
+  const [errors, setErrors] = useState<{ fullName?: string; phone?: string; pin?: string }>({});
   const [loading, setLoading] = useState(false);
 
   const validate = () => {
-    const nextErrors: { fullName?: string; phone?: string } = {};
+    const nextErrors: { fullName?: string; phone?: string; pin?: string } = {};
     if (!fullName.trim() || fullName.trim().length < 2) {
-      nextErrors.fullName = "Please enter your full name";
+      nextErrors.fullName = "Please enter your username";
     }
     const cleanedPhone = phone.replace(/\D/g, "");
     if (!cleanedPhone || cleanedPhone.length < 7) {
       nextErrors.phone = "Please enter a valid phone number";
     }
+    if (!/^\d{5}$/.test(pin)) nextErrors.pin = "Enter exactly 5 digits";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = () => {
-    if (!validate()) return;
+  const handleSubmit = async () => {
+    if (loading || !validate()) return;
     setLoading(true);
-
-    const fullPhone = `${selectedCountry.code} ${phone.trim()}`;
-
-    // Frontend flow: transition directly to SMS verification screen
-    setTimeout(() => {
-      setLoading(false);
-      router.push({
-        pathname: "/auth/otp",
-        params: {
-          purpose: "register",
-          phone: fullPhone,
-          fullName: fullName.trim(),
-        },
-      } as any);
-    }, 300);
+    setSubmitError("");
+    const input = { phone: `${selectedCountry.code}${phone.replace(/\D/g, "")}`, username: fullName.trim(), pin };
+    try {
+      await register(input);
+      router.push({ pathname: "/auth/otp", params: { purpose: "register", phone: input.phone, fullName: input.username } });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Could not create your account. Please try again.");
+    } finally { setLoading(false); }
   };
 
   return (
@@ -98,9 +97,7 @@ export default function RegisterScreen() {
           <Text style={[styles.title, { color: colors.foreground }]}>
             Create an account
           </Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            A name and a number. Then you're in the city.
-          </Text>
+
         </Animated.View>
 
         {/* Full Name Field */}
@@ -109,7 +106,7 @@ export default function RegisterScreen() {
           style={styles.fieldSection}
         >
           <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-            Full names
+            Username
           </Text>
           <View
             style={[
@@ -136,7 +133,7 @@ export default function RegisterScreen() {
               }}
               autoCapitalize="words"
               autoCorrect={false}
-              accessibilityLabel="Full name"
+              accessibilityLabel="Username"
             />
           </View>
           {errors.fullName ? (
@@ -167,6 +164,9 @@ export default function RegisterScreen() {
           />
         </Animated.View>
 
+        <PinInput value={pin} onChangeText={(value) => { setPin(value); setErrors((e) => ({ ...e, pin: undefined })); }} error={errors.pin} />
+        {submitError ? <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive }}>{submitError}</Text> : null}
+
         {/* Submit Button */}
         <Animated.View
           entering={Platform.OS !== "web" ? FadeInDown.delay(260).springify() : undefined}
@@ -177,6 +177,8 @@ export default function RegisterScreen() {
               { backgroundColor: colors.primary, opacity: loading ? 0.75 : 1 },
             ]}
             onPress={handleSubmit}
+              accessibilityRole="button"
+              accessibilityState={{ busy: loading }}
             disabled={loading}
           >
             <Text style={styles.submitBtnText}>

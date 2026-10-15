@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 
+import { DEMO_AUTH, type LoginInput, type SignupInput } from "@/constants/auth";
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import {
   createOrganisation,
@@ -66,13 +67,8 @@ interface AuthContextType {
   isLoading: boolean;
   hasCompletedOnboarding: boolean;
   pendingOTPContext: { purpose: "register" | "payment" | "chat"; eventId?: string } | null;
-  login: (identifier: string, password: string) => Promise<void>;
-  register: (data: {
-    username: string;
-    email?: string;
-    phone?: string;
-    password: string;
-  }) => Promise<void>;
+  login: (input: LoginInput) => Promise<void>;
+  register: (data: SignupInput) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   exploreDemo: () => Promise<void>;
   logout: () => Promise<void>;
@@ -182,18 +178,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(normalisedUser);
   }, []);
 
-  const login = useCallback(
-    async (identifier: string, password: string) => {
-      const data = await api.post<{ token: string; user: User }>("/auth/login", {
-        identifier,
-        password,
-      });
-      await setToken(data.token);
-      await persistUser(data.user);
-    },
-    [persistUser]
-  );
-
   const exploreDemo = useCallback(async () => {
     await clearToken();
     await persistUser({
@@ -208,7 +192,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [persistUser]);
 
   const register = useCallback(
-    async (regData: { username: string; email?: string; phone?: string; password: string }) => {
+    async (regData: SignupInput) => {
+      if (!/^\d{5}$/.test(regData.pin)) throw new Error("Enter a 5 digit PIN.");
+      if (DEMO_AUTH) return;
       const data = await api.post<{ token: string; user: User }>("/auth/register", regData);
       await setToken(data.token);
       await persistUser(data.user);
@@ -275,25 +261,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [persistUser]
   );
 
+  const login = useCallback(async (input: LoginInput) => {
+    if (!/^\d{5}$/.test(input.pin)) throw new Error("Enter a 5 digit PIN.");
+    if (DEMO_AUTH) {
+      await signInWithPhoneSession(input.phone);
+      return;
+    }
+    const data = await api.post<{ token: string; user: User }>("/auth/login", input);
+    await setToken(data.token);
+    await persistUser(data.user);
+  }, [persistUser, signInWithPhoneSession]);
+
   const verifyOTP = useCallback(
     async (code: string, phone?: string, fullName?: string): Promise<boolean> => {
-      if (code.length !== 4 || !/^\d{4}$/.test(code)) return false;
+      if (code.length !== 6 || !/^\d{6}$/.test(code)) return false;
       try {
         const data = await api.post<{ user: User }>("/auth/verify-otp", { code });
         await persistUser(data.user);
         setPendingOTPContext(null);
         return true;
       } catch {
-        // Offline / demo fallback: create verified session using phone & name
-        if (phone) {
-          await signInWithPhoneSession(phone, fullName);
-          setPendingOTPContext(null);
-          return true;
-        }
         return false;
       }
     },
-    [persistUser, signInWithPhoneSession]
+    [persistUser]
   );
 
   const requestOTP = useCallback(

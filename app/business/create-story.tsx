@@ -1,9 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
+import { publishLocalStories, type StoryDraft } from "@/services/storyService";
+import { persistStoryMedia } from "@/services/storyMedia";
+import { StoryVideo } from "@/components/StoryVideo";
+import { useStories } from "@/context/StoriesContext";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, Alert, Image, Keyboard, Modal, Platform, Pressable,
+  ActivityIndicator, Image, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions,
   type ImageSourcePropType,
 } from "react-native";
@@ -32,6 +37,7 @@ const TOOLS = [
   { id: "layout", label: "Layout", icon: "crop-outline" },
 ] as const;
 type Tool = (typeof TOOLS)[number]["id"];
+type DraftCanvas = { image?: ImageSourcePropType; videoUri?: string; backgroundIndex: number; fit: "cover" | "contain"; overlays: StoryOverlay[] };
 
 function Choice({ label, selected, onPress, disabled = false }: { label: string; selected?: boolean; onPress: () => void; disabled?: boolean }) {
   const palette = useOrganiserPalette();
@@ -49,14 +55,22 @@ function Choice({ label, selected, onPress, disabled = false }: { label: string;
 
 export default function CreateStoryScreen() {
   const palette = useOrganiserPalette();
+  const router = useRouter();
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState(false);
+  const publishLock = useRef(false);
   const insets = useAppSafeAreaInsets();
   const { user } = useAuth();
+  const { refresh, openStories } = useStories();
   const { width, height } = useWindowDimensions();
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const textInputRef = useRef<TextInput>(null);
   const nextLayerId = useRef(0);
   const [editing, setEditing] = useState(false);
   const [image, setImage] = useState<ImageSourcePropType | undefined>();
+  const [videoUri, setVideoUri] = useState<string>();
+  const [batch, setBatch] = useState<DraftCanvas[]>([]);
+  const [draftIndex, setDraftIndex] = useState(0);
   const [backgroundIndex, setBackgroundIndex] = useState(0);
   const [fit, setFit] = useState<"cover" | "contain">("contain");
   const [overlays, setOverlays] = useState<StoryOverlay[]>([]);
@@ -68,7 +82,25 @@ export default function CreateStoryScreen() {
   const [footerHeight, setFooterHeight] = useState(82);
   const selected = overlays.find((layer) => layer.id === selectedId);
   const background = STORY_BACKGROUNDS[backgroundIndex];
-  const hasContent = Boolean(image) || overlays.some((layer) => layer.text.trim());
+  const hasContent = Boolean(image || videoUri) || overlays.some((layer) => layer.text.trim());
+  const snapshot = (): DraftCanvas => ({ image, videoUri, backgroundIndex, fit, overlays });
+  const loadDraft = (draft: DraftCanvas) => {
+    setImage(draft.image); setVideoUri(draft.videoUri); setBackgroundIndex(draft.backgroundIndex);
+    setFit(draft.fit); setOverlays(draft.overlays); setSelectedId(undefined); setActiveTool(undefined);
+  };
+  const selectDraft = (index: number) => {
+    if (index === draftIndex) return;
+    setBatch((current) => current.map((draft, i) => i === draftIndex ? snapshot() : draft));
+    loadDraft(batch[index]); setDraftIndex(index);
+  };
+  const removeDraft = () => {
+    const remaining = batch.filter((_, index) => index !== draftIndex);
+    setBatch(remaining);
+    const nextIndex = Math.max(0, Math.min(draftIndex, remaining.length - 1));
+    setDraftIndex(nextIndex);
+    loadDraft(remaining[nextIndex] ?? { backgroundIndex: 0, fit: "contain", overlays: [] });
+    if (!remaining.length) setEditing(false);
+  };
   const canvasWidth = Math.min(width - 36, Math.max(165, (height - insets.top - insets.bottom - 300) * 9 / 16));
   const organisationName = user?.organisation?.name ?? user?.businessName ?? "Your organisation";
   const selectedTextId = selected?.kind === "text" ? selected.id : undefined;
@@ -122,10 +154,18 @@ export default function CreateStoryScreen() {
           return;
         }
       }
-      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], quality: 0.85, allowsEditing: false };
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images", "videos"], quality: 0.85, allowsEditing: false,
+        allowsMultipleSelection: !camera, selectionLimit: 10, orderedSelection: true, videoMaxDuration: 60 };
       const result = camera ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
       if (!result.canceled && result.assets[0]) {
-        setImage({ uri: result.assets[0].uri });
+        const additions: DraftCanvas[] = result.assets.map((asset) => ({
+          image: asset.type === "video" ? undefined : { uri: asset.uri },
+          videoUri: asset.type === "video" ? asset.uri : undefined, backgroundIndex: 0, fit: "contain", overlays: [],
+        }));
+        const current = batch.length ? batch.map((draft, index) => index === draftIndex ? snapshot() : draft) : hasContent ? [snapshot()] : [];
+        setBatch([...current, ...additions]);
+        setDraftIndex(current.length);
+        loadDraft(additions[0]);
         setEditing(true);
         setActiveTool(undefined);
         setFit("contain");
@@ -138,6 +178,9 @@ export default function CreateStoryScreen() {
     }
   };
   const useTemplate = (template: (typeof TEMPLATES)[number]) => {
+    setBatch([]);
+    setDraftIndex(0);
+    setVideoUri(undefined);
     setImage(template.image);
     setOverlays([{ id: `layer-${++nextLayerId.current}`, kind: "text", text: template.message, x: 0.5, y: 0.83, color: "#FFFFFF", style: "label", size: 21 }]);
     setSelectedId(undefined);
@@ -146,16 +189,59 @@ export default function CreateStoryScreen() {
     setFit("contain");
     haptic();
   };
-  // The existing stories flow is a UI demo; do not imply a server publication succeeded.
-  const share = () => {
-    if (!hasContent) return;
+  const share = async () => {
+    if (!hasContent || publishLock.current) return;
+    if (!user) { setPickError("Sign in to publish your story."); return; }
+    publishLock.current = true;
+    setPublishing(true);
+    setPickError(undefined);
     Keyboard.dismiss();
-    Alert.alert("Story preview ready", "Your story design is ready. Publishing to the feed will be available when story sharing is connected.", [{ text: "Keep editing" }]);
+    try {
+      const canvases = batch.length ? batch.map((draft, index) => index === draftIndex ? snapshot() : draft) : [snapshot()];
+      const emptyIndex = canvases.findIndex((canvas) => !canvas.image && !canvas.videoUri && !canvas.overlays.some((layer) => layer.text.trim()));
+      if (emptyIndex >= 0) {
+        setPickError(`Story ${emptyIndex + 1} is empty. Add media or text, or remove it.`);
+        return;
+      }
+      const drafts: StoryDraft[] = [];
+      for (const canvas of canvases) {
+        const imageUri = typeof canvas.image === "object" && !Array.isArray(canvas.image) ? canvas.image?.uri : undefined;
+        const mediaUri = canvas.videoUri || imageUri;
+        const durableUri = mediaUri ? await persistStoryMedia(mediaUri) : undefined;
+        drafts.push({ organizerName: organisationName, organizerAvatar: user.organisation?.logoUrl || user.avatarUrl || "",
+          storyImage: canvas.videoUri ? undefined : durableUri ? { uri: durableUri } : canvas.image,
+          mediaUrl: durableUri, mediaType: canvas.videoUri ? "video" : canvas.image ? "image" : "text",
+          background: STORY_BACKGROUNDS[canvas.backgroundIndex].color, fit: canvas.fit, overlays: canvas.overlays.filter((layer) => layer.text.trim()) });
+      }
+      await publishLocalStories(user.id, drafts);
+      await refresh();
+      setPreviewing(false);
+      setPublished(true);
+    } catch {
+      setPreviewing(false);
+      setPickError("Your story could not be saved. Your design is still here — please try publishing again.");
+    } finally {
+      publishLock.current = false;
+      setPublishing(false);
+    }
   };
+
+  if (published) return (
+    <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+      <PortalScreenHeader title="Story published" />
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 28, gap: 18 }}>
+        <Ionicons name="checkmark-circle-outline" size={56} color={palette.accent} />
+        <Text style={[styles.heading, { color: palette.text }]}>Your story is ready to view</Text>
+        <Text style={[styles.description, { color: palette.muted, textAlign: "center" }]}>Saved to your home stories for 24 hours. During the demo, stories are visible on this device.</Text>
+        <Pressable onPress={() => { if (user) openStories(user.id, true); }} accessibilityRole="button" style={[styles.shareButton, { flex: 0, paddingHorizontal: 24, backgroundColor: palette.blue }]}><Text style={styles.shareText}>View your stories</Text><Ionicons name="arrow-forward" size={20} color="#FFFFFF" /></Pressable>
+        <Pressable onPress={() => router.replace("/business/dashboard")} accessibilityRole="button"><Text style={[styles.choiceText, { color: palette.accent }]}>Back to dashboard</Text></Pressable>
+      </View>
+    </View>
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>
-      <PortalScreenHeader title="Create Story" icon="close" compact={keyboardVisible} />
+      <PortalScreenHeader title="Create Story" icon="close" compact={keyboardVisible} disabled={publishing} />
       <StoryScrollView
         style={styles.flex} contentContainerStyle={styles.content}
         bottomOffset={editing ? footerHeight + 24 : 24} extraKeyboardSpace={editing ? footerHeight : 0}
@@ -174,7 +260,7 @@ export default function CreateStoryScreen() {
                 <Ionicons name="camera-outline" size={29} color="#FFFFFF" /><Text style={styles.entryTitle}>Camera</Text><Text style={styles.entrySubtitle}>Capture now</Text>
               </Pressable>
               <Pressable onPress={() => void chooseMedia()} disabled={picking} accessibilityRole="button" accessibilityState={{ disabled: picking }} style={({ pressed }) => [styles.entryCard, { backgroundColor: palette.surface, borderColor: palette.line, opacity: pressed || picking ? 0.75 : 1 }]}>
-                <Ionicons name="images-outline" size={29} color={palette.accent} /><Text style={[styles.entryTitle, { color: palette.text }]}>Gallery</Text><Text style={[styles.entrySubtitle, { color: palette.muted }]}>Choose a photo</Text>
+                <Ionicons name="images-outline" size={29} color={palette.accent} /><Text style={[styles.entryTitle, { color: palette.text }]}>Gallery</Text><Text style={[styles.entrySubtitle, { color: palette.muted }]}>Photos and videos</Text>
               </Pressable>
             </View>
             <Pressable onPress={() => { setEditing(true); setActiveTool("text"); addLayer("Your message", "text"); }} accessibilityRole="button" style={[styles.textEntry, { backgroundColor: palette.surface, borderColor: palette.line }]}>
@@ -187,7 +273,7 @@ export default function CreateStoryScreen() {
                 <Pressable key={template.id} onPress={() => useTemplate(template)} accessibilityRole="button" accessibilityLabel={`Use ${template.title} story template`} style={[styles.templateCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
                   <Image source={template.image} style={styles.templateImage} resizeMode="cover" />
                   <View style={styles.templateCopy}><Text style={[styles.templateTitle, { color: palette.text }]}>{template.title}</Text><Text style={[styles.templateSubtitle, { color: palette.muted }]}>{template.subtitle}</Text></View>
-                  <View style={styles.templateBadge}><Ionicons name="sparkles" size={12} color="#FFFFFF" /><Text style={styles.templateBadgeText}>Try it</Text></View>
+                  <View style={styles.templateBadge}><Ionicons name="image-outline" size={12} color="#FFFFFF" /><Text style={styles.templateBadgeText}>Try it</Text></View>
                 </Pressable>
               ))}
             </ScrollView>
@@ -201,10 +287,17 @@ export default function CreateStoryScreen() {
             </View>
             <View style={[styles.canvasFrame, { width: canvasWidth, borderColor: palette.line }]}>
               <StoryCanvas image={image} background={background.color} fit={fit} overlays={overlays} editable selectedId={selectedId}
+                media={videoUri ? <StoryVideo key={videoUri} uri={videoUri} paused={previewing || publishing} fit={fit} /> : undefined}
                 onSelect={(id) => { Keyboard.dismiss(); setSelectedId(id); setActiveTool(undefined); }}
                 onMove={(id, x, y) => updateLayer(id, { x, y })}
               />
             </View>
+            {batch.length > 1 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.styleRow}>
+              {batch.map((draft, index) => <Choice key={index} label={`${index + 1} · ${draft.videoUri ? "Video" : "Story"}`} selected={draftIndex === index} disabled={publishing} onPress={() => selectDraft(index)} />)}
+            </ScrollView> : null}
+            {batch.length ? <Pressable onPress={removeDraft} disabled={publishing} accessibilityRole="button" style={styles.previewBtn}>
+              <Ionicons name="trash-outline" size={17} color={palette.danger} /><Text style={[styles.choiceText, { color: palette.danger }]}>Remove this item</Text>
+            </Pressable> : null}
             <View style={styles.toolRow}>{TOOLS.map((tool) => (
               <Pressable key={tool.id} onPress={() => chooseTool(tool.id)} accessibilityRole="button" accessibilityState={{ selected: activeTool === tool.id }} style={[styles.tool, { backgroundColor: activeTool === tool.id ? palette.blueSoft : palette.surface, borderColor: activeTool === tool.id ? palette.accent : palette.line }]}>
                 <Ionicons name={tool.icon} size={21} color={activeTool === tool.id ? palette.accent : palette.text} /><Text style={[styles.toolLabel, { color: activeTool === tool.id ? palette.accent : palette.text }]}>{tool.label}</Text>
@@ -241,10 +334,10 @@ export default function CreateStoryScreen() {
             ) : null}
             {activeTool === "layout" ? (
               <View style={[styles.panel, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                <Text style={[styles.optionTitle, { color: palette.text }]}>Frame your photo</Text>
-                <View style={styles.styleRow}><Choice label="Full photo" selected={fit === "contain"} onPress={() => setFit("contain")} disabled={!image} /><Choice label="Fill screen" selected={fit === "cover"} onPress={() => setFit("cover")} disabled={!image} /></View>
-                <Text style={[styles.smallText, { color: palette.muted }]}>{image ? "Full photo keeps every detail of your poster visible." : "Add a photo to adjust how it fills your story."}</Text>
-                {image ? <Choice label="Remove photo" onPress={() => setImage(undefined)} /> : null}
+                <Text style={[styles.optionTitle, { color: palette.text }]}>Frame your story</Text>
+                <View style={styles.styleRow}><Choice label="Fit media" selected={fit === "contain"} onPress={() => setFit("contain")} disabled={!image && !videoUri} /><Choice label="Fill screen" selected={fit === "cover"} onPress={() => setFit("cover")} disabled={!image && !videoUri} /></View>
+                <Text style={[styles.smallText, { color: palette.muted }]}>Fit media keeps your whole photo or video visible.</Text>
+                {image || videoUri ? <Choice label="Remove media" onPress={() => { setImage(undefined); setVideoUri(undefined); }} /> : null}
               </View>
             ) : null}
             {selected ? (
@@ -258,15 +351,17 @@ export default function CreateStoryScreen() {
       {editing ? (
         <StoryFooter offset={{ closed: 0, opened: insets.bottom }}>
           <View onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)} style={[styles.footer, { backgroundColor: palette.canvas, borderColor: palette.line, paddingBottom: Math.max(12, insets.bottom) }]}>
-            <Pressable onPress={() => void chooseMedia()} disabled={picking} accessibilityRole="button" accessibilityLabel="Choose or change story photo" style={[styles.footerGallery, { backgroundColor: palette.surface, borderColor: palette.line }]}><Ionicons name="images-outline" size={22} color={palette.text} /></Pressable>
-            <Pressable onPress={share} disabled={!hasContent} accessibilityRole="button" accessibilityState={{ disabled: !hasContent }} style={[styles.shareButton, { backgroundColor: hasContent ? palette.blue : palette.surfaceRaised }]}><Text style={[styles.shareText, { color: hasContent ? "#FFFFFF" : palette.muted }]}>Share story</Text><Ionicons name="arrow-forward" size={20} color={hasContent ? "#FFFFFF" : palette.muted} /></Pressable>
+            <Pressable onPress={() => void chooseMedia()} disabled={picking || publishing} accessibilityRole="button" accessibilityLabel="Add photos or videos to stories" style={[styles.footerGallery, { backgroundColor: palette.surface, borderColor: palette.line }]}><Ionicons name="images-outline" size={22} color={palette.text} /></Pressable>
+            <Pressable onPress={() => void share()} disabled={!hasContent || publishing || picking} accessibilityRole="button" accessibilityState={{ disabled: !hasContent || publishing || picking, busy: publishing }} style={[styles.shareButton, { backgroundColor: hasContent ? palette.blue : palette.surfaceRaised }]}><Text style={[styles.shareText, { color: hasContent ? "#FFFFFF" : palette.muted }]}>{publishing ? "Publishing…" : batch.length > 1 ? `Publish ${batch.length} stories` : "Publish story"}</Text><Ionicons name="arrow-forward" size={20} color={hasContent ? "#FFFFFF" : palette.muted} /></Pressable>
           </View>
         </StoryFooter>
       ) : <View style={{ height: insets.bottom }} />}
       <Modal visible={previewing} animationType="fade" onRequestClose={() => setPreviewing(false)}>
         <View style={[styles.fullPreview, { paddingTop: insets.top + 10, paddingBottom: Math.max(insets.bottom, 12) }]}>
           <View style={styles.fullPreviewHeader}><View style={styles.flex}><Text style={styles.fullPreviewTitle}>{organisationName}</Text><Text style={styles.fullPreviewSubtitle}>Story preview</Text></View><Pressable onPress={() => setPreviewing(false)} accessibilityRole="button" accessibilityLabel="Close preview" style={styles.smallButton}><Ionicons name="close" size={26} color="#FFFFFF" /></Pressable></View>
-          <View style={[styles.fullCanvas, { width: Math.max(120, Math.min(width - 32, (height - insets.top - insets.bottom - 160) * 9 / 16)) }]}><StoryCanvas image={image} background={background.color} fit={fit} overlays={overlays} /></View>
+          <View style={[styles.fullCanvas, { width: Math.max(120, Math.min(width - 32, (height - insets.top - insets.bottom - 160) * 9 / 16)) }]}><StoryCanvas image={image} background={background.color} fit={fit} overlays={overlays}
+            media={videoUri && previewing ? <StoryVideo key={videoUri} uri={videoUri} paused={publishing} fit={fit} /> : undefined} /></View>
+          <Pressable onPress={() => void share()} disabled={!hasContent || publishing} accessibilityRole="button" style={[styles.keepEditing, { backgroundColor: palette.blue }]}><Text style={styles.shareText}>{publishing ? "Publishing…" : "Publish story"}</Text></Pressable>
           <Pressable onPress={() => setPreviewing(false)} accessibilityRole="button" style={styles.keepEditing}><Ionicons name="create-outline" size={19} color="#FFFFFF" /><Text style={styles.shareText}>Keep editing</Text></Pressable>
         </View>
       </Modal>

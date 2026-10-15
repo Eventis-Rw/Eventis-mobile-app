@@ -25,6 +25,7 @@ import { ChatProvider } from "@/context/ChatContext";
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 import { BookingsProvider } from "@/context/BookingsContext";
 import { EventsProvider } from "@/context/EventsContext";
+import { StoriesProvider } from "@/context/StoriesContext";
 import { FindLoveDemoProvider } from "@/context/FindLoveDemoContext";
 import { LoveProfilesProvider } from "@/context/LoveProfilesContext";
 import { MyLoveProfileProvider } from "@/context/MyLoveProfileContext";
@@ -88,7 +89,10 @@ function RootLayoutNav() {
         name="event/[id]"
         options={{ animation: "slide_from_right" }}
       />
-      <Stack.Screen name="love" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="love/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="love/connections" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="love/wallet" options={{ animation: "slide_from_bottom" }} />
+      <Stack.Screen name="love/chat/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="chat" options={{ animation: "slide_from_right" }} />
       <Stack.Screen
         name="booking/[id]"
@@ -139,7 +143,7 @@ export default function RootLayout() {
   );
 }
 
-// FindLove state is only mounted when the feature is switched on.
+// Keep FindLove state out of the app until the launch switch is enabled.
 function FindLoveProviders({ children }: { children: React.ReactNode }) {
   if (!FIND_LOVE_ENABLED) return <>{children}</>;
   return (
@@ -170,9 +174,11 @@ function ThemedAppSurface() {
                 <ChatProvider>
                   <EventsProvider>
                     <FindLoveProviders>
-                      <BookingsProvider>
-                        <RootLayoutNav />
-                      </BookingsProvider>
+                        <BookingsProvider>
+                          <StoriesProvider>
+                            <RootLayoutNav />
+                          </StoriesProvider>
+                        </BookingsProvider>
                     </FindLoveProviders>
                   </EventsProvider>
                 </ChatProvider>

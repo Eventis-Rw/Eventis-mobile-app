@@ -34,15 +34,15 @@ export function CategoryPill({ category, isSelected, onPress }: CategoryPillProp
 
   return (
     <AnimatedPressable
-      style={({ pressed }: { pressed: boolean }) => [
+      accessibilityRole="button"
+      accessibilityState={{ selected: isSelected }}
+      style={[
         styles.pill,
         animatedStyle,
         {
           backgroundColor: isSelected
             ? colors.primary
-            : pressed
-            ? "rgba(255,255,255,0.14)"
-            : colors.glass,
+            : colors.card,
           borderColor: isSelected ? colors.primary : colors.border,
         },
       ]}
@@ -67,6 +67,9 @@ export function CategoryPill({ category, isSelected, onPress }: CategoryPillProp
 
 const styles = StyleSheet.create({
   pill: {
+    minHeight: 40,
+    flexShrink: 0,
+    justifyContent: "center",
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 20,

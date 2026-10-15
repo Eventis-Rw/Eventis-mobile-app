@@ -95,11 +95,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const captionCanExpand = event.description.trim().length > 110;
 
-  const viewsCount = useMemo(() => {
-    if (event.viewCount && event.viewCount > 0) return event.viewCount;
-    const seed = event.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return 1200 + (seed % 4800);
-  }, [event.id, event.viewCount]);
+  const viewsCount = Math.max(0, event.viewCount ?? 0);
 
   const initialShares = useMemo(() => {
     return Math.max(14, Math.floor(viewsCount * 0.082));
@@ -1230,6 +1226,10 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
         <View style={styles.instaActionBar}>
           {/* Left: Interactive Share with count */}
           <View style={styles.instaLeftActions}>
+            <View style={styles.instaActionPill} accessible accessibilityLabel={`${viewsCount} views`}>
+              <Ionicons name="eye-outline" size={21} color={colors.foreground} />
+              <Text style={[styles.instaActionCount, { color: colors.foreground }]}>{formatCount(viewsCount)}</Text>
+            </View>
             {/* Share action with count kept */}
             <Pressable
               style={({ pressed }) => [styles.instaActionPill, pressed && { opacity: 0.7 }]}

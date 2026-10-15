@@ -56,7 +56,8 @@
         {
           "microphonePermission": "Allow Eventis to record voice messages."
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

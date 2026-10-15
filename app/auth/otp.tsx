@@ -12,6 +12,7 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { DEMO_AUTH, OTP_LENGTH } from "@/constants/auth";
 import { Logo } from "@/components/Logo";
 import { OTPInput } from "@/components/OTPInput";
 import { useAuth } from "@/context/AuthContext";
@@ -26,7 +27,7 @@ export default function OTPScreen() {
     phone?: string;
     fullName?: string;
   }>();
-  const { completeOnboarding, signInWithPhoneSession, user } = useAuth();
+  const { verifyOTP, clearOTPContext, completeOnboarding, signInWithPhoneSession, user } = useAuth();
   const isCompleting = useRef(false);
   const [error, setError] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -50,14 +51,19 @@ export default function OTPScreen() {
 
   const handleComplete = useCallback(
     async (code: string) => {
-      if (code.length !== 4 || isCompleting.current) return;
+      if (!new RegExp(`^\\d{${OTP_LENGTH}}$`).test(code) || isCompleting.current) return;
       isCompleting.current = true;
       setError(false);
 
       try {
-        // Demo flow: any four digits create a local session immediately. Avoid
+        // Demo flow: any six digits create a local session immediately. Avoid
         // waiting on the verification API, which can strand an offline user.
-        await signInWithPhoneSession(phone || user?.phone || "+250 7XX XXX XXX", fullName);
+        if (DEMO_AUTH) {
+          await signInWithPhoneSession(phone || user?.phone || "+250 7XX XXX XXX", fullName);
+        } else if (!(await verifyOTP(code, phone, fullName))) {
+          throw new Error("Invalid verification code");
+        }
+        clearOTPContext();
         await completeOnboarding();
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         router.replace("/(tabs)" as any);
@@ -68,17 +74,17 @@ export default function OTPScreen() {
         setTimeout(() => setError(false), 1000);
       }
     },
-    [completeOnboarding, fullName, phone, router, signInWithPhoneSession, user?.phone]
+    [verifyOTP, clearOTPContext, completeOnboarding, fullName, phone, router, signInWithPhoneSession, user?.phone]
   );
 
   const purposeLabels: Record<string, { title: string; subtitle: string }> = {
     login: {
       title: "Enter verification code",
-      subtitle: "We sent a 4 digit code via SMS to your phone to sign in.",
+      subtitle: "We sent a 6 digit code via SMS to your phone to sign in.",
     },
     register: {
       title: "Enter verification code",
-      subtitle: "We sent a 4 digit code via SMS to verify your new account.",
+      subtitle: "We sent a 6 digit code via SMS to verify your new account.",
     },
     payment: {
       title: "Confirm your identity",
@@ -137,10 +143,10 @@ export default function OTPScreen() {
         entering={Platform.OS !== "web" ? FadeInDown.delay(200).springify() : undefined}
         style={styles.otpSection}
       >
-        <OTPInput onComplete={handleComplete} error={error} />
+        <OTPInput length={OTP_LENGTH} onComplete={handleComplete} error={error} />
 
         <Text style={[styles.hintText, { color: colors.mutedForeground }]}>
-          Enter any 4 digit code to continue to Home
+          {DEMO_AUTH ? "Demo: enter any 6 digits to continue to Home" : "Enter the 6 digit code sent to your phone"}
         </Text>
 
         <View style={styles.resendRow}>

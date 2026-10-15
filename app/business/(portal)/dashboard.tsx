@@ -67,7 +67,7 @@ export default function OrganiserDashboard() {
             <View style={styles.heroOrb} />
             <View style={styles.heroLabelRow}><View style={styles.statusDot} /><Text style={styles.heroLabel}>WORKSPACE READY</Text></View>
             <Text style={styles.heroTitle}>Your next event starts here.</Text>
-            <Text style={styles.heroCopy}>Create the event page first, then keep people interested with posts and stories.</Text>
+            <Text style={styles.heroCopy}>Create the event page first, then keep people interested with stories.</Text>
             <Pressable
               onPress={() => router.push("/business/create-event" as any)}
               style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
@@ -96,7 +96,6 @@ export default function OrganiserDashboard() {
         <SectionHeading title="Quick create" text="Choose the format that matches your goal." palette={palette} />
         <Animated.View entering={enter(110)} style={styles.actions}>
           <QuickAction icon="calendar-outline" title="Event" text="A dated, discoverable page with venue and ticket details." onPress={() => router.push("/business/create-event" as any)} palette={palette} />
-          <QuickAction icon="images-outline" title="Post" text="A feed update for news, reminders or announcements." onPress={() => router.push("/business/create-post" as any)} palette={palette} />
           <QuickAction icon="aperture-outline" title="Story" text="A short visual update shown at the top of the feed." onPress={() => router.push("/business/create-story" as any)} palette={palette} />
         </Animated.View>
 

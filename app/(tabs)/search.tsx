@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -19,7 +18,6 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { GlassSurface } from "@/components/GlassSurface";
 import { EventCard } from "@/components/EventCard";
 import { useEvents } from "@/context/EventsContext";
-import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
 type SortOption = "relevance" | "date" | "distance" | "price";
@@ -38,7 +36,6 @@ const POPULAR_SEARCHES = [
 
 export default function SearchScreen() {
   const colors = useColors();
-  const { scheme } = useTheme();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -106,21 +103,12 @@ export default function SearchScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <LinearGradient
-        pointerEvents="none"
-        colors={
-          scheme === "dark"
-            ? ["#1A2458", "#070814", "#070814"]
-            : ["#D9E6FF", "#E8EEF8", "#F7F4FF"]
-        }
-        locations={[0, 0.42, 1]}
-        style={StyleSheet.absoluteFill}
-      />
       <GlassSurface
         style={[
           styles.header,
           {
             paddingTop: insets.top + 8,
+            backgroundColor: colors.background,
             borderWidth: 0,
             borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.border,
@@ -161,7 +149,7 @@ export default function SearchScreen() {
         <View
           style={[
             styles.searchRow,
-            { backgroundColor: colors.input, borderColor: colors.border },
+            { backgroundColor: colors.card, borderColor: colors.border },
           ]}
         >
           <Ionicons name="search-outline" size={18} color={colors.mutedForeground} />

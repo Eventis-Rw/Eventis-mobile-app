@@ -33,7 +33,7 @@ export interface Event {
   distance: number;
   rating: number;
   reviewCount: number;
-  /** Not in the events API yet; cards hide the count when absent. */
+  /** View count displayed on event cards; defaults to zero when absent. */
   viewCount?: number;
   /** Organizer notes (dress code, entry rules, what to bring), one per item. Not in the events API yet. */
   instructions?: string[];

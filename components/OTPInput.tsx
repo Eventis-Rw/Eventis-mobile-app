@@ -2,7 +2,6 @@ import React, { useCallback, useRef, useState } from "react";
 import {
   Platform,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from "react-native";
@@ -10,9 +9,9 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSequence,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { OTP_LENGTH } from "@/constants/auth";
 
 import { useColors } from "@/hooks/useColors";
 
@@ -22,7 +21,7 @@ interface OTPInputProps {
   error?: boolean;
 }
 
-export function OTPInput({ length = 4, onComplete, error }: OTPInputProps) {
+export function OTPInput({ length = OTP_LENGTH, onComplete, error }: OTPInputProps) {
   const colors = useColors();
   const [otp, setOtp] = useState<string[]>(Array(length).fill(""));
   const [focused, setFocused] = useState(-1);
@@ -49,13 +48,17 @@ export function OTPInput({ length = 4, onComplete, error }: OTPInputProps) {
 
   const handleChange = useCallback(
     (text: string, index: number) => {
-      const digit = text.replace(/[^0-9]/g, "").slice(-1);
+      const digits = text.replace(/[^0-9]/g, "").slice(0, length);
       const newOtp = [...otp];
-      newOtp[index] = digit;
+      const start = digits.length === length ? 0 : index;
+      if (!digits) newOtp[index] = "";
+      else digits.split("").forEach((digit, offset) => {
+        if (start + offset < length) newOtp[start + offset] = digit;
+      });
       setOtp(newOtp);
 
-      if (digit && index < length - 1) {
-        inputs.current[index + 1]?.focus();
+      if (digits) {
+        inputs.current[Math.min(start + digits.length, length - 1)]?.focus();
       }
 
       const fullCode = newOtp.join("");
@@ -123,7 +126,8 @@ export function OTPInput({ length = 4, onComplete, error }: OTPInputProps) {
                 onFocus={() => setFocused(i)}
                 onBlur={() => setFocused(-1)}
                 keyboardType="number-pad"
-                maxLength={1}
+                maxLength={length}
+                accessibilityLabel={`Verification digit ${i + 1} of ${length}`}
                 selectTextOnFocus
                 textContentType="oneTimeCode"
                 autoComplete={Platform.OS === "android" ? "sms-otp" : "one-time-code"}
@@ -139,12 +143,15 @@ export function OTPInput({ length = 4, onComplete, error }: OTPInputProps) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    gap: 14,
+    gap: 8,
+    width: "100%",
+    maxWidth: 400,
     justifyContent: "center",
   },
   cell: {
-    width: 62,
-    height: 68,
+    flex: 1,
+    minWidth: 0,
+    height: 58,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",

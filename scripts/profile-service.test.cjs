@@ -54,6 +54,13 @@ const publisher = load("services/publisherService.ts", (name) => {
   if (name === "@/services/profileService") return profile;
 });
 
+const stories = load("services/storyService.ts", (name) => {
+  if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
+});
+const playback = load("utils/storyPlayback.ts", (name) => {
+  if (name === "@/services/storyService") return stories;
+});
+
 const validation = load("utils/profileValidation.ts", () => undefined);
 const support = load("services/supportService.ts", (name) => {
   if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
@@ -169,12 +176,12 @@ test("business verification requires a verified phone and valid details", async 
   assert.equal(approved.rejectionReason, undefined);
 });
 
-test("phone codes are 4 digits and the demo wrong code is rejected", async () => {
-  assert.match(profile.validatePhoneCode("12a4"), /4-digit/);
+test("phone codes require six digits and the demo accepts any six digits", async () => {
+  assert.match(profile.validatePhoneCode("12a456"), /6-digit/);
   const request = await profile.requestPhoneVerification("+250 788 123 456");
   assert.equal(request.resendAfterSeconds, profile.PHONE_CODE_RESEND_SECONDS);
-  await assert.rejects(profile.confirmPhoneVerification("+250 788 123 456", profile.DEMO_WRONG_CODE), /isn't right/);
-  const ok = await profile.confirmPhoneVerification("+250 788 123 456", "4821");
+  assert.equal((await profile.confirmPhoneVerification("+250 788 123 456", "000000")).isPhoneVerified, true);
+  const ok = await profile.confirmPhoneVerification("+250 788 123 456", "482135");
   assert.equal(ok.isPhoneVerified, true);
 });
 
@@ -331,6 +338,7 @@ test("ticket pattern is stable per code and differs between codes", () => {
 });
 
 const eventInput = (over = {}) => ({
+  image: "file:///demo/event-cover.jpg",
   title: "Rooftop Jazz",
   description: "Live jazz on the roof.",
   category: "Music",
@@ -346,10 +354,14 @@ const eventInput = (over = {}) => ({
 test("event input validation covers dates, times, capacity and paid rules", () => {
   const today = "2026-10-11";
   assert.equal(publisher.validateEventInput(eventInput(), today), null);
+  assert.match(publisher.validateEventInput(eventInput({ image: " " }), today), /image/);
   assert.match(publisher.validateEventInput(eventInput({ title: " " }), today), /title/);
   assert.match(publisher.validateEventInput(eventInput({ date: "15/01/2099" }), today), /YYYY-MM-DD/);
   assert.match(publisher.validateEventInput(eventInput({ date: "2026-10-10" }), today), /past/);
   assert.match(publisher.validateEventInput(eventInput({ time: "7pm" }), today), /HH:MM/);
+  assert.match(publisher.validateEventInput(eventInput({ date: "2099-02-31" }), today), /YYYY-MM-DD/);
+  assert.equal(publisher.validateEventInput(eventInput({ date: "2096-02-29", time: "23:59" }), today), null);
+  assert.match(publisher.validateEventInput(eventInput({ time: "24:00" }), today), /HH:MM/);
   assert.match(publisher.validateEventInput(eventInput({ capacity: 0 }), today), /Capacity/);
   assert.match(publisher.validateEventInput(eventInput({ isPaid: true, price: 0 }), today), /price/);
   assert.match(
@@ -366,13 +378,15 @@ test("publishers create, edit, pause and delete only their own events", async ()
   const created = await publisher.createPublisherEvent("u1", "Jazz Co", eventInput());
   assert.equal(created.status, "published");
   assert.equal(created.organizer, "Jazz Co");
+  assert.equal(created.image, "file:///demo/event-cover.jpg");
   assert.equal(created.city, "Kigali");
   await publisher.createPublisherEvent("u2", "Other", eventInput({ title: "Other event" }));
 
   assert.deepEqual((await publisher.fetchPublisherEvents("u1")).map((e) => e.id), [created.id]);
 
-  const edited = await publisher.updatePublisherEvent("u1", created.id, eventInput({ title: "Rooftop Jazz II" }));
+  const edited = await publisher.updatePublisherEvent("u1", created.id, eventInput({ image: "file:///demo/new-cover.jpg", title: "Rooftop Jazz II" }));
   assert.equal(edited.title, "Rooftop Jazz II");
+  assert.equal(edited.image, "file:///demo/new-cover.jpg");
 
   await publisher.setPublisherEventStatus("u1", created.id, "paused");
   assert.deepEqual((await publisher.fetchDemoPublishedEvents()).map((e) => e.title), ["Other event"]);
@@ -483,9 +497,9 @@ test("account deletion re-checks identity on the verified channel", async () => 
   assert.equal(email.channel, "email");
   assert.equal(email.destination, "al•••@eventis.rw");
 
-  await assert.rejects(security.verifyDeletionCode("12"), /4-digit/);
+  await assert.rejects(security.verifyDeletionCode("12"), /6-digit/);
   await assert.rejects(security.verifyDeletionCode(profile.DEMO_WRONG_CODE), /isn't right/);
-  assert.match(await security.verifyDeletionCode("4821"), /^demo_deletion_/);
+  assert.match(await security.verifyDeletionCode("482135"), /^demo_deletion_/);
 });
 
 test("type-to-confirm needs the exact phrase", async () => {
@@ -541,4 +555,116 @@ test("today is the local calendar date, not the UTC one", () => {
   const justAfterMidnight = new Date(2026, 9, 12, 0, 30);
   assert.equal(dates.localToday(justAfterMidnight), "2026-10-12");
   assert.equal(dates.localToday(new Date(2026, 0, 5, 23, 59)), "2026-01-05");
+});
+
+test("story testing resets other saved views only, preserving own and current-session views", () => {
+  const saved = { "me:one": 100, "other:old": 100, "me-other:old": 100 };
+  const session = { "other:new": 200 };
+  assert.deepEqual(playback.hydrateStoryViews(saved, session, "me", true), { "me:one": 100, "other:new": 200 });
+  assert.deepEqual(playback.hydrateStoryViews(saved, {}, "me", true), { "me:one": 100 });
+  assert.deepEqual(playback.hydrateStoryViews(saved, {}, undefined, true), {});
+  assert.deepEqual(playback.hydrateStoryViews(saved, session, "me", false), { ...saved, ...session });
+});
+
+test("demo stories group multiple items under nine accounts with real event links and avatars", () => {
+  const demo = load("constants/demoStories.ts", (name) => name.startsWith("../assets/") ? { uri: name } : undefined);
+  const generic = load("constants/mockData.ts", () => undefined);
+  const featured = load("constants/featuredDemoPosts.ts", () => undefined);
+  const validIds = new Set([...generic.MOCK_EVENTS, ...featured.FEATURED_DEMO_POSTS].map((event) => event.id));
+  const now = Date.now();
+  const items = demo.makeDemoStories(now);
+  const groups = stories.groupStories(items, {}, undefined, now);
+  assert.equal(groups.length, 9);
+  assert.equal(items.length, 19);
+  assert.equal(new Set(items.map(stories.storyKey)).size, items.length);
+  assert.ok(groups.every((group) => group.items.length >= 2 && group.hasUnwatched && group.organizerAvatar.startsWith("https://")));
+  assert.ok(items.every((item) => validIds.has(item.eventId) && item.createdAt <= now && item.expiresAt > now));
+});
+
+test("story collections group uploads by owner, deduplicate results and retain chronological items", async () => {
+  const draft = { organizerName: "Same name", organizerAvatar: "", storyImage: { uri: "file:///photo.jpg" }, background: "#080B10", fit: "contain", overlays: [] };
+  const uploaded = await stories.publishLocalStories("owner-a", [draft, draft, { ...draft, storyImage: undefined, mediaType: "video", mediaUrl: "file:///clip.mp4" }]);
+  await stories.publishLocalStory("owner-b", draft);
+  const feed = await stories.getStoryFeed();
+  const groups = stories.groupStories([...feed, ...uploaded], {}, "owner-a");
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].ownerId, "owner-a");
+  assert.equal(groups[0].items.length, 3);
+  assert.equal(new Set(groups[0].items.map((item) => item.id)).size, 3);
+  assert.ok(groups[0].hasUnwatched);
+  assert.equal(groups[1].items.length, 1);
+});
+
+test("watched state persists per story and per viewer, allows replay, and new uploads restore the ring", async () => {
+  const draft = { organizerName: "Host", organizerAvatar: "", storyImage: { uri: "file:///photo.jpg" }, background: "#080B10", fit: "contain", overlays: [] };
+  const [a, b] = await stories.publishLocalStories("host", [draft, draft]);
+  await stories.persistStoryView("viewer-a", a);
+  let viewed = await stories.getViewedStories("viewer-a");
+  let groups = stories.groupStories(await stories.getStoryFeed(), viewed);
+  assert.equal(groups[0].hasUnwatched, true);
+  assert.equal(playback.buildStorySession(groups, "host", viewed).index, 1);
+  await stories.persistStoryView("viewer-a", b);
+  viewed = await stories.getViewedStories("viewer-a");
+  groups = stories.groupStories(await stories.getStoryFeed(), viewed);
+  assert.equal(groups[0].hasUnwatched, false);
+  assert.equal(groups[0].items.length, 2);
+  assert.equal(playback.buildStorySession(groups, "host", viewed).index, 0);
+  assert.deepEqual(await stories.getViewedStories("viewer-b"), {});
+  const c = await stories.publishLocalStory("host", draft);
+  groups = stories.groupStories(await stories.getStoryFeed(), viewed);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].hasUnwatched, true);
+  const session = playback.buildStorySession(groups, "host", viewed);
+  assert.equal(session.ids[session.index], stories.storyKey(c));
+});
+
+test("story sessions skip watched accounts, preserve order while rings change, and skip unavailable items", async () => {
+  const draft = { organizerName: "Host", organizerAvatar: "", storyImage: { uri: "file:///photo.jpg" }, background: "#080B10", fit: "contain", overlays: [] };
+  const [a, b] = await stories.publishLocalStories("one", [draft, draft]);
+  const c = await stories.publishLocalStory("two", draft);
+  const d = await stories.publishLocalStory("three", draft);
+  const viewed = { [stories.storyKey(d)]: d.expiresAt };
+  const grouped = stories.groupStories(await stories.getStoryFeed(), viewed);
+  const groups = ["one", "two", "three"].map((id) => grouped.find((group) => group.ownerId === id));
+  const session = playback.buildStorySession(groups, "one", viewed);
+  assert.deepEqual(session.ids, [a, b, c].map(stories.storyKey));
+  assert.equal(playback.buildStorySession(groups, "two", viewed).index, 2);
+  assert.deepEqual(playback.buildStorySession(groups, "one", viewed, true).ids, [a, b].map(stories.storyKey));
+  const available = new Set([stories.storyKey(a), stories.storyKey(c)]);
+  assert.equal(playback.resolveStoryIndex(session.ids, available, 1), 2);
+  assert.equal(playback.resolveStoryIndex(session.ids, available, 1, -1), 0);
+  assert.equal(playback.resolveStoryIndex(session.ids, available, 3), -1);
+  await stories.deleteLocalStory("one", b.id);
+  assert.equal((await stories.getLocalStories("one")).length, 1);
+  assert.equal(stories.groupStories([{ ...a, expiresAt: Date.now() - 1 }], {}).length, 0);
+  assert.equal(playback.buildStorySession([], "one", {}), null);
+});
+
+test("concurrent uploads and view writes preserve every story and watched entry", async () => {
+  const draft = { organizerName: "Host", organizerAvatar: "", background: "#080B10", fit: "contain", overlays: [{ text: "Hello" }] };
+  const uploaded = await Promise.all(Array.from({ length: 7 }, () => stories.publishLocalStory("one", draft)));
+  assert.equal((await stories.getLocalStories("one")).length, 7);
+  await Promise.all(uploaded.map((story) => stories.persistStoryView("viewer", story)));
+  assert.equal(Object.keys(await stories.getViewedStories("viewer")).length, 7);
+  assert.equal(stories.groupStories(await stories.getStoryFeed(), await stories.getViewedStories("viewer"))[0].hasUnwatched, false);
+});
+
+
+
+test("publishing a story preserves its design and isolates each account", async () => {
+  const draft = { organizerName: "Aline", organizerAvatar: "", background: "#080B10", fit: "contain", overlays: [{ id: "text1", kind: "text", text: "Tonight", x: 0.5, y: 0.4, color: "#FFFFFF", style: "bold", size: 28 }] };
+  const published = await stories.publishLocalStory("u1", draft);
+  const saved = await stories.getLocalStories("u1");
+  assert.equal(saved[0].id, published.id);
+  assert.deepEqual(saved[0].overlays, draft.overlays);
+  assert.equal(saved[0].expiresAt - saved[0].createdAt, 86400000);
+  assert.deepEqual(await stories.getLocalStories("u2"), []);
+});
+
+test("stories expire after 24 hours and an empty story cannot be published", async () => {
+  const draft = { organizerName: "Aline", organizerAvatar: "", background: "#080B10", fit: "contain", overlays: [] };
+  await assert.rejects(stories.publishLocalStory("u1", draft), /photo, video or some text/);
+  const saved = await stories.publishLocalStory("u1", { ...draft, storyImage: { uri: "file:///poster.jpg" } });
+  stored.set("@eventis_stories_v1:u1", JSON.stringify([{ ...saved, expiresAt: Date.now() - 1 }]));
+  assert.deepEqual(await stories.getLocalStories("u1"), []);
 });

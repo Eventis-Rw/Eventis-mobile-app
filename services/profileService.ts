@@ -144,8 +144,8 @@ export interface BusinessVerificationInput {
   registrationDocumentUri: string;
 }
 
-/** Codes are 4 digits; the demo treats this one as wrong so the error state can be reviewed. */
-export const DEMO_WRONG_CODE = "0000";
+/** Codes are 6 digits; the demo treats this one as wrong so the error state can be reviewed. */
+export const DEMO_WRONG_CODE = "000000";
 export const PHONE_CODE_RESEND_SECONDS = 60;
 export const PHONE_CODE_MAX_ATTEMPTS = 5;
 
@@ -192,7 +192,7 @@ export function validateBusinessVerification(input: BusinessVerificationInput): 
 }
 
 export function validatePhoneCode(code: string): string | null {
-  return /^\d{4}$/.test(code) ? null : "Enter the 4-digit code.";
+  return /^\d{6}$/.test(code) ? null : "Enter the 6-digit code.";
 }
 
 export function describeProfileError(error: unknown, fallback: string): string {
@@ -471,7 +471,6 @@ export async function confirmPhoneVerification(
   if (problem) throw new Error(problem);
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
-    if (code === DEMO_WRONG_CODE) throw new Error("That code isn't right. Check the SMS and try again.");
     return { phone, isPhoneVerified: true };
   }
   return api.post<{ phone: string; isPhoneVerified: true }>("/api/v1/users/me/phone/verification/confirm", {

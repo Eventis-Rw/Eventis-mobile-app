@@ -28,6 +28,9 @@ export const STORY_BACKGROUNDS = [
 ] as const;
 
 type CanvasProps = {
+  media?: React.ReactNode;
+  onImageLoad?: () => void;
+  onImageError?: () => void;
   image?: ImageSourcePropType;
   background: string;
   fit: "cover" | "contain";
@@ -130,7 +133,7 @@ function StoryLayer({
 }
 
 /** A portrait canvas; normalized positions stay consistent in the larger preview. */
-export function StoryCanvas({ image, background, fit, overlays, selectedId, editable = false, onSelect, onMove }: CanvasProps) {
+export function StoryCanvas({ image, background, fit, overlays, selectedId, editable = false, onSelect, onMove, media, onImageLoad, onImageError }: CanvasProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
     <View
@@ -140,12 +143,12 @@ export function StoryCanvas({ image, background, fit, overlays, selectedId, edit
         setSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
       }}
     >
-      {image ? <Image source={image} style={styles.photo} resizeMode={fit} accessibilityLabel="Story photo" /> : (
+      {media ?? (image ? <Image source={image} style={styles.photo} resizeMode={fit} accessibilityLabel="Story photo" onLoad={onImageLoad} onError={onImageError} /> : (
         <View pointerEvents="none" style={styles.backgroundDecor}>
           <View style={styles.ring} />
           <View style={styles.smallRing} />
         </View>
-      )}
+      ))}
       {size.width > 0 ? overlays.map((overlay) => (
         <StoryLayer
           key={overlay.id}

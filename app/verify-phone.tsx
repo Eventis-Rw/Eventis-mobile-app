@@ -13,7 +13,6 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import {
   confirmPhoneVerification,
-  DEMO_WRONG_CODE,
   describeProfileError,
   PHONE_CODE_MAX_ATTEMPTS,
   requestPhoneVerification,
@@ -172,7 +171,7 @@ export default function VerifyPhoneScreen() {
               </View>
               <Text style={[styles.title, { color: colors.foreground }]}>{copy.title}</Text>
               <Text style={[styles.body, { color: colors.mutedForeground }]}>
-                {step === "phone" ? copy.reason : `Enter the 4-digit code we sent to ${sentTo}.`}
+                {step === "phone" ? copy.reason : `Enter the 6-digit code we sent to ${sentTo}.`}
               </Text>
             </View>
 
@@ -216,7 +215,7 @@ export default function VerifyPhoneScreen() {
                 {error ? <InlineError message={error} /> : null}
                 {!USE_PROFILE_API ? (
                   <Text style={[styles.hint, { color: colors.mutedForeground }]}>
-                    Demo: any 4 digits work, except {DEMO_WRONG_CODE}, which shows the wrong-code error.
+                    Demo: any 6 digits work.
                   </Text>
                 ) : null}
                 <View style={styles.codeActions}>
