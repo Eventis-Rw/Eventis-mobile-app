@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import type { LoveProfile } from "@/constants/loveProfiles";
-import { useLoveProfiles } from "@/context/LoveProfilesContext";
+import { useLoveProfilesState } from "@/context/LoveProfilesContext";
 
 export type LoveActivityType = "connection" | "request" | "gift" | "purchase" | "message";
 
@@ -57,7 +57,7 @@ const INITIAL_ACTIVITY: LoveActivity[] = [
 ];
 
 export function FindLoveDemoProvider({ children }: { children: React.ReactNode }) {
-  const { profiles, getConnectionStatus } = useLoveProfiles();
+  const { profiles, getConnectionStatus } = useLoveProfilesState();
   const [tokenBalance, setTokenBalance] = useState(120);
   const [activity, setActivity] = useState<LoveActivity[]>(INITIAL_ACTIVITY);
 
@@ -150,5 +150,9 @@ export function FindLoveDemoProvider({ children }: { children: React.ReactNode }
 export function useFindLoveDemo() {
   const context = useContext(FindLoveDemoContext);
   if (!context) throw new Error("useFindLoveDemo must be used within FindLoveDemoProvider");
+  const { ensureLoaded } = useLoveProfilesState();
+  useEffect(() => {
+    ensureLoaded();
+  }, [ensureLoaded]);
   return context;
 }

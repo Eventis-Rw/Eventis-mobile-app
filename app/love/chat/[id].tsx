@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -35,7 +36,7 @@ export default function LoveChatScreen() {
   const router = useRouter();
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
-  const { getProfileById } = useLoveProfiles();
+  const { isLoading, getProfileById, getConnectionStatus } = useLoveProfiles();
   const { tokenBalance, sendGift, recordMessage } = useFindLoveDemo();
   const profile = getProfileById(id ?? "");
   const [composer, setComposer] = useState("");
@@ -51,12 +52,37 @@ export default function LoveChatScreen() {
   const giftAffordable = tokenBalance >= selectedGift;
   const subtitle = useMemo(() => profile ? `${profile.city} · Connected` : "Connection", [profile]);
 
+  if (!profile && isLoading) {
+    return (
+      <View style={[styles.notFound, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
   if (!profile) {
     return (
       <View style={[styles.notFound, { backgroundColor: colors.background }]}>
         <Ionicons name="chatbubble-outline" size={40} color={colors.mutedForeground} />
         <Text style={[styles.notFoundTitle, { color: colors.foreground }]}>Conversation unavailable</Text>
         <Pressable onPress={() => router.back()}><Text style={[styles.goBack, { color: colors.primary }]}>Go back</Text></Pressable>
+      </View>
+    );
+  }
+
+  // Only connected members can message each other.
+  if (getConnectionStatus(profile.id) !== "connected") {
+    const profileId = profile.id;
+    return (
+      <View style={[styles.notFound, { backgroundColor: colors.background }]}>
+        <Ionicons name="lock-closed-outline" size={40} color={colors.mutedForeground} />
+        <Text style={[styles.notFoundTitle, { color: colors.foreground }]}>Not connected yet</Text>
+        <Text style={[styles.notFoundText, { color: colors.mutedForeground }]}>
+          You can message {profile.name} once you are connected.
+        </Text>
+        <Pressable onPress={() => router.replace({ pathname: "/love/[id]", params: { id: profileId } } as any)}>
+          <Text style={[styles.goBack, { color: colors.primary }]}>View profile</Text>
+        </Pressable>
       </View>
     );
   }
@@ -245,5 +271,6 @@ const styles = StyleSheet.create({
   giftNotice: { fontSize: 9, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 8 },
   notFound: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   notFoundTitle: { fontSize: 19, fontFamily: "Inter_700Bold", marginTop: 14 },
+  notFoundText: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 8 },
   goBack: { fontSize: 14, fontFamily: "Inter_700Bold", marginTop: 18 },
 });

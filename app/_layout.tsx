@@ -27,6 +27,8 @@ import { BookingsProvider } from "@/context/BookingsContext";
 import { EventsProvider } from "@/context/EventsContext";
 import { FindLoveDemoProvider } from "@/context/FindLoveDemoContext";
 import { LoveProfilesProvider } from "@/context/LoveProfilesContext";
+import { MyLoveProfileProvider } from "@/context/MyLoveProfileContext";
+import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 import { useColors } from "@/hooks/useColors";
 
 SplashScreen.preventAutoHideAsync();
@@ -86,10 +88,7 @@ function RootLayoutNav() {
         name="event/[id]"
         options={{ animation: "slide_from_right" }}
       />
-      <Stack.Screen name="love/[id]" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="love/connections" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="love/wallet" options={{ animation: "slide_from_bottom" }} />
-      <Stack.Screen name="love/chat/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="love" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="chat" options={{ animation: "slide_from_right" }} />
       <Stack.Screen
         name="booking/[id]"
@@ -140,6 +139,18 @@ export default function RootLayout() {
   );
 }
 
+// FindLove state is only mounted when the feature is switched on.
+function FindLoveProviders({ children }: { children: React.ReactNode }) {
+  if (!FIND_LOVE_ENABLED) return <>{children}</>;
+  return (
+    <MyLoveProfileProvider>
+      <LoveProfilesProvider>
+        <FindLoveDemoProvider>{children}</FindLoveDemoProvider>
+      </LoveProfilesProvider>
+    </MyLoveProfileProvider>
+  );
+}
+
 function ThemedAppSurface() {
   const colors = useColors();
   return (
@@ -158,13 +169,11 @@ function ThemedAppSurface() {
               <AuthProvider>
                 <ChatProvider>
                   <EventsProvider>
-                    <LoveProfilesProvider>
-                      <FindLoveDemoProvider>
-                        <BookingsProvider>
-                          <RootLayoutNav />
-                        </BookingsProvider>
-                      </FindLoveDemoProvider>
-                    </LoveProfilesProvider>
+                    <FindLoveProviders>
+                      <BookingsProvider>
+                        <RootLayoutNav />
+                      </BookingsProvider>
+                    </FindLoveProviders>
                   </EventsProvider>
                 </ChatProvider>
               </AuthProvider>
