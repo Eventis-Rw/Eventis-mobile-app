@@ -19,6 +19,7 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
+import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useColors } from "@/hooks/useColors";
 
 interface DemoMessage {
@@ -78,7 +79,7 @@ export default function LoveChatScreen() {
         <Ionicons name="lock-closed-outline" size={40} color={colors.mutedForeground} />
         <Text style={[styles.notFoundTitle, { color: colors.foreground }]}>Not connected yet</Text>
         <Text style={[styles.notFoundText, { color: colors.mutedForeground }]}>
-          You can message {profile.name} once you are connected.
+          You can message @{profile.username} once you are connected.
         </Text>
         <Pressable onPress={() => router.replace({ pathname: "/love/[id]", params: { id: profileId } } as any)}>
           <Text style={[styles.goBack, { color: colors.primary }]}>View profile</Text>
@@ -120,15 +121,16 @@ export default function LoveChatScreen() {
         <Pressable onPress={() => router.back()} style={styles.headerButton} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
         </Pressable>
-        <Image source={{ uri: profile.imageUrl }} style={styles.avatar} accessibilityLabel={`Profile photo of ${profile.name}`} />
+        <Image source={{ uri: profile.imageUrl }} style={styles.avatar} accessibilityLabel={`Profile photo of @${profile.username}`} />
         <View style={styles.headerCopy}>
           <View style={styles.nameRow}>
-            <Text style={[styles.name, { color: colors.foreground }]}>{profile.name}</Text>
+            <Text style={[styles.name, { color: colors.foreground }]}>@{profile.username}</Text>
+            <MembershipBadge type={profile.accountType} size="sm" iconOnly />
             <View style={[styles.demoBadge, { backgroundColor: colors.glass }]}><Text style={[styles.demoText, { color: colors.primary }]}>DEMO</Text></View>
           </View>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
         </View>
-        <Pressable onPress={() => setGiftOpen(true)} style={[styles.headerGift, { backgroundColor: colors.glass }]} accessibilityRole="button" accessibilityLabel={`Send gift tokens to ${profile.name}`}>
+        <Pressable onPress={() => setGiftOpen(true)} style={[styles.headerGift, { backgroundColor: colors.glass }]} accessibilityRole="button" accessibilityLabel={`Send gift tokens to @${profile.username}`}>
           <Ionicons name="gift-outline" size={20} color={colors.primary} />
         </Pressable>
       </View>
@@ -168,12 +170,12 @@ export default function LoveChatScreen() {
           <TextInput
             value={composer}
             onChangeText={setComposer}
-            placeholder={`Message ${profile.name}`}
+            placeholder={`Message @${profile.username}`}
             placeholderTextColor={colors.mutedForeground}
             style={[styles.input, { backgroundColor: colors.input, color: colors.foreground, borderColor: colors.border }]}
             multiline
             maxLength={500}
-            accessibilityLabel={`Message ${profile.name}`}
+            accessibilityLabel={`Message @${profile.username}`}
           />
           <Pressable onPress={sendMessage} disabled={!canSend} style={[styles.sendButton, { backgroundColor: canSend ? colors.primary : colors.disabled }]} accessibilityRole="button" accessibilityLabel="Send message">
             <Ionicons name="arrow-up" size={21} color="#FFFFFF" />
@@ -189,7 +191,7 @@ export default function LoveChatScreen() {
             <View style={styles.sheetTitleRow}>
               <View>
                 <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Send a gift</Text>
-                <Text style={[styles.sheetSubtitle, { color: colors.mutedForeground }]}>Show {profile.name} a little appreciation</Text>
+                <Text style={[styles.sheetSubtitle, { color: colors.mutedForeground }]}>Show @{profile.username} a little appreciation</Text>
               </View>
               <View style={[styles.sheetBalance, { backgroundColor: colors.glass }]}>
                 <Ionicons name="sparkles" size={15} color={colors.primary} />

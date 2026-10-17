@@ -1,20 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { Skeleton } from "@/components/SkeletonLoader";
+import { MembershipBadge } from "@/components/love/MembershipBadge";
+import { useLoveConnect } from "@/components/love/UpgradePrompt";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { useColors } from "@/hooks/useColors";
+import { presenceLabel } from "@/utils/findLoveDiscovery";
 
 export default function LoveProfileDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useAppSafeAreaInsets();
   const colors = useColors();
-  const { isLoading, getProfileById, getConnectionStatus, sendConnectionRequest } = useLoveProfiles();
+  const { isLoading, getProfileById, getConnectionStatus } = useLoveProfiles();
+  const { connect: connectWith, upgradePrompt } = useLoveConnect();
   const [imageFailed, setImageFailed] = useState(false);
   const profile = getProfileById(id ?? "");
 
@@ -48,11 +51,11 @@ export default function LoveProfileDetailScreen() {
   const connectionStatus = getConnectionStatus(profileId);
   const pending = connectionStatus === "pending";
   const connected = connectionStatus === "connected";
+  const presence = presenceLabel(profile);
 
   function connect() {
-    if (pending || connected) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    void sendConnectionRequest(profileId);
+    if (pending || connected || !profile) return;
+    void connectWith(profile);
   }
 
   return (
@@ -60,10 +63,10 @@ export default function LoveProfileDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 118 + insets.bottom }}>
         <View style={styles.hero}>
           {profile.imageUrl && !imageFailed ? (
-            <Image source={{ uri: profile.imageUrl }} style={styles.heroImage} resizeMode="cover" onError={() => setImageFailed(true)} accessibilityLabel={`Profile photo of ${profile.name}`} />
+            <Image source={{ uri: profile.imageUrl }} style={styles.heroImage} resizeMode="cover" onError={() => setImageFailed(true)} accessibilityLabel={`Profile photo of @${profile.username}`} />
           ) : (
             <View style={[styles.heroImage, styles.fallback, { backgroundColor: colors.secondary }]}>
-              <Text style={[styles.initials, { color: colors.primary }]}>{profile.name.slice(0, 2).toUpperCase()}</Text>
+              <Text style={[styles.initials, { color: colors.primary }]}>{profile.username.slice(0, 2).toUpperCase()}</Text>
             </View>
           )}
           <View style={styles.heroShade} />
@@ -77,12 +80,13 @@ export default function LoveProfileDetailScreen() {
           </Pressable>
           <View style={styles.heroCopy}>
             <View style={styles.heroNameRow}>
-              <Text style={styles.heroName}>{profile.name}, {profile.age}</Text>
+              <Text style={styles.heroName} numberOfLines={1}>@{profile.username}</Text>
               {profile.verified ? <Ionicons name="checkmark-circle" size={21} color="#8AB4FF" /> : null}
+              <MembershipBadge type={profile.accountType} iconOnly />
             </View>
             <View style={styles.heroLocationRow}>
               <Ionicons name="location-outline" size={15} color="#FFFFFF" />
-              <Text style={styles.heroLocation}>{profile.city}</Text>
+              <Text style={styles.heroLocation}>{profile.neighborhood ? `${profile.neighborhood}, ${profile.city}` : profile.city}</Text>
             </View>
           </View>
         </View>
@@ -95,16 +99,22 @@ export default function LoveProfileDetailScreen() {
               <Text style={[styles.factValue, { color: colors.foreground }]}>{profile.gender}</Text>
             </View>
             <View style={[styles.fact, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Ionicons name="briefcase-outline" size={20} color={colors.primary} />
-              <Text style={[styles.factLabel, { color: colors.mutedForeground }]}>Work</Text>
-              <Text numberOfLines={1} style={[styles.factValue, { color: colors.foreground }]}>{profile.occupation}</Text>
+              <Ionicons name="time-outline" size={20} color={colors.primary} />
+              <Text style={[styles.factLabel, { color: colors.mutedForeground }]}>Last active</Text>
+              <Text numberOfLines={1} style={[styles.factValue, { color: colors.foreground }]}>{presence ?? "Not recently"}</Text>
             </View>
           </View>
 
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>About me</Text>
-          <Text style={[styles.bio, { color: colors.mutedForeground }]}>{profile.bio}</Text>
+          {profile.bio ? (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>About me</Text>
+              <Text style={[styles.bio, { color: colors.mutedForeground }]}>{profile.bio}</Text>
+            </>
+          ) : null}
 
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Interests</Text>
+          {profile.interests.length ? (
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Interests</Text>
+          ) : null}
           <View style={styles.interests}>
             {profile.interests.map((interest) => (
               <View key={interest} style={[styles.interest, { backgroundColor: colors.glass, borderColor: colors.border }]}>
@@ -129,15 +139,20 @@ export default function LoveProfileDetailScreen() {
           onPress={connect}
           disabled={pending || connected}
           accessibilityRole="button"
-          accessibilityLabel={`${pending ? "Connection pending with" : connected ? "Connected with" : "Connect with"} ${profile.name}`}
+          accessibilityLabel={`${pending ? "Connection pending with" : connected ? "Connected with" : "Connect with"} @${profile.username}`}
           style={[styles.connectButton, { backgroundColor: pending || connected ? colors.secondary : colors.primary }]}
         >
-          <Ionicons name={pending ? "time-outline" : connected ? "checkmark-circle-outline" : "heart"} size={20} color={pending || connected ? colors.mutedForeground : "#FFFFFF"} />
+          <Ionicons
+            name={pending ? "time-outline" : connected ? "checkmark-circle-outline" : "heart"}
+            size={20}
+            color={pending || connected ? colors.mutedForeground : "#FFFFFF"}
+          />
           <Text style={[styles.connectText, { color: pending || connected ? colors.mutedForeground : "#FFFFFF" }]}>
-            {pending ? "Request Pending" : connected ? "Connected" : `Connect with ${profile.name}`}
+            {pending ? "Request Pending" : connected ? "Connected" : `Connect with @${profile.username}`}
           </Text>
         </Pressable>
       </View>
+      {upgradePrompt}
     </View>
   );
 }
