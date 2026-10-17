@@ -5,8 +5,10 @@ import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native
 
 import { FormField } from "@/components/OrganisationForm";
 import { InlineError } from "@/components/profile/ProfileSection";
-import type { LoveVisibility } from "@/constants/loveProfiles";
+import { MembershipBadge } from "@/components/love/MembershipBadge";
+import type { LoveAccountType } from "@/constants/loveProfiles";
 import { useColors } from "@/hooks/useColors";
+import { formatMembershipPrice, PRIVATE_MEMBERSHIP_PLAN } from "@/utils/findLoveMembership";
 import {
   FREE_LOVE_PHOTO_LIMIT,
   LOVE_GENDERS,
@@ -17,7 +19,8 @@ import {
 export interface LoveProfileFormValues {
   username: string;
   gender?: LoveGender;
-  visibility: LoveVisibility;
+  /** Create only. Membership changes after that go through the upgrade flow. */
+  accountType?: LoveAccountType;
   photoUrls: string[];
 }
 
@@ -125,25 +128,26 @@ export function LoveProfileForm({ values, errors, onChange, onBlur, phone, disab
         </View>
       </Section>
 
-      <Section title="Profile type">
-        <VisibilityOption
-          title="Public"
-          description="Free. Members can find you in FindLove."
-          icon="globe-outline"
-          selected={values.visibility === "public"}
-          onPress={() => set("visibility", "public")}
-          disabled={disabled}
-        />
-        <VisibilityOption
-          title="Private"
-          description="Premium. Only premium members can see you. Available when FindLove plans launch."
-          icon="lock-closed-outline"
-          selected={values.visibility === "private"}
-          onPress={() => set("visibility", "private")}
-          disabled
-          badge="Soon"
-        />
-      </Section>
+      {values.accountType ? (
+        <Section title="Account type">
+          <AccountTypeOption
+            type="public"
+            title="Free"
+            description="Discover everyone and connect with Public members."
+            selected={values.accountType === "public"}
+            onPress={() => set("accountType", "public")}
+            disabled={disabled}
+          />
+          <AccountTypeOption
+            type="private"
+            title={`${formatMembershipPrice()} / ${PRIVATE_MEMBERSHIP_PLAN.periodLabel}`}
+            description="Connect with anyone, including Private members. You pay next; Private starts once payment is confirmed."
+            selected={values.accountType === "private"}
+            onPress={() => set("accountType", "private")}
+            disabled={disabled}
+          />
+        </Section>
+      ) : null}
     </View>
   );
 }
@@ -236,22 +240,20 @@ function PhotoSlots({
   );
 }
 
-function VisibilityOption({
+function AccountTypeOption({
+  type,
   title,
   description,
-  icon,
   selected,
   onPress,
   disabled,
-  badge,
 }: {
+  type: LoveAccountType;
   title: string;
   description: string;
-  icon: React.ComponentProps<typeof Ionicons>["name"];
   selected: boolean;
   onPress: () => void;
   disabled?: boolean;
-  badge?: string;
 }) {
   const colors = useColors();
   return (
@@ -269,17 +271,10 @@ function VisibilityOption({
       accessibilityRole="radio"
       accessibilityState={{ checked: selected, disabled }}
     >
-      <View style={[styles.optionIcon, { backgroundColor: colors.secondary }]}>
-        <Ionicons name={icon} size={20} color={colors.primary} />
-      </View>
       <View style={styles.optionBody}>
         <View style={styles.optionTitleRow}>
+          <MembershipBadge type={type} />
           <Text style={[styles.optionTitle, { color: colors.foreground }]}>{title}</Text>
-          {badge ? (
-            <View style={[styles.badge, { backgroundColor: colors.secondary }]}>
-              <Text style={[styles.badgeText, { color: colors.mutedForeground }]}>{badge}</Text>
-            </View>
-          ) : null}
         </View>
         <Text style={[styles.optionText, { color: colors.mutedForeground }]}>{description}</Text>
       </View>
@@ -325,11 +320,8 @@ const styles = StyleSheet.create({
   photoEmptyText: { fontSize: 12, fontFamily: "Inter_500Medium" },
   removeBtn: { position: "absolute", top: 8, right: 8, width: 30, height: 30, borderRadius: 15, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   option: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 18, borderWidth: 1.5, padding: 14 },
-  optionIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   optionBody: { flex: 1, gap: 3 },
   optionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   optionTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
   optionText: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99 },
-  badgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
 });
