@@ -46,7 +46,7 @@ export default function CreateLoveProfileScreen() {
   const [ageError, setAgeError] = useState<string | null>(null);
   const [dateOfBirth, setDateOfBirth] = useState("");
 
-  const [values, setValues] = useState<LoveProfileFormValues>({ username: "", visibility: "public", photoUrls: [] });
+  const [values, setValues] = useState<LoveProfileFormValues>({ username: "", accountType: "public", photoUrls: [] });
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [serverErrors, setServerErrors] = useState<LoveProfileFormErrors>({});
@@ -152,12 +152,17 @@ export default function CreateLoveProfileScreen() {
         username: values.username,
         gender: values.gender,
         dateOfBirth,
-        visibility: values.visibility,
+        accountType: values.accountType,
         photoUrls: values.photoUrls,
         confirmedAdult: true,
       });
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/(tabs)/findlove" as any);
+      // Private is a paid membership: the profile starts Public until payment is confirmed.
+      if (values.accountType === "private") {
+        router.replace({ pathname: "/love/membership", params: { from: "create" } } as any);
+      } else {
+        router.replace("/(tabs)/findlove" as any);
+      }
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (err instanceof LoveProfileInputError) {
@@ -275,7 +280,11 @@ export default function CreateLoveProfileScreen() {
           accessibilityRole="button"
           accessibilityState={{ busy: saving }}
         >
-          {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>Create my profile</Text>}
+          {saving ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.primaryText}>{values.accountType === "private" ? "Create profile and continue to payment" : "Create my profile"}</Text>
+          )}
         </Pressable>
       </LoveScreenShell>
     </KeyboardAvoidingView>

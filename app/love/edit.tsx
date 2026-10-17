@@ -12,6 +12,7 @@ import {
   type LoveProfileExtrasValues,
 } from "@/components/love/LoveProfileExtras";
 import { LoveScreenShell } from "@/components/love/LoveScreenShell";
+import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { InlineError, SectionState } from "@/components/profile/ProfileSection";
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
@@ -28,7 +29,7 @@ export default function EditLoveProfileScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { myProfile, status, error, reload, save } = useMyLoveProfile();
+  const { myProfile, status, error, reload, save, accountType } = useMyLoveProfile();
   const allowLeave = useRef(false);
 
   const initial = useMemo<EditValues | null>(
@@ -37,7 +38,6 @@ export default function EditLoveProfileScreen() {
         ? {
             username: myProfile.username,
             gender: myProfile.gender,
-            visibility: myProfile.visibility,
             photoUrls: myProfile.photoUrls,
             bio: myProfile.bio ?? "",
             interests: myProfile.interests,
@@ -129,7 +129,6 @@ export default function EditLoveProfileScreen() {
         username: values.username,
         gender: values.gender,
         dateOfBirth: myProfile.dateOfBirth,
-        visibility: values.visibility,
         photoUrls: values.photoUrls,
         bio: values.bio,
         interests: values.interests,
@@ -183,6 +182,13 @@ export default function EditLoveProfileScreen() {
           disabled={saving}
         />
 
+        <MembershipSection
+          isPrivate={accountType === "private"}
+          awaitingPayment={myProfile.membership.type === "private" && myProfile.membership.status === "pending_payment"}
+          expiresAt={myProfile.membership.expiresAt}
+          onUpgrade={() => router.push({ pathname: "/love/membership", params: { from: "upgrade" } } as any)}
+        />
+
         <Section title="Age" hint="Other members see your age, not your date of birth. Contact support if it is wrong.">
           <View style={[styles.readOnly, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
             <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
@@ -222,8 +228,48 @@ export default function EditLoveProfileScreen() {
   );
 }
 
+/** The member's actual account type, with the way to upgrade when they are Public. */
+function MembershipSection({
+  isPrivate,
+  awaitingPayment,
+  expiresAt,
+  onUpgrade,
+}: {
+  isPrivate: boolean;
+  awaitingPayment: boolean;
+  expiresAt?: string;
+  onUpgrade: () => void;
+}) {
+  const colors = useColors();
+  const message = isPrivate
+    ? `Paid membership with enhanced connection privileges.${expiresAt ? ` Runs until ${formatDateOfBirth(expiresAt.slice(0, 10))}.` : ""}`
+    : awaitingPayment
+      ? "You chose Private, but the payment hasn't been confirmed, so your account is Public for now."
+      : "Basic account. You can connect with Public members; connecting with Private members needs Private.";
+  return (
+    <Section title="Account type">
+      <View style={[styles.membership, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <MembershipBadge type={isPrivate ? "private" : "public"} />
+        <Text style={[styles.membershipText, { color: colors.mutedForeground }]}>{message}</Text>
+        {!isPrivate ? (
+          <Pressable onPress={onUpgrade} style={[styles.upgradeBtn, { borderColor: colors.primary }]} accessibilityRole="button">
+            <Ionicons name="diamond-outline" size={16} color={colors.primary} />
+            <Text style={[styles.upgradeText, { color: colors.primary }]}>
+              {awaitingPayment ? "Complete payment" : "Upgrade to Private"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </Section>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  membership: { borderRadius: 18, borderWidth: 1, padding: 14, gap: 10 },
+  membershipText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
+  upgradeBtn: { minHeight: 44, borderRadius: 12, borderWidth: 1.5, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  upgradeText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   readOnly: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, minHeight: 46 },
   readOnlyText: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   saveBtn: { minHeight: 52, borderRadius: 14, alignItems: "center", justifyContent: "center" },

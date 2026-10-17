@@ -103,7 +103,7 @@ export function FindLoveDemoProvider({ children }: { children: React.ReactNode }
       {
         id: "activity-" + Date.now(),
         type: "gift",
-        title: "You sent " + amount + " tokens to " + profile.name,
+        title: "You sent " + amount + " tokens to " + "@" + profile.username,
         description: "Gift sent from your Find Love token balance.",
         createdAt: "Just now",
       },
@@ -120,7 +120,7 @@ export function FindLoveDemoProvider({ children }: { children: React.ReactNode }
       {
         id: "activity-" + Date.now(),
         type: "message",
-        title: "You messaged " + profile.name,
+        title: "You messaged " + "@" + profile.username,
         description: "Your demo conversation was updated.",
         createdAt: "Just now",
       },
