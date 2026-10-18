@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   ImageBackground,
@@ -30,6 +30,8 @@ import { useColors } from "@/hooks/useColors";
 import type { Event } from "@/constants/events";
 import { shareEvent } from "@/utils/shareEvent";
 import { getEventImage } from "@/constants/eventImages";
+import { useAnalytics } from "@/context/AnalyticsContext";
+import type { AnalyticsSource } from "@/services/analyticsService";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -38,15 +40,20 @@ interface EventCardProps {
   variant?: "featured" | "standard" | "compact" | "feed";
   // Feed posts span the screen; the details line up with the page padding.
   inset?: number;
+  source?: AnalyticsSource;
+  onMediaReady?: (id: string, ready?: boolean) => void;
+  onTrackingBlocked?: (blocked: boolean) => void;
 }
 
-export function EventCard({ event, variant = "standard", inset = 20 }: EventCardProps) {
+export function EventCard({ event, variant = "standard", inset = 20, source = "home", onMediaReady, onTrackingBlocked }: EventCardProps) {
+  const { records, trackEvent } = useAnalytics();
   const colors = useColors();
   const { scheme } = useTheme();
   const router = useRouter();
   const { user, toggleSaveEvent } = useAuth();
   const scale = useSharedValue(1);
   const isSaved = user?.savedEvents.includes(event.id) ?? false;
+  const saving = useRef(false);
   const postSurface =
     scheme === "dark" ? "rgba(16, 22, 44, 0.72)" : "rgba(255, 255, 255, 0.78)";
 
@@ -70,16 +77,20 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
   }, [scale]);
 
   const handlePress = useCallback(() => {
-    router.push(`/event/${event.id}`);
-  }, [router, event.id]);
+    router.push({ pathname: "/event/[id]", params: { id: event.id, source } });
+  }, [router, event.id, source]);
 
   const handleSave = useCallback(
-    (e: any) => {
+    async (e: any) => {
       e.stopPropagation();
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      toggleSaveEvent(event.id);
+      if (saving.current) return;
+      saving.current = true;
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (await toggleSaveEvent(event.id)) trackEvent(event, isSaved ? "unsave" : "save", source);
+      } finally { saving.current = false; }
     },
-    [toggleSaveEvent, event.id]
+    [toggleSaveEvent, event, isSaved, source, trackEvent]
   );
 
   const { conversations, getContact, sendMessage } = useChat();
@@ -92,22 +103,28 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
   const [sentChatIds, setSentChatIds] = useState<Record<string, boolean>>({});
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [sendingAll, setSendingAll] = useState(false);
+  const [shareError, setShareError] = useState("");
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const captionCanExpand = event.description.trim().length > 110;
 
-  const viewsCount = Math.max(0, event.viewCount ?? 0);
-
-  const initialShares = useMemo(() => {
-    return Math.max(14, Math.floor(viewsCount * 0.082));
-  }, [viewsCount]);
-
-  const [shareCount, setShareCount] = useState(initialShares);
-
-  const initialSaves = useMemo(() => {
-    return Math.max(9, Math.floor(viewsCount * 0.064));
-  }, [viewsCount]);
-
-  const savesCount = initialSaves + (isSaved ? 1 : 0);
+  const localActivity = records.filter((record) => record.entityType === "event" && record.entityId === event.id);
+  // Legacy mock viewCount values were not qualified detail opens. Use measured activity only.
+  const viewsCount = localActivity.filter((record) => record.type === "detail_view").length;
+  const shareCount = localActivity.filter((record) => record.type === "share").length;
+  const localViewCount = viewsCount;
+  const savesCount = localActivity.filter((record) => record.type === "save").length;
+  const reached = new Set(localActivity.filter((record) => record.type === "feed_view").map((record) => record.viewerId));
+  const engaged = new Set(localActivity.filter((record) => ["share", "save", "link_copy"].includes(record.type) && reached.has(record.viewerId)).map((record) => record.viewerId));
+  const overlayOpen = showShareModal || showOptionsModal || showInsightsModal;
+  useEffect(() => {
+    if (!overlayOpen) return;
+    onTrackingBlocked?.(true);
+    return () => onTrackingBlocked?.(false);
+  }, [overlayOpen, onTrackingBlocked]);
+  useEffect(() => {
+    if (hidden) onMediaReady?.(event.id, false);
+    return () => onMediaReady?.(event.id, false);
+  }, [hidden, event.id, onMediaReady]);
 
   const handleShare = useCallback((e?: any) => {
     e?.stopPropagation?.();
@@ -147,10 +164,10 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
   const handleCopyLink = useCallback(async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await Clipboard.setStringAsync(`https://eventis.app/event/${event.id}`);
-    setShareCount((prev) => prev + 1);
+    trackEvent(event, "link_copy", source);
     setCopyFeedback(true);
     setTimeout(() => setCopyFeedback(false), 2000);
-  }, [event.id]);
+  }, [event, source, trackEvent]);
 
   const handleOptionsCopyLink = useCallback(async () => {
     await handleCopyLink();
@@ -170,34 +187,40 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
       if (sentChatIds[convId]) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSentChatIds((prev) => ({ ...prev, [convId]: true }));
-      setShareCount((prev) => prev + 1);
       const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
-      await sendMessage(convId, shareText);
+      try {
+        setShareError("");
+        await sendMessage(convId, shareText);
+        trackEvent(event, "share", source);
+      } catch {
+        setSentChatIds((prev) => ({ ...prev, [convId]: false }));
+        setShareError("Couldn't send this event. Please try again.");
+      }
     },
-    [event, sendMessage, sentChatIds]
+    [event, sendMessage, sentChatIds, source, trackEvent]
   );
 
   const handleSendToAllChats = useCallback(async () => {
     if (!conversations.length || sendingAll) return;
     setSendingAll(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const addedCount = conversations.length;
-    setShareCount((prev) => prev + addedCount);
     const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
-    const newSent: Record<string, boolean> = { ...sentChatIds };
-    for (const conv of conversations) {
-      newSent[conv.id] = true;
-      await sendMessage(conv.id, shareText);
-    }
-    setSentChatIds(newSent);
-    setSendingAll(false);
-  }, [conversations, sendingAll, event, sendMessage, sentChatIds]);
+    try {
+      setShareError("");
+      for (const conv of conversations) {
+        if (sentChatIds[conv.id]) continue;
+        await sendMessage(conv.id, shareText);
+        setSentChatIds((prev) => ({ ...prev, [conv.id]: true }));
+        trackEvent(event, "share", source);
+      }
+    } catch { setShareError("Some events couldn't be sent. Try again to send the remaining ones."); }
+    finally { setSendingAll(false); }
+  }, [conversations, sendingAll, event, sendMessage, sentChatIds, source, trackEvent]);
 
   const handleNativeShare = useCallback(async () => {
     setShowShareModal(false);
-    setShareCount((prev) => prev + 1);
-    await shareEvent(event);
-  }, [event]);
+    if (await shareEvent(event)) trackEvent(event, "share", source);
+  }, [event, source, trackEvent]);
 
   const handleShareToChat = useCallback(() => {
     setShowShareModal(false);
@@ -308,6 +331,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
           </View>
 
           {/* Send to all chats button */}
+          {shareError ? <Text accessibilityRole="alert" style={{ color: colors.destructive, paddingVertical: 8 }}>{shareError}</Text> : null}
           {conversations.length > 0 && (
             <Pressable
               style={[
@@ -840,10 +864,10 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
             >
               <Ionicons name="eye-outline" size={20} color={colors.primary} />
               <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
-                {formatCount(viewsCount)}
+                {formatCount(localViewCount)}
               </Text>
               <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
-                Total Views
+                Event views on this device
               </Text>
             </View>
 
@@ -893,7 +917,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
                 {formatCount(savesCount)}
               </Text>
               <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
-                Saved / Bookmarked
+                Save actions
               </Text>
             </View>
 
@@ -915,10 +939,10 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
             >
               <Ionicons name="people-outline" size={20} color="#8B5CF6" />
               <Text style={[styles.insightsMetricValue, { color: colors.foreground }]}>
-                {formatCount(event.attendees || 85)}
+                {formatCount(reached.size)}
               </Text>
               <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
-                Attending
+                Reached on this device
               </Text>
             </View>
           </View>
@@ -942,11 +966,11 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
             <View style={styles.insightsEngagementLeft}>
               <Ionicons name="trending-up" size={18} color={colors.primary} />
               <Text style={[styles.insightsEngagementText, { color: colors.foreground }]}>
-                Engagement Rate
+                Local engagement rate
               </Text>
             </View>
             <Text style={[styles.insightsEngagementValue, { color: colors.primary }]}>
-              {(((shareCount + savesCount) / Math.max(viewsCount, 1)) * 100).toFixed(1)}%
+              {reached.size ? `${(engaged.size / reached.size * 100).toFixed(1)}%` : "—"}
             </Text>
           </View>
 
@@ -1162,6 +1186,7 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
   return (
     <>
       <AnimatedPressable
+        testID={`event-card-${event.id}`}
         style={[
           styles.instaCard,
           {
@@ -1215,6 +1240,8 @@ export function EventCard({ event, variant = "standard", inset = 20 }: EventCard
         {/* Post Media: Full-width event image */}
         <View style={styles.instaMediaWrap}>
           <ImageBackground
+            onLoad={() => onMediaReady?.(event.id)}
+            onError={() => onMediaReady?.(event.id, false)}
             source={getEventImage(event.image)}
             style={styles.instaMediaImage}
             imageStyle={styles.instaMediaInnerImage}

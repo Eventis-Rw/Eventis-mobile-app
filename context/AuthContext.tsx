@@ -22,6 +22,7 @@ import {
   type SubscriptionResult,
 } from "@/services/organiserService";
 import { clearLocalProfileData } from "@/services/profileService";
+import { deleteAccountAnalytics } from "@/services/analyticsService";
 import { requestAccountDeletion } from "@/services/securityService";
 import { api, ApiError, clearToken, getToken, setToken } from "@/utils/apiClient";
 
@@ -81,7 +82,7 @@ interface AuthContextType {
   verifyOTP: (code: string, phone?: string, fullName?: string) => Promise<boolean>;
   requestOTP: (purpose: "register" | "payment" | "chat", eventId?: string) => void;
   clearOTPContext: () => void;
-  toggleSaveEvent: (eventId: string) => void;
+  toggleSaveEvent: (eventId: string) => Promise<boolean>;
   updateProfile: (data: Partial<User>) => Promise<void>;
   /** Mirrors a phone number the server just verified; keeps the current session. */
   markPhoneVerified: (phone: string) => Promise<void>;
@@ -231,6 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await clearToken();
       await AsyncStorage.multiRemove([USER_CACHE_KEY, ONBOARDING_KEY, ONBOARDING_COMPLETE_KEY, BOOKINGS_CACHE_KEY]);
       if (userId) await clearLocalProfileData(userId).catch(() => undefined);
+      if (userId) await deleteAccountAnalytics(userId).catch(() => undefined);
     },
     [user],
   );
@@ -301,13 +303,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const toggleSaveEvent = useCallback(
     async (eventId: string) => {
-      if (!user) return;
+      if (!user) return false;
       const isSaved = user.savedEvents.includes(eventId);
       const optimistic = isSaved
         ? user.savedEvents.filter((id) => id !== eventId)
         : [...user.savedEvents, eventId];
       const updated = { ...user, savedEvents: optimistic };
       await persistUser(updated);
+      if (user.isDemo) return true;
       try {
         if (isSaved) {
           await api.delete<{ savedEvents: string[] }>(
@@ -320,7 +323,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {
         await persistUser(user);
+        return false;
       }
+      return true;
     },
     [user, persistUser]
   );

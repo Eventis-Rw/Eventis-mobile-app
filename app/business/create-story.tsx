@@ -208,7 +208,7 @@ export default function CreateStoryScreen() {
         const imageUri = typeof canvas.image === "object" && !Array.isArray(canvas.image) ? canvas.image?.uri : undefined;
         const mediaUri = canvas.videoUri || imageUri;
         const durableUri = mediaUri ? await persistStoryMedia(mediaUri) : undefined;
-        drafts.push({ organizerName: organisationName, organizerAvatar: user.organisation?.logoUrl || user.avatarUrl || "",
+        drafts.push({ organisationId: user.organisation?.id, organizerName: organisationName, organizerAvatar: user.organisation?.logoUrl || user.avatarUrl || "",
           storyImage: canvas.videoUri ? undefined : durableUri ? { uri: durableUri } : canvas.image,
           mediaUrl: durableUri, mediaType: canvas.videoUri ? "video" : canvas.image ? "image" : "text",
           background: STORY_BACKGROUNDS[canvas.backgroundIndex].color, fit: canvas.fit, overlays: canvas.overlays.filter((layer) => layer.text.trim()) });

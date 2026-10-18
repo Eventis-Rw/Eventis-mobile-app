@@ -3,8 +3,8 @@ import { BlurView } from "expo-blur";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -25,7 +25,6 @@ import { DetailSurface } from "@/components/DetailSurface";
 import { getEventImage } from "@/constants/eventImages";
 import { getEventTiming } from "@/constants/eventPresentation";
 import { getAccountType, useAuth } from "@/context/AuthContext";
-import { useBookings } from "@/context/BookingsContext";
 import { useChat } from "@/context/ChatContext";
 import { useEvents } from "@/context/EventsContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -34,9 +33,15 @@ import { useColors } from "@/hooks/useColors";
 import { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
 import { organiserIdFromName } from "@/services/profileService";
 import { shareEvent } from "@/utils/shareEvent";
+import { useAnalytics } from "@/context/AnalyticsContext";
+import type { AnalyticsSource } from "@/services/analyticsService";
 
 export default function EventDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, source: routeSource } = useLocalSearchParams<{ id: string; source?: string }>();
+  const source: AnalyticsSource = routeSource === "home" || routeSource === "category" || routeSource === "search" || routeSource === "stories" ? routeSource : "direct";
+  const { trackEvent, foreground } = useAnalytics();
+  const [focused, setFocused] = useState(false);
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const colors = useColors();
   const { scheme } = useTheme();
   const styles = createStyles({ ...colors, card: scheme === "dark" ? "#121827" : "#F4F7FC" });
@@ -44,11 +49,9 @@ export default function EventDetailScreen() {
   const router = useRouter();
 
   const { user, toggleSaveEvent } = useAuth();
-  const { hasBookedEvent, addBooking } = useBookings();
   const { getEventById, isLoading } = useEvents();
   const { conversations, getContact, sendMessage } = useChat();
 
-  const [bookingLoading, setBookingLoading] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [reportState, setReportState] = useState<"idle" | "reported">("idle");
@@ -57,10 +60,16 @@ export default function EventDetailScreen() {
   const [sentChatIds, setSentChatIds] = useState<Record<string, boolean>>({});
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [sendingAll, setSendingAll] = useState(false);
+  const [shareError, setShareError] = useState("");
+  const saving = useRef(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
   const event = getEventById(id ?? "");
-  const isBooked = hasBookedEvent(id ?? "");
+  useEffect(() => {
+    if (!event || !focused || !foreground || showShareModal || showOptionsModal) return;
+    const timer = setTimeout(() => trackEvent(event, "detail_view", source), 1000);
+    return () => clearTimeout(timer);
+  }, [event, focused, foreground, trackEvent, source, showShareModal, showOptionsModal]);
   const isSaved = user?.savedEvents.includes(id ?? "") ?? false;
   const palette = { accent: colors.primary };
   const timing = useMemo(() => (event ? getEventTiming(event) : null), [event]);
@@ -87,49 +96,14 @@ export default function EventDetailScreen() {
   }, [event, user, router, savedOrganisers, organiserId]);
 
   // Actions
-  const handleBook = useCallback(async () => {
-    if (!event || timing?.kind === "ended") return;
-    if (!user) {
-      router.push("/auth/register" as never);
-      return;
-    }
-    // Journey rule: paid bookings need a verified phone. This verifies the
-    // current account (the sign-up OTP screen would replace the session).
-    if (event.isPaid && !user.isPhoneVerified) {
-      router.push({
-        pathname: "/verify-phone",
-        params: { purpose: "payment", eventId: event.id },
-      } as never);
-      return;
-    }
-    if (event.isPaid && event.organizerWebsite) {
-      await Linking.openURL(event.organizerWebsite);
-      return;
-    }
-    setBookingLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await addBooking({
-      eventId: event.id,
-      eventTitle: event.title,
-      eventDate: event.date,
-      eventTime: event.time,
-      eventLocation: event.location,
-      eventImage: event.image,
-      userId: user.id,
-      quantity: 1,
-      totalPrice: event.price,
-      currency: event.currency,
-      isPaid: event.isPaid,
-    });
-    setBookingLoading(false);
-    router.push("/(tabs)/tickets" as never);
-  }, [addBooking, event, router, timing?.kind, user]);
-
-  const handleSave = useCallback(() => {
-    if (!event) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    toggleSaveEvent(event.id);
-  }, [event, toggleSaveEvent]);
+  const handleSave = useCallback(async () => {
+    if (!event || saving.current) return;
+    saving.current = true;
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (await toggleSaveEvent(event.id)) trackEvent(event, isSaved ? "unsave" : "save", "details");
+    } finally { saving.current = false; }
+  }, [event, toggleSaveEvent, isSaved, trackEvent]);
 
   const handleOpenShare = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -141,15 +115,16 @@ export default function EventDetailScreen() {
     if (!event) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await Clipboard.setStringAsync(`https://eventis.app/event/${event.id}`);
+    trackEvent(event, "link_copy", "details");
     setCopyFeedback(true);
     setTimeout(() => setCopyFeedback(false), 2000);
-  }, [event]);
+  }, [event, trackEvent]);
 
   const handleNativeShare = useCallback(async () => {
     if (!event) return;
     setShowShareModal(false);
-    await shareEvent(event);
-  }, [event]);
+    if (await shareEvent(event)) trackEvent(event, "share", "details");
+  }, [event, trackEvent]);
 
   const handleSendToChat = useCallback(
     async (convId: string) => {
@@ -157,9 +132,16 @@ export default function EventDetailScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSentChatIds((prev) => ({ ...prev, [convId]: true }));
       const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
-      await sendMessage(convId, shareText);
+      try {
+        setShareError("");
+        await sendMessage(convId, shareText);
+        trackEvent(event, "share", "details");
+      } catch {
+        setSentChatIds((prev) => ({ ...prev, [convId]: false }));
+        setShareError("Couldn't send this event. Please try again.");
+      }
     },
-    [event, sendMessage, sentChatIds]
+    [event, sendMessage, sentChatIds, trackEvent]
   );
 
   const handleSendToAllChats = useCallback(async () => {
@@ -167,14 +149,17 @@ export default function EventDetailScreen() {
     setSendingAll(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
-    const newSent: Record<string, boolean> = { ...sentChatIds };
-    for (const conv of conversations) {
-      newSent[conv.id] = true;
-      await sendMessage(conv.id, shareText);
-    }
-    setSentChatIds(newSent);
-    setSendingAll(false);
-  }, [conversations, sendingAll, event, sendMessage, sentChatIds]);
+    try {
+      setShareError("");
+      for (const conv of conversations) {
+        if (sentChatIds[conv.id]) continue;
+        await sendMessage(conv.id, shareText);
+        setSentChatIds((prev) => ({ ...prev, [conv.id]: true }));
+        trackEvent(event, "share", "details");
+      }
+    } catch { setShareError("Some events couldn't be sent. Try again to send the remaining ones."); }
+    finally { setSendingAll(false); }
+  }, [conversations, sendingAll, event, sendMessage, sentChatIds, trackEvent]);
 
   const handleShareToChat = useCallback(() => {
     if (!event) return;
@@ -194,11 +179,22 @@ export default function EventDetailScreen() {
     }, 1600);
   }, []);
 
-  const openMaps = useCallback(() => {
+  const openMaps = useCallback(async () => {
     if (!event) return;
     const query = encodeURIComponent(`${event.location}, ${event.city}`);
-    Linking.openURL(`https://maps.google.com/?q=${query}`);
-  }, [event]);
+    try {
+      await Linking.openURL(`https://maps.google.com/?q=${query}`);
+      trackEvent(event, "directions_click", "details");
+    } catch { /* An unavailable maps app isn't a completed action. */ }
+  }, [event, trackEvent]);
+
+  const openWebsite = useCallback(async () => {
+    if (!event?.organizerWebsite) return;
+    try {
+      await Linking.openURL(event.organizerWebsite);
+      trackEvent(event, "website_click", "details");
+    } catch { /* Only record successful hand-offs. */ }
+  }, [event, trackEvent]);
 
   const filteredConversations = useMemo(() => {
     if (!chatSearch.trim()) return conversations;
@@ -259,7 +255,7 @@ export default function EventDetailScreen() {
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* HERO IMAGE BANNER */}
@@ -485,7 +481,7 @@ export default function EventDetailScreen() {
               {event.organizerWebsite && (
                 <Pressable
                   style={[styles.organizerBtn, styles.organizerBtnOutline]}
-                  onPress={() => Linking.openURL(event.organizerWebsite!)}
+                  onPress={openWebsite}
                   accessibilityRole="button"
                   accessibilityLabel="Visit organizer website"
                 >
@@ -574,73 +570,6 @@ export default function EventDetailScreen() {
         </Animated.View>
       </ScrollView>
 
-      {/* FIXED FLOATING GLASS BOTTOM ACTION BAR */}
-      <DetailSurface
-        style={[
-          styles.bottomFixedBar,
-          {
-            paddingBottom: insets.bottom + 12,
-            borderWidth: 0,
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: "rgba(255,255,255,0.14)",
-            borderRadius: 0,
-          },
-        ]}
-
-      >
-        <View style={styles.bottomPriceCol}>
-          <Text style={styles.bottomPriceLabel}>TICKET ADMISSION</Text>
-          <Text style={styles.bottomPriceValue}>{price}</Text>
-          <Text style={styles.bottomPriceSub}>Instant confirmation</Text>
-        </View>
-
-        <Pressable
-          onPress={isBooked || timing.kind === "ended" ? undefined : handleBook}
-          disabled={bookingLoading || timing.kind === "ended"}
-          accessibilityRole="button"
-          style={[
-            styles.bottomCtaBtn,
-            {
-              backgroundColor: isBooked
-                ? "#10B981"
-                : timing.kind === "ended"
-                ? "rgba(255,255,255,0.16)"
-                : colors.primary,
-              opacity: bookingLoading ? 0.75 : 1,
-            },
-          ]}
-        >
-          {bookingLoading ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <>
-              <Ionicons
-                name={
-                  isBooked
-                    ? "checkmark-circle"
-                    : timing.kind === "ended"
-                    ? "time-outline"
-                    : event.isPaid
-                    ? "ticket"
-                    : "add-circle"
-                }
-                size={19}
-                color="#FFFFFF"
-              />
-              <Text style={styles.bottomCtaText}>
-                {isBooked
-                  ? "Booked"
-                  : timing.kind === "ended"
-                  ? "Event ended"
-                  : event.isPaid
-                  ? "Get tickets"
-                  : "Reserve spot"}
-              </Text>
-            </>
-          )}
-        </Pressable>
-      </DetailSurface>
-
       {/* INSTAGRAM-STYLE TRANSPARENT FROSTED SHARE MODAL */}
       <Modal
         visible={showShareModal}
@@ -708,6 +637,7 @@ export default function EventDetailScreen() {
             )}
 
             {/* Contacts list */}
+            {shareError ? <Text accessibilityRole="alert" style={{ color: colors.destructive, paddingVertical: 8 }}>{shareError}</Text> : null}
             <ScrollView style={styles.shareChatList} showsVerticalScrollIndicator={false}>
               {filteredConversations.length > 0 ? (
                 filteredConversations.map((conv) => {
@@ -1029,7 +959,7 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 130,
+    flexGrow: 1,
   },
 
   // HERO
@@ -1394,61 +1324,6 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     lineHeight: 19,
     fontFamily: "Inter_400Regular",
     flex: 1,
-  },
-
-  // FIXED BOTTOM BAR
-  bottomFixedBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    backgroundColor: colors.card,
-  },
-  bottomPriceCol: {
-    flex: 1,
-  },
-  bottomPriceLabel: {
-    color: colors.mutedForeground,
-    fontSize: 9,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 0.8,
-  },
-  bottomPriceValue: {
-    color: colors.foreground,
-    fontSize: 17,
-    fontFamily: "Inter_800ExtraBold",
-    marginTop: 2,
-  },
-  bottomPriceSub: {
-    color: colors.mutedForeground,
-    fontSize: 10,
-    fontFamily: "Inter_400Regular",
-    marginTop: 1,
-  },
-  bottomCtaBtn: {
-    minWidth: 160,
-    height: 48,
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingHorizontal: 18,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  bottomCtaText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
   },
 
   // MODAL OVERLAYS & SHEETS

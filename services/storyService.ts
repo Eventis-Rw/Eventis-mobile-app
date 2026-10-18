@@ -5,6 +5,7 @@ import type { StoryOverlay } from "@/components/StoryCanvas";
 export type PublishedStory = {
   id: string;
   ownerId: string;
+  organisationId?: string;
   mediaType?: "image" | "video" | "text";
   mediaUrl?: string;
   durationMs?: number;
