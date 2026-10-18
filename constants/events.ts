@@ -11,6 +11,9 @@ export type EventCategory =
 
 export interface Event {
   id: string;
+  /** Publisher identity when supplied by the events source. */
+  ownerId?: string;
+  organisationId?: string;
   title: string;
   category: EventCategory;
   description: string;

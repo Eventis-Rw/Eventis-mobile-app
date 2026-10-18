@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { OrganiserPortalHeader } from "@/components/OrganiserPortalHeader";
+import { OrganiserAnalytics } from "@/components/OrganiserAnalytics";
 import { getEventImage } from "@/constants/eventImages";
 import { useAuth } from "@/context/AuthContext";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
@@ -92,6 +93,8 @@ export default function OrganiserDashboard() {
             <Text style={[styles.summaryLabel, { color: palette.muted }]}>Active organisation</Text>
           </View>
         </Animated.View>
+
+        {user ? <OrganiserAnalytics key={user.id} ownerId={user.id} events={events.filter((event) => event.ownerId === user.id)} /> : null}
 
         <SectionHeading title="Quick create" text="Choose the format that matches your goal." palette={palette} />
         <Animated.View entering={enter(110)} style={styles.actions}>

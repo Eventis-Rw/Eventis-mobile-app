@@ -27,6 +27,8 @@ import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { DEMO_POST_ORDER } from "@/constants/featuredDemoPosts";
+import { useFeedAnalytics } from "@/hooks/useFeedAnalytics";
+import { useStories } from "@/context/StoriesContext";
 
 const PAGE_PADDING = 20;
 const FEED_PAGE_SIZE = 6;
@@ -43,6 +45,9 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
+  const { viewerOpen } = useStories();
+  const [cardCovered, setCardCovered] = useState(false);
+  const feedAnalytics = useFeedAnalytics(selectedCategory === "All" ? "home" : "category", viewerOpen || showOrganizerModal || cardCovered);
   const location = useLocationPermission();
   const [headerHeight, setHeaderHeight] = useState(0);
 
@@ -275,7 +280,7 @@ export default function HomeScreen() {
         data={visibleEvents}
         keyExtractor={(event) => event.id}
         renderItem={({ item }) => (
-          <EventCard event={item} variant="feed" inset={0} />
+          <EventCard event={item} variant="feed" inset={0} source={selectedCategory === "All" ? "home" : "category"} onMediaReady={feedAnalytics.onMediaReady} onTrackingBlocked={setCardCovered} />
         )}
         ListHeaderComponent={renderBody()}
         ListFooterComponent={visibleEvents.length ? (
@@ -284,6 +289,8 @@ export default function HomeScreen() {
           </Text>
         ) : null}
         onEndReached={loadMore}
+        viewabilityConfig={feedAnalytics.viewabilityConfig}
+        onViewableItemsChanged={feedAnalytics.onViewableItemsChanged}
         onEndReachedThreshold={0.5}
         scrollEventThrottle={16}
         initialNumToRender={FEED_PAGE_SIZE}

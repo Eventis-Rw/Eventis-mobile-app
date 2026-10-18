@@ -17,6 +17,8 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { CategoryPill } from "@/components/CategoryPill";
 import { GlassSurface } from "@/components/GlassSurface";
 import { EventCard } from "@/components/EventCard";
+import { useFeedAnalytics } from "@/hooks/useFeedAnalytics";
+import { useStories } from "@/context/StoriesContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -35,6 +37,9 @@ const POPULAR_SEARCHES = [
 ];
 
 export default function SearchScreen() {
+  const { viewerOpen } = useStories();
+  const [cardCovered, setCardCovered] = useState(false);
+  const feedAnalytics = useFeedAnalytics("search", viewerOpen || cardCovered);
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
@@ -218,6 +223,8 @@ export default function SearchScreen() {
 
       {/* Events List: Always displays events and live-filters as user types */}
       <FlatList
+        viewabilityConfig={feedAnalytics.viewabilityConfig}
+        onViewableItemsChanged={feedAnalytics.onViewableItemsChanged}
         data={results}
         keyExtractor={(item) => item.id}
         keyboardDismissMode="on-drag"
@@ -368,7 +375,7 @@ export default function SearchScreen() {
           <Animated.View
             entering={Platform.OS !== "web" ? FadeInDown.delay(index * 40).springify() : undefined}
           >
-            <EventCard event={item} variant="feed" inset={0} />
+            <EventCard event={item} variant="feed" inset={0} source="search" onMediaReady={feedAnalytics.onMediaReady} onTrackingBlocked={setCardCovered} />
           </Animated.View>
         )}
       />

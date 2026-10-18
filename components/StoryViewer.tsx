@@ -9,6 +9,8 @@ import { StoryVideo } from "@/components/StoryVideo";
 import { StoryAvatar } from "@/components/StoryAvatar";
 import { isStoryAvailable, storyKey, type PublishedStory, type StoryCollection } from "@/services/storyService";
 import { resolveStoryIndex } from "@/utils/storyPlayback";
+import { useAnalytics } from "@/context/AnalyticsContext";
+import type { AnalyticsType } from "@/services/analyticsService";
 
 type Props = {
   session: { ids: string[]; index: number }; collections: StoryCollection[]; ownId?: string;
@@ -20,6 +22,7 @@ export function StoryViewer({ session, collections, ownId, onViewed, onClose, on
   const { width, height } = useWindowDimensions();
   const [index, setIndex] = useState(session.index);
   const [replay, setReplay] = useState(0);
+  const closeRequest = useRef<(() => void) | null>(null);
   const items = useMemo(() => new Map(collections.flatMap((group) => group.items.map((item) => [storyKey(item), item] as const))), [collections]);
   const available = new Set(items.keys());
   const resolved = resolveStoryIndex(session.ids, available, index);
@@ -36,23 +39,28 @@ export function StoryViewer({ session, collections, ownId, onViewed, onClose, on
   useEffect(() => { if (!story) onClose(); }, [story, onClose]);
   if (!story || !group) return null;
   return (
-    <Modal visible animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <Modal visible animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent navigationBarTranslucent onRequestClose={() => { if (closeRequest.current) closeRequest.current(); else onClose(); }}>
       <SafeAreaProvider initialMetrics={{ insets, frame: { x: 0, y: 0, width, height } }}>
       <StoryPlayback key={`${storyKey(story)}:${replay}`} story={story} group={group} own={story.ownerId === ownId}
-        onNext={next} onPrevious={previous} onClose={onClose} onViewed={onViewed} onDelete={onDelete} />
+        onNext={next} onPrevious={previous} onClose={onClose} onViewed={onViewed} onDelete={onDelete} closeRequest={closeRequest} />
       </SafeAreaProvider>
     </Modal>
   );
 }
 
-function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewed, onDelete }: {
+function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewed, onDelete, closeRequest }: {
   story: PublishedStory; group: StoryCollection; own: boolean;
   onNext: () => void; onPrevious: () => void; onClose: () => void;
   onViewed: (story: PublishedStory) => void; onDelete: (story: PublishedStory) => Promise<void>;
+  closeRequest: React.RefObject<(() => void) | null>;
 }) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const router = useRouter();
+  const { track } = useAnalytics();
+  const trackStory = useCallback((type: AnalyticsType) => {
+    track({ type, entityType: "story", entityId: story.id, ownerId: story.ownerId, organisationId: story.organisationId, source: "stories" });
+  }, [track, story.id, story.ownerId, story.organisationId]);
   const { getEventById, isLoading: eventsLoading } = useEvents();
   const linkedEvent = story.eventId ? getEventById(story.eventId) : undefined;
   const [viewport, setViewport] = useState({ width, height });
@@ -76,14 +84,21 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
   const longPress = useRef(false);
   const swiping = useRef(false);
   const advanced = useRef(false);
+  const exitSent = useRef(false);
   const paused = holding || manualPause || !foreground || confirmDelete || failed;
   const duration = Math.max(1000, Math.min(15000, story.durationMs ?? 5000));
-  const latest = useRef({ onNext, onPrevious, onClose, width, paused });
-  latest.current = { onNext, onPrevious, onClose, width, paused };
+  const closeViewer = useCallback(() => {
+    if (ready && !failed && !advanced.current && !exitSent.current) { exitSent.current = true; trackStory("story_exit"); }
+    onClose();
+  }, [ready, failed, trackStory, onClose]);
+  useEffect(() => { closeRequest.current = closeViewer; return () => { closeRequest.current = null; }; }, [closeViewer, closeRequest]);
+  const latest = useRef({ onNext, onClose: closeViewer, trackStory });
+  latest.current = { onNext, onClose: closeViewer, trackStory };
 
   const finish = useCallback(() => {
     if (advanced.current) return;
     advanced.current = true;
+    latest.current.trackStory("story_complete");
     latest.current.onNext();
   }, []);
   useEffect(() => {
@@ -103,6 +118,9 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
   useEffect(() => {
     if (ready && !paused && !failed && isStoryAvailable(story)) onViewed(story);
   }, [ready, paused, failed, story, onViewed]);
+  useEffect(() => {
+    if (ready && !paused && !failed && isStoryAvailable(story)) trackStory("story_view");
+  }, [ready, paused, failed, story, trackStory]);
   useEffect(() => {
     if (ready || failed || !foreground) return;
     const timeout = setTimeout(() => setFailed(true), 15000);
@@ -185,7 +203,7 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
             <View style={styles.identity}><Text style={styles.name} numberOfLines={1}>{story.organizerName}</Text><Text style={styles.time}>{timestamp} · {activeIndex + 1}/{group.items.length}</Text></View>
             {video ? <Pressable style={styles.control} onPress={() => setMuted((value) => !value)} accessibilityRole="button" accessibilityLabel={muted ? "Unmute story" : "Mute story"}><Ionicons name={muted ? "volume-mute-outline" : "volume-high-outline"} size={21} color="white" /></Pressable> : null}
             <Pressable style={styles.control} onPress={() => setManualPause((value) => !value)} accessibilityRole="button" accessibilityLabel={manualPause ? "Resume story" : "Pause story"}><Ionicons name={manualPause ? "play" : "pause"} size={20} color="white" /></Pressable>
-            <Pressable style={styles.control} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close story"><Ionicons name="close" size={28} color="white" /></Pressable>
+            <Pressable style={styles.control} onPress={closeViewer} accessibilityRole="button" accessibilityLabel="Close story"><Ionicons name="close" size={28} color="white" /></Pressable>
           </View>
         </View>
         {!ready && !failed ? <View pointerEvents="none" style={styles.loading}><ActivityIndicator color="white" accessibilityLabel="Loading story" /></View> : null}
@@ -194,7 +212,7 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
           {own ? <View style={styles.actions}>
             <Pressable style={styles.button} onPress={() => { onClose(); router.push("/business/create-story"); }} accessibilityRole="button"><Ionicons name="add" color="white" size={20} /><Text style={styles.name}>Add to story</Text></Pressable>
             <Pressable style={styles.control} onPress={() => setConfirmDelete(true)} accessibilityRole="button" accessibilityLabel="Delete story"><Ionicons name="trash-outline" color="white" size={22} /></Pressable>
-          </View> : linkedEvent ? <Pressable style={styles.button} accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: "/event/[id]", params: { id: linkedEvent.id } }); }}><Text style={styles.name}>View event</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
+          </View> : linkedEvent ? <Pressable style={styles.button} accessibilityRole="button" onPress={() => { trackStory("story_event_click"); onClose(); router.push({ pathname: "/event/[id]", params: { id: linkedEvent.id, source: "stories" } }); }}><Text style={styles.name}>View event</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
             : story.eventId ? <Text style={styles.time}>{eventsLoading ? "Loading event…" : "Event no longer available"}</Text> : null}
         </View>
         {confirmDelete ? <View style={styles.confirm}><View style={styles.confirmCard}>
