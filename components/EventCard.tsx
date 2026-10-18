@@ -108,9 +108,10 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
   const captionCanExpand = event.description.trim().length > 110;
 
   const localActivity = records.filter((record) => record.entityType === "event" && record.entityId === event.id);
-  const viewsCount = Math.max(0, event.viewCount ?? 0) + localActivity.filter((record) => record.type === "feed_view" && !record.syncedAt).length;
+  // Legacy mock viewCount values were not qualified detail opens. Use measured activity only.
+  const viewsCount = localActivity.filter((record) => record.type === "detail_view").length;
   const shareCount = localActivity.filter((record) => record.type === "share").length;
-  const localViewCount = localActivity.filter((record) => record.type === "feed_view").length;
+  const localViewCount = viewsCount;
   const savesCount = localActivity.filter((record) => record.type === "save").length;
   const reached = new Set(localActivity.filter((record) => record.type === "feed_view").map((record) => record.viewerId));
   const engaged = new Set(localActivity.filter((record) => ["share", "save", "link_copy"].includes(record.type) && reached.has(record.viewerId)).map((record) => record.viewerId));
@@ -866,7 +867,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
                 {formatCount(localViewCount)}
               </Text>
               <Text style={[styles.insightsMetricLabel, { color: colors.mutedForeground }]}>
-                Post views on this device
+                Event views on this device
               </Text>
             </View>
 

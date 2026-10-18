@@ -15,9 +15,11 @@ export function summarizeLocalAnalytics(records: AnalyticsRecord[], events: { id
   const current = relevant.filter((r) => r.occurredAt >= start.getTime());
   const previous = relevant.filter((r) => r.occurredAt >= previousStart.getTime() && r.occurredAt < start.getTime());
   const eventActivity = current.filter((r) => r.entityType === "event");
-  const views = eventActivity.filter((r) => r.type === "feed_view");
-  const previousViews = previous.filter((r) => r.type === "feed_view").length;
-  const reached = new Set(views.map((r) => r.viewerId));
+  // Keep the persisted feed_view type compatible with older journals: it means an impression.
+  const impressions = eventActivity.filter((r) => r.type === "feed_view");
+  const views = eventActivity.filter((r) => r.type === "detail_view");
+  const previousViews = previous.filter((r) => r.entityType === "event" && r.type === "detail_view").length;
+  const reached = new Set(impressions.map((r) => r.viewerId));
   const engaged = new Set(eventActivity.filter((r) => ["save", "share", "link_copy"].includes(r.type) && reached.has(r.viewerId)).map((r) => r.viewerId));
   const stories = current.filter((r) => r.entityType === "story");
   const storyViews = stories.filter((r) => r.type === "story_view");
@@ -38,15 +40,15 @@ export function summarizeLocalAnalytics(records: AnalyticsRecord[], events: { id
   });
   const topEvents = events.map((event) => {
     const items = eventActivity.filter((r) => r.entityId === event.id);
-    return { ...event, views: count(items, "feed_view"), reach: uniquePeople(items.filter((r) => r.type === "feed_view")),
-      details: count(items, "detail_view"), saves: count(items, "save"), shares: count(items, "share") };
-  }).sort((a, b) => b.views - a.views || b.details - a.details || a.title.localeCompare(b.title));
+    return { ...event, views: count(items, "detail_view"), impressions: count(items, "feed_view"), reach: uniquePeople(items.filter((r) => r.type === "feed_view")),
+      saves: count(items, "save"), shares: count(items, "share") };
+  }).sort((a, b) => b.views - a.views || b.impressions - a.impressions || a.title.localeCompare(b.title));
   const sources = (["home", "category", "search", "stories", "direct"] as const).map((source) => ({ source,
     views: views.filter((r) => r.source === source).length,
-    details: eventActivity.filter((r) => r.type === "detail_view" && r.source === source).length }));
+    impressions: impressions.filter((r) => r.source === source).length }));
   const oldest = relevant.length ? Math.min(...relevant.map((r) => r.occurredAt)) : null;
   return {
-    views: views.length, reach: reached.size, detailOpens: count(eventActivity, "detail_view"),
+    views: views.length, impressions: impressions.length, reach: reached.size,
     saves: count(eventActivity, "save"), unsaves: count(eventActivity, "unsave"), shares: count(eventActivity, "share"), linkCopies: count(eventActivity, "link_copy"),
     engagementRate: reached.size ? engaged.size / reached.size : null,
     websiteClicks: count(eventActivity, "website_click"), directionsClicks: count(eventActivity, "directions_click"),

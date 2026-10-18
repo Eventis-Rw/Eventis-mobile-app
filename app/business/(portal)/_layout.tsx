@@ -12,6 +12,8 @@ type TabIconName = React.ComponentProps<typeof Feather>["name"];
 // for new organiser management areas.
 const PORTAL_TABS: { name: string; title: string; icon: TabIconName }[] = [
   { name: "dashboard", title: "Overview", icon: "grid" },
+  { name: "events", title: "My events", icon: "calendar" },
+  { name: "insights", title: "Insights", icon: "bar-chart-2" },
   { name: "organisation", title: "Organisation", icon: "briefcase" },
 ];
 
@@ -54,6 +56,7 @@ export default function OrganiserPortalLayout() {
           name={tab.name}
           options={{
             title: tab.title,
+            tabBarButtonTestID: `organiser-tab-${tab.name}`,
             tabBarIcon: ({ color, focused }) => (
               <View style={[styles.iconWrap, focused && { backgroundColor: palette.blueSoft }]}>
                 <Feather name={tab.icon} size={20} color={color} />

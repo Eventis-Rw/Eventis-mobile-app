@@ -85,15 +85,40 @@ test("analytics isolate owners, split source/periods, and calculate unique reach
   const r = (type, viewer = "customer", extra = {}) => ({ ...event(viewer), id: String(++seq), schemaVersion: 1, sessionId: "session", occurredAt: now, type, ...extra });
   const records = [r("feed_view"), r("feed_view"), r("feed_view", "other", { source: "search" }), r("detail_view"),
     r("save"), r("share"), r("link_copy"), r("unsave"), r("website_click"), r("directions_click"),
-    r("feed_view", "host"), r("feed_view", "outsider", { entityId: "not-owned" }), r("feed_view", "past", { occurredAt: now - 10 * 86400000 })];
+    r("feed_view", "host"), r("feed_view", "outsider", { entityId: "not-owned" }), r("feed_view", "past", { occurredAt: now - 10 * 86400000 }),
+    r("detail_view", "past", { occurredAt: now - 10 * 86400000 }), r("detail_view", "past2", { occurredAt: now - 10 * 86400000 })];
   const report = summarizeLocalAnalytics([...records, records[0]], [{ id: "e1", title: "Event" }], "host", 7, now);
-  assert.equal(report.views, 3); assert.equal(report.reach, 2); assert.equal(report.engagementRate, 0.5);
-  assert.equal(report.previousViews, 1); assert.equal(report.change, 2); assert.equal(report.detailOpens, 1);
+  assert.equal(report.views, 1); assert.equal(report.impressions, 3); assert.equal(report.reach, 2); assert.equal(report.engagementRate, 0.5);
+  assert.equal(report.previousViews, 2); assert.equal(report.change, -0.5);
   assert.equal(report.saves, 1); assert.equal(report.unsaves, 1); assert.equal(report.shares, 1); assert.equal(report.linkCopies, 1);
   assert.equal(report.websiteClicks, 1); assert.equal(report.directionsClicks, 1);
-  assert.equal(report.sources.find((s) => s.source === "search").views, 1);
-  assert.equal(report.daily.reduce((n, day) => n + day.views, 0), 3);
-  assert.equal(report.topEvents.length, 1); assert.equal(report.topEvents[0].views, 3);
+  assert.equal(report.sources.find((s) => s.source === "search").impressions, 1);
+  assert.equal(report.sources.find((s) => s.source === "search").views, 0);
+  assert.equal(report.daily.reduce((n, day) => n + day.views, 0), 1);
+  assert.equal(report.topEvents.length, 1); assert.equal(report.topEvents[0].views, 1);
+  assert.equal(report.topEvents[0].impressions, 3);
+});
+
+test("event rankings prefer qualified detail views over feed exposure and ignore seeded totals", () => {
+  const now = Date.now();
+  const records = Array.from({ length: 10 }, (_, index) => ({ ...event(), id: String(index), occurredAt: now }));
+  records.push({ ...event(), id: "detail", entityId: "e2", type: "detail_view", occurredAt: now });
+  const report = summarizeLocalAnalytics(records, [{ id: "e1", title: "Popular feed", viewCount: 9000 }, { id: "e2", title: "Opened event" }], "host", 7, now);
+  assert.equal(report.topEvents[0].id, "e2");
+  assert.equal(report.topEvents[1].views, 0);
+  assert.equal(report.impressions, 10); assert.equal(report.views, 1);
+});
+
+test("native shares count only successful handoffs, include an event link, and tolerate unavailable haptics", async () => {
+  let action = "shared"; let failure = false; let payload;
+  const { shareEvent } = load("utils/shareEvent.ts", (name) => name === "react-native" ? { Share: {
+    sharedAction: "shared", share: async (value) => { payload = value; if (failure) throw Error("Cancelled"); return { action }; },
+  } } : name === "expo-haptics" ? { ImpactFeedbackStyle: { Light: "light" }, impactAsync: async () => { throw Error("Unavailable"); } } : undefined);
+  const item = { id: "test-event", title: "Test event", date: "2026-10-20", location: "Venue", city: "Kigali" };
+  assert.equal(await shareEvent(item), true);
+  assert.match(payload.message, /https:\/\/eventis.app\/event\/test-event/);
+  action = "dismissed"; assert.equal(await shareEvent(item), false);
+  failure = true; assert.equal(await shareEvent(item), false);
 });
 
 test("story completion needs a recorded view and other owners/own previews never enter reports", () => {

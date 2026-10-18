@@ -66,10 +66,10 @@ export default function EventDetailScreen() {
 
   const event = getEventById(id ?? "");
   useEffect(() => {
-    if (!event || !focused || !foreground) return;
+    if (!event || !focused || !foreground || showShareModal || showOptionsModal) return;
     const timer = setTimeout(() => trackEvent(event, "detail_view", source), 1000);
     return () => clearTimeout(timer);
-  }, [event, focused, foreground, trackEvent, source]);
+  }, [event, focused, foreground, trackEvent, source, showShareModal, showOptionsModal]);
   const isSaved = user?.savedEvents.includes(id ?? "") ?? false;
   const palette = { accent: colors.primary };
   const timing = useMemo(() => (event ? getEventTiming(event) : null), [event]);

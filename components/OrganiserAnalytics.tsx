@@ -36,9 +36,9 @@ export function OrganiserAnalytics({ ownerId, events }: { ownerId: string; event
     {loading ? <ActivityIndicator accessibilityLabel="Loading analytics" color={palette.accent} /> : error ? <Pressable onPress={() => void refresh()} accessibilityRole="button" style={[styles.panel, surface]}><Text style={[styles.body, { color: palette.danger }]}>{error}</Text><Text style={{ color: palette.accent }}>Retry analytics</Text></Pressable> : <>
       {!data.hasActivity ? <View style={[styles.panel, surface]}><Text style={[styles.panelTitle, heading]}>Ready for your first insights</Text><Text style={[styles.body, muted]}>Activity will appear as other accounts view and interact with your content on this device. Your own previews are excluded.</Text></View> : null}
       <View style={styles.grid}>
-        {metric("Post views", number(data.views), "50% visible for 1 second")}
-        {metric("People reached", number(data.reach), "Unique accounts / guest browsers")}
-        {metric("Event detail opens", number(data.detailOpens), "Viewed for at least 1 second")}
+        {metric("Event views", number(data.views), "Details open for at least 1 second")}
+        {metric("Impressions", number(data.impressions), "Feed card 50% visible for 1 second")}
+        {metric("Feed reach", number(data.reach), "Unique accounts / guest browsers in the feed")}
         {metric("Engagement rate", percent(data.engagementRate), "Reached viewers who saved, shared or copied a link")}
       </View>
       <View style={[styles.panel, surface]}>
@@ -62,12 +62,12 @@ export function OrganiserAnalytics({ ownerId, events }: { ownerId: string; event
         {data.storyRows.length ? <><Pressable onPress={() => setShowStories((value) => !value)} accessibilityRole="button" accessibilityState={{ expanded: showStories }} style={styles.expand}><Text style={{ color: palette.accent }}>{showStories ? "Hide story breakdown" : "View story breakdown"}</Text></Pressable>
           {showStories ? data.storyRows.map((story, index) => <View key={story.id} style={[styles.breakdown, { borderTopColor: palette.line }]}><Text style={[styles.rowValue, heading]}>Story {index + 1}</Text><Text style={[styles.caption, muted]}>{story.views} views · {story.reach} viewers · {percent(story.completion)} completed · {story.exits} early closes · {story.eventClicks} event taps</Text></View>) : null}</> : null}
       </View>
-      <View style={[styles.panel, surface]}><Text accessibilityRole="header" style={[styles.panelTitle, heading]}>Discovery sources</Text><Text style={[styles.caption, muted]}>Post views / event detail opens</Text>
-        {data.sources.map((source) => row(SOURCE_LABELS[source.source], `${number(source.views)} / ${number(source.details)}`))}
+      <View style={[styles.panel, surface]}><Text accessibilityRole="header" style={[styles.panelTitle, heading]}>Discovery sources</Text><Text style={[styles.caption, muted]}>Impressions / event views</Text>
+        {data.sources.map((source) => row(SOURCE_LABELS[source.source], `${number(source.impressions)} / ${number(source.views)}`))}
       </View>
-      <View style={[styles.panel, surface]}><Text accessibilityRole="header" style={[styles.panelTitle, heading]}>Event performance</Text><Text style={[styles.caption, muted]}>Ranked by post views, then detail opens.</Text>
+      <View style={[styles.panel, surface]}><Text accessibilityRole="header" style={[styles.panelTitle, heading]}>Event performance</Text><Text style={[styles.caption, muted]}>Ranked by event views, then feed impressions.</Text>
         {!data.topEvents.length ? <Text style={[styles.body, muted]}>Publish an event to see its performance here.</Text> : (showAllEvents ? data.topEvents : data.topEvents.slice(0, 3)).map((event, index) => <Pressable key={event.id} onPress={() => router.push({ pathname: "/business/event/[id]", params: { id: event.id } })} accessibilityRole="button" accessibilityLabel={`Manage ${event.title}`} style={[styles.breakdown, { borderTopColor: palette.line }]}>
-          <Text style={[styles.rowValue, heading]}>{index + 1}. {event.title}</Text><Text style={[styles.caption, muted]}>{event.views} views · {event.reach} reached · {event.details} detail opens · {event.saves} saves · {event.shares} shares</Text>
+          <Text style={[styles.rowValue, heading]}>{index + 1}. {event.title}</Text><Text style={[styles.caption, muted]}>{event.views} views · {event.impressions} impressions · {event.reach} feed reach · {event.saves} saves · {event.shares} shares</Text>
         </Pressable>)}
         {data.topEvents.length > 3 ? <Pressable onPress={() => setShowAllEvents((value) => !value)} accessibilityRole="button" accessibilityState={{ expanded: showAllEvents }} style={styles.expand}><Text style={{ color: palette.accent }}>{showAllEvents ? "Show fewer events" : "View all event results"}</Text></Pressable> : null}
       </View>
