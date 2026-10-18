@@ -3,19 +3,19 @@ import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 
-export function PinInput({ value, onChangeText, error }: { value: string; onChangeText: (value: string) => void; error?: string }) {
+export function PinInput({ value, onChangeText, error, label = "5 digit PIN", placeholder = "Enter your PIN" }: { value: string; onChangeText: (value: string) => void; error?: string; label?: string; placeholder?: string }) {
   const colors = useColors();
   const [visible, setVisible] = useState(false);
   return (
     <View style={styles.group}>
-      <Text style={[styles.label, { color: colors.foreground }]}>5 digit PIN</Text>
+      <Text style={[styles.label, { color: colors.foreground }]}>{label}</Text>
       <View style={[styles.field, { backgroundColor: colors.input, borderColor: error ? colors.destructive : colors.border }]}>
         <Ionicons name="lock-closed-outline" size={18} color={colors.mutedForeground} />
         <TextInput value={value} onChangeText={(text) => onChangeText(text.replace(/\D/g, "").slice(0, 5))}
           secureTextEntry={!visible} keyboardType="number-pad" maxLength={5} autoCorrect={false}
-          autoComplete="off" accessibilityLabel="5 digit PIN" placeholder="Enter your PIN"
+          autoComplete="off" accessibilityLabel={label} placeholder={placeholder}
           placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground }]} />
-        <Pressable onPress={() => setVisible(!visible)} accessibilityRole="button" accessibilityLabel={visible ? "Hide PIN" : "Show PIN"} style={styles.toggle}>
+        <Pressable onPress={() => setVisible(!visible)} accessibilityRole="button" accessibilityLabel={`${visible ? "Hide" : "Show"} ${label}`} style={styles.toggle}>
           <Ionicons name={visible ? "eye-off-outline" : "eye-outline"} size={20} color={colors.mutedForeground} />
         </Pressable>
       </View>

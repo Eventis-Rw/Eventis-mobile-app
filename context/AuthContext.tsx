@@ -70,6 +70,9 @@ interface AuthContextType {
   pendingOTPContext: { purpose: "register" | "payment" | "chat"; eventId?: string } | null;
   login: (input: LoginInput) => Promise<void>;
   register: (data: SignupInput) => Promise<void>;
+  pendingSignup: { phone: string; username: string; verified: boolean } | null;
+  beginSignup: (data: Pick<SignupInput, "phone" | "username">) => Promise<void>;
+  verifySignupOTP: (code: string) => Promise<boolean>;
   completeOnboarding: () => Promise<void>;
   exploreDemo: () => Promise<void>;
   logout: () => Promise<void>;
@@ -146,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  const [pendingSignup, setPendingSignup] = useState<AuthContextType["pendingSignup"]>(null);
   const [pendingOTPContext, setPendingOTPContext] = useState<{
     purpose: "register" | "payment" | "chat";
     eventId?: string;
@@ -192,22 +196,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [persistUser]);
 
-  const register = useCallback(
-    async (regData: SignupInput) => {
-      if (!/^\d{5}$/.test(regData.pin)) throw new Error("Enter a 5 digit PIN.");
-      if (DEMO_AUTH) return;
-      const data = await api.post<{ token: string; user: User }>("/auth/register", regData);
-      await setToken(data.token);
-      await persistUser(data.user);
-    },
-    [persistUser]
-  );
+  const beginSignup = useCallback(async (input: Pick<SignupInput, "phone" | "username">) => {
+    setPendingSignup({ phone: input.phone, username: input.username, verified: false });
+    if (!DEMO_AUTH) await api.post("/auth/request-otp", { phone: input.phone, purpose: "register" });
+  }, []);
+
+  const verifySignupOTP = useCallback(async (code: string) => {
+    if (!pendingSignup || !/^\d{6}$/.test(code)) return false;
+    if (!DEMO_AUTH) await api.post("/auth/verify-otp", { phone: pendingSignup.phone, code });
+    setPendingSignup((current) => current === pendingSignup ? { ...current, verified: true } : current);
+    return true;
+  }, [pendingSignup]);
   const completeOnboarding = useCallback(async () => {
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setHasCompletedOnboarding(true);
   }, []);
   const logout = useCallback(async () => {
+    setPendingSignup(null);
     setUser(null);
     setHasCompletedOnboarding(false);
     await clearToken();
@@ -273,6 +279,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await setToken(data.token);
     await persistUser(data.user);
   }, [persistUser, signInWithPhoneSession]);
+
+  const register = useCallback(async (regData: SignupInput) => {
+    if (!pendingSignup?.verified || regData.phone !== pendingSignup.phone || regData.username !== pendingSignup.username) {
+      throw new Error("Verify your phone number before creating your PIN.");
+    }
+    if (!/^\d{5}$/.test(regData.pin)) throw new Error("Enter a 5 digit PIN.");
+    if (DEMO_AUTH) {
+      await signInWithPhoneSession(regData.phone, regData.username);
+    } else {
+      const data = await api.post<{ token: string; user: User }>("/auth/register", regData);
+      await setToken(data.token);
+      await persistUser(data.user);
+    }
+    setPendingSignup(null);
+  }, [pendingSignup, persistUser, signInWithPhoneSession]);
 
   const verifyOTP = useCallback(
     async (code: string, phone?: string, fullName?: string): Promise<boolean> => {
@@ -451,6 +472,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         pendingOTPContext,
         login,
         register,
+        pendingSignup,
+        beginSignup,
+        verifySignupOTP,
         completeOnboarding,
         exploreDemo,
         logout,
