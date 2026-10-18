@@ -1,10 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import {
   ImageBackground,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -15,7 +13,6 @@ import {
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
-import { useAuth } from "@/context/AuthContext";
 import { useBookings } from "@/context/BookingsContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
@@ -33,11 +30,9 @@ export default function BookingScreen() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
-  const { bookings, addBooking, hasBookedEvent } = useBookings();
+  const { bookings, hasBookedEvent } = useBookings();
   const { getEventById } = useEvents();
   const [quantity, setQuantity] = useState(1);
-  const [loading, setLoading] = useState(false);
 
   const event = getEventById(id ?? "");
   const isAlreadyBooked = hasBookedEvent(id ?? "");
@@ -47,37 +42,6 @@ export default function BookingScreen() {
     activeBooking && router.push({ pathname: "/ticket/[id]", params: { id: activeBooking.id } } as any);
 
   const total = (event?.price ?? 0) * quantity;
-
-  // Declared before any early return so the hook order never changes.
-  const handleConfirm = useCallback(async () => {
-    if (!user || !event) return;
-    // Paid bookings need a verified phone (also enforced on the event page).
-    if (event.isPaid && !user.isPhoneVerified) {
-      router.push({ pathname: "/verify-phone", params: { purpose: "payment", eventId: event.id } } as any);
-      return;
-    }
-    if (event.isPaid && event.organizerWebsite) {
-      Linking.openURL(event.organizerWebsite);
-      return;
-    }
-    setLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await addBooking({
-      eventId: event.id,
-      eventTitle: event.title,
-      eventDate: event.date,
-      eventTime: event.time,
-      eventLocation: event.location,
-      eventImage: event.image,
-      userId: user.id,
-      quantity,
-      totalPrice: total,
-      currency: event.currency,
-      isPaid: event.isPaid,
-    });
-    setLoading(false);
-    router.replace("/(tabs)/tickets" as any);
-  }, [user, event, quantity, total, addBooking, router]);
 
   // Ended events drop out of the public list, but their bookings still open here.
   if (!event) {
@@ -180,7 +144,7 @@ export default function BookingScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + (isAlreadyBooked ? 100 : 24) }]}
         showsVerticalScrollIndicator={false}
       >
         {existingBooking ? (
@@ -353,8 +317,7 @@ export default function BookingScreen() {
         </Animated.View>
       </ScrollView>
 
-      {/* CTA */}
-      <GlassSurface
+      {isAlreadyBooked ? <GlassSurface
         style={[
           styles.bottomBar,
           {
@@ -370,31 +333,22 @@ export default function BookingScreen() {
           style={[
             styles.confirmBtn,
             {
-              backgroundColor: isAlreadyBooked ? colors.success : colors.primary,
-              opacity: loading ? 0.8 : 1,
+              backgroundColor: colors.success,
             },
           ]}
-          onPress={isAlreadyBooked ? openTicket : handleConfirm}
-          disabled={loading}
+          onPress={openTicket}
+          accessibilityRole="button"
         >
           <Ionicons
-            name={isAlreadyBooked ? "qr-code-outline" : event.isPaid && event.organizerWebsite ? "open-outline" : "ticket"}
+            name="qr-code-outline"
             size={20}
             color="#fff"
           />
           <Text style={styles.confirmBtnText}>
-            {isAlreadyBooked
-              ? "View Ticket"
-              : loading
-              ? "Processing..."
-              : event.isPaid && event.organizerWebsite
-              ? "Continue to Payment"
-              : event.isPaid
-              ? "Confirm Booking"
-              : "Reserve Spot"}
+            View Ticket
           </Text>
         </Pressable>
-      </GlassSurface>
+      </GlassSurface> : null}
     </View>
   );
 }
