@@ -1,8 +1,8 @@
 import type { LoveGender } from "@/utils/findLoveProfile";
+import type { LoveAccountType, LoveMembership } from "@/utils/findLoveMembership";
 
-export type { LoveGender };
+export type { LoveAccountType, LoveGender, LoveMembership };
 export type LoveConnectionStatus = "none" | "pending" | "connected";
-export type LoveVisibility = "public" | "private";
 
 /**
  * The signed-in member's own FindLove profile. It belongs to their Eventis
@@ -13,7 +13,8 @@ export interface MyLoveProfile {
   gender: LoveGender;
   /** ISO date, "YYYY-MM-DD". Age is worked out from it, never stored. */
   dateOfBirth: string;
-  visibility: LoveVisibility;
+  /** Set by the server. Private only after confirmed payment; see utils/findLoveMembership.ts. */
+  membership: LoveMembership;
   /** Main photo first; may be empty. Free members can have up to FREE_LOVE_PHOTO_LIMIT. */
   photoUrls: string[];
   /** Optional extras, edited after creation. */
@@ -30,7 +31,11 @@ export interface MyLoveProfileInput {
   username: string;
   gender: LoveGender;
   dateOfBirth: string;
-  visibility: LoveVisibility;
+  /**
+   * Create only: the account type the member picked. Private starts as
+   * "pending_payment" and only becomes active once payment is confirmed.
+   */
+  accountType?: LoveAccountType;
   photoUrls: string[];
   bio?: string;
   interests?: string[];
@@ -52,7 +57,8 @@ export interface LoveProfile {
   bio: string;
   interests: string[];
   imageUrl: string;
-  visibility: LoveVisibility;
+  /** The member's actual account type (active membership), as the server reports it. */
+  accountType: LoveAccountType;
   isOnline: boolean;
   /** ISO timestamp of the last activity; drives "recently active". */
   lastActiveAt?: string;
@@ -77,7 +83,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     bio: "Live music, quiet coffee shops, and spontaneous weekend plans. Looking for someone kind and curious.",
     interests: ["Live music", "Coffee", "Travel"],
     imageUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=85",
-    visibility: "public",
+    accountType: "public",
     isOnline: true,
     neighborhood: "Kimihurura",
     active: true,
@@ -97,7 +103,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     bio: "Designing by day, discovering new food spots by night. Always ready for a good concert.",
     interests: ["Design", "Food", "Concerts"],
     imageUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=85",
-    visibility: "public",
+    accountType: "public",
     isOnline: false,
     neighborhood: "Remera",
     active: true,
@@ -116,7 +122,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     bio: "Usually outdoors with a camera. I value honest conversations, laughter, and people who love adventure.",
     interests: ["Photography", "Hiking", "Art"],
     imageUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=85",
-    visibility: "public",
+    accountType: "public",
     isOnline: true,
     neighborhood: "Muhoza",
     active: true,
@@ -135,7 +141,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     bio: "Tech enthusiast, runner, and amateur chef. Here for real connections and memorable experiences.",
     interests: ["Technology", "Running", "Cooking"],
     imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=900&q=85",
-    visibility: "public",
+    accountType: "public",
     isOnline: false,
     neighborhood: "Kicukiro",
     active: true,
@@ -153,7 +159,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     bio: "I create experiences for a living and collect great stories along the way. Dancing is always a yes.",
     interests: ["Dance", "Festivals", "Books"],
     imageUrl: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=85",
-    visibility: "public",
+    accountType: "public",
     isOnline: true,
     neighborhood: "Ngoma",
     active: true,
@@ -171,7 +177,7 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     bio: "Drawn to good architecture, lakeside sunsets, and conversations that run longer than expected.",
     interests: ["Architecture", "Jazz", "Travel"],
     imageUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=85",
-    visibility: "public",
+    accountType: "public",
     isOnline: false,
     neighborhood: "Gisenyi",
     active: true,
@@ -179,4 +185,37 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     verified: true,
     connectionStatus: "pending",
   },
+  {
+    // Private member: everyone can see her, but only Private members can connect.
+    id: "love-claire",
+    userId: "user-claire",
+    username: "claire.private",
+    name: "Claire",
+    gender: "Woman",
+    age: 31,
+    city: "Kigali",
+    occupation: "Lawyer",
+    bio: "Private profile. Weekend hikes and good books.",
+    interests: ["Hiking", "Books"],
+    imageUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=900&q=85",
+    accountType: "private",
+    isOnline: true,
+    neighborhood: "Remera",
+    active: true,
+    eligible: true,
+  },
 ];
+
+/**
+ * Demo only: minutes since each member was last active, applied when the demo
+ * list loads so presence ("Online now", "Active 3h ago") looks realistic.
+ */
+export const DEMO_LAST_ACTIVE_MINUTES: Record<string, number> = {
+  "love-amara": 1,
+  "love-ethan": 45,
+  "love-ineza": 3,
+  "love-noah": 60 * 30,
+  "love-keza": 0,
+  "love-samuel": 60 * 5,
+  "love-claire": 2,
+};

@@ -3,7 +3,10 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import type { LoveConnectionStatus, LoveProfile } from "@/constants/loveProfiles";
 import { useAuth } from "@/context/AuthContext";
 import { describeError } from "@/services/organiserService";
-import { fetchLoveProfiles, requestLoveConnection } from "@/services/findLoveService";
+import { fetchLoveProfiles, MembershipRequiredError, requestLoveConnection } from "@/services/findLoveService";
+
+/** "upgrade_required": the server says this connection needs a Private membership. */
+export type LoveConnectResult = "sent" | "upgrade_required" | "failed";
 
 interface LoveProfilesContextValue {
   profiles: LoveProfile[];
@@ -14,7 +17,7 @@ interface LoveProfilesContextValue {
   refreshProfiles: () => Promise<void>;
   getProfileById: (id: string) => LoveProfile | undefined;
   getConnectionStatus: (id: string) => LoveConnectionStatus;
-  sendConnectionRequest: (id: string) => Promise<void>;
+  sendConnectionRequest: (id: string) => Promise<LoveConnectResult>;
 }
 
 const LoveProfilesContext = createContext<LoveProfilesContextValue | null>(null);
@@ -46,7 +49,12 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
   }, [refreshProfiles]);
 
   const visibleProfiles = useMemo(
-    () => profiles.filter((profile) => profile.active && profile.eligible && profile.userId !== user?.id),
+    () =>
+      profiles.filter(
+        (profile) =>
+          // Public and Private members are both discoverable; membership only limits connecting.
+          profile.active && profile.eligible && profile.userId !== user?.id,
+      ),
     [profiles, user?.id],
   );
 
@@ -66,16 +74,19 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
     );
   }, []);
 
-  const sendConnectionRequest = useCallback(async (id: string) => {
+  const sendConnectionRequest = useCallback(async (id: string): Promise<LoveConnectResult> => {
     setError(null);
     setStatus(id, "pending");
     try {
-      setStatus(id, await requestLoveConnection(id));
+      setStatus(id, await requestLoveConnection(id, user?.id));
+      return "sent";
     } catch (err) {
       setStatus(id, "none");
+      if (err instanceof MembershipRequiredError) return "upgrade_required";
       setError(describeError(err, "Your request was not sent. Please try again."));
+      return "failed";
     }
-  }, [setStatus]);
+  }, [setStatus, user?.id]);
 
   const value = useMemo(
     () => ({

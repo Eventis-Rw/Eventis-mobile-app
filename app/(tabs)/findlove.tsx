@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
 import { Redirect, useRouter } from "expo-router";
 import React, { useCallback, useDeferredValue, useMemo, useState } from "react";
 import {
@@ -21,19 +20,23 @@ import { LoveProfileCard } from "@/components/LoveProfileCard";
 import { FindLoveIntro } from "@/components/love/FindLoveIntro";
 import { SectionState } from "@/components/profile/ProfileSection";
 import { Skeleton } from "@/components/SkeletonLoader";
-import type { LoveGender, LoveProfile } from "@/constants/loveProfiles";
+import { DiscoveryFilters } from "@/components/love/DiscoveryFilters";
+import { MembershipBadge } from "@/components/love/MembershipBadge";
+import { useLoveConnect } from "@/components/love/UpgradePrompt";
+import { PeopleStrip } from "@/components/love/PeopleStrip";
+import type { LoveProfile } from "@/constants/loveProfiles";
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { useColors } from "@/hooks/useColors";
 import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
-
-type GenderFilter = "All" | LoveGender;
-const FILTERS: { value: GenderFilter; label: string }[] = [
-  { value: "All", label: "All" },
-  { value: "Woman", label: "Women" },
-  { value: "Man", label: "Men" },
-];
+import {
+  activeFilterCount,
+  DEFAULT_DISCOVERY_FILTERS,
+  filterProfiles,
+  presenceOf,
+  type DiscoveryFilters as Filters,
+} from "@/utils/findLoveDiscovery";
 
 // The tab stays reachable by link, so it needs its own guard.
 export default function FindLoveTab() {
@@ -66,40 +69,35 @@ function FindLoveScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { profiles, isLoading, error, refreshProfiles, getConnectionStatus, sendConnectionRequest } = useLoveProfiles();
+  const { profiles, isLoading, error, refreshProfiles, getConnectionStatus } = useLoveProfiles();
+  const { myProfile, accountType } = useMyLoveProfile();
+  const { connect, upgradePrompt } = useLoveConnect();
   const [query, setQuery] = useState("");
-  const [genderFilter, setGenderFilter] = useState<GenderFilter>("All");
-  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+  const [filters, setFilters] = useState<Filters>(DEFAULT_DISCOVERY_FILTERS);
+  const deferredQuery = useDeferredValue(query);
   const columns = width >= 960 ? 3 : width >= 620 ? 2 : 1;
   const horizontalPadding = width < 360 ? 16 : 20;
   const headerTop = Platform.OS === "web" ? 68 : insets.top;
+  const myNeighborhood = myProfile?.neighborhood;
 
-  const filteredProfiles = useMemo(() => {
-    return profiles.filter((profile) => {
-      const matchesGender = genderFilter === "All" || profile.gender === genderFilter;
-      if (!matchesGender) return false;
-      if (!deferredQuery) return true;
-      const searchable = [
-        // Gender is left out on purpose: the Women/Men buttons handle it, and
-        // text matching would let "man" match "Woman".
-        profile.name,
-        profile.city,
-        profile.occupation,
-        profile.bio,
-        ...profile.interests,
-      ].join(" ").toLowerCase();
-      return searchable.includes(deferredQuery);
-    });
-  }, [profiles, genderFilter, deferredQuery]);
+  const filteredProfiles = useMemo(
+    () => filterProfiles(profiles, { ...filters, query: deferredQuery }),
+    [profiles, filters, deferredQuery],
+  );
+  const onlineProfiles = useMemo(() => profiles.filter((profile) => presenceOf(profile) === "online"), [profiles]);
+  const nearbyProfiles = useMemo(
+    () => (myNeighborhood ? filterProfiles(profiles, { ...DEFAULT_DISCOVERY_FILTERS, neighborhood: myNeighborhood }) : []),
+    [profiles, myNeighborhood],
+  );
+  const filtering = activeFilterCount(filters) > 0 || !!query.trim();
+  const clearFilters = () => {
+    setQuery("");
+    setFilters(DEFAULT_DISCOVERY_FILTERS);
+  };
 
   const openProfile = useCallback((profile: LoveProfile) => {
     router.push({ pathname: "/love/[id]", params: { id: profile.id } } as any);
   }, [router]);
-
-  const connect = useCallback((profile: LoveProfile) => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    void sendConnectionRequest(profile.id);
-  }, [sendConnectionRequest]);
 
   const renderProfile = useCallback(({ item }: { item: LoveProfile }) => (
     <View style={styles.cardCell}>
@@ -107,7 +105,7 @@ function FindLoveScreen() {
         profile={item}
         connectionStatus={getConnectionStatus(item.id)}
         onOpen={() => openProfile(item)}
-        onConnect={() => connect(item)}
+        onConnect={() => void connect(item)}
       />
     </View>
   ), [connect, getConnectionStatus, openProfile]);
@@ -159,14 +157,63 @@ function FindLoveScreen() {
             </View>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Meet people who enjoy the same events, places, and moments as you.</Text>
 
+            <Pressable
+              onPress={() => router.push(accountType === "private" ? ("/love/edit" as any) : { pathname: "/love/membership", params: { from: "upgrade" } } as any)}
+              style={[styles.myAccount, { backgroundColor: colors.card, borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel={accountType === "private" ? "Your account is Private" : "Your account is Public. Upgrade to Private"}
+            >
+              <Text style={[styles.myAccountText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                @{myProfile?.username}
+              </Text>
+              <MembershipBadge type={accountType} size="sm" />
+              <View style={styles.flexSpacer} />
+              {accountType === "public" ? (
+                <Text style={[styles.myAccountAction, { color: colors.primary }]}>Upgrade</Text>
+              ) : null}
+              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+            </Pressable>
+
             <FindLoveQuickActions />
+
+            {/* The strips are shortcuts; hide them while the member is searching or filtering. */}
+            {!filtering ? (
+              <>
+                <PeopleStrip
+                  title="Online now"
+                  subtitle={onlineProfiles.length ? `${onlineProfiles.length} online` : undefined}
+                  profiles={onlineProfiles}
+                  onOpen={openProfile}
+                />
+                <PeopleStrip
+                  title={myNeighborhood ? `Near you in ${myNeighborhood}` : "People near you"}
+                  profiles={nearbyProfiles}
+                  onOpen={openProfile}
+                  empty={
+                    <Pressable
+                      onPress={() => router.push("/love/edit" as any)}
+                      style={[styles.nearbyEmpty, { backgroundColor: colors.card, borderColor: colors.border }]}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="location-outline" size={20} color={colors.primary} />
+                      <Text style={[styles.nearbyEmptyText, { color: colors.mutedForeground }]}>
+                        {myNeighborhood
+                          ? `Nobody else in ${myNeighborhood} yet. Check back soon.`
+                          : "Add your neighbourhood to your profile to see people near you."}
+                      </Text>
+                      {!myNeighborhood ? <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} /> : null}
+                    </Pressable>
+                  }
+                />
+              </>
+            ) : null}
 
             <View style={[styles.searchBox, { backgroundColor: colors.input, borderColor: colors.border }]}>
               <Ionicons name="search-outline" size={20} color={colors.mutedForeground} />
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search name, city, interests..."
+                placeholder="Search username, area, interests..."
                 placeholderTextColor={colors.mutedForeground}
                 style={[styles.searchInput, { color: colors.foreground }]}
                 returnKeyType="search"
@@ -180,25 +227,7 @@ function FindLoveScreen() {
               ) : null}
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-              {FILTERS.map(({ value: filter, label }) => {
-                const selected = genderFilter === filter;
-                return (
-                  <Pressable
-                    key={filter}
-                    onPress={() => setGenderFilter(filter)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    style={[
-                      styles.filterChip,
-                      { backgroundColor: selected ? colors.primary : colors.card, borderColor: selected ? colors.primary : colors.border },
-                    ]}
-                  >
-                    <Text style={[styles.filterText, { color: selected ? "#FFFFFF" : colors.foreground }]}>{label}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <DiscoveryFilters filters={filters} onChange={setFilters} />
 
             {error ? (
               <View style={[styles.errorBanner, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
@@ -211,7 +240,7 @@ function FindLoveScreen() {
             ) : null}
 
             <View style={styles.resultsRow}>
-              <Text style={[styles.resultsTitle, { color: colors.foreground }]}>People to discover</Text>
+              <Text style={[styles.resultsTitle, { color: colors.foreground }]}>{filtering ? "Results" : "People to discover"}</Text>
               <Text style={[styles.resultsCount, { color: colors.mutedForeground }]}>{filteredProfiles.length} profiles</Text>
             </View>
           </View>
@@ -222,13 +251,14 @@ function FindLoveScreen() {
               <Ionicons name="heart-dislike-outline" size={32} color={colors.primary} />
             </View>
             <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No profiles found</Text>
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Try another name, interest, or filter.</Text>
-            <Pressable onPress={() => { setQuery(""); setGenderFilter("All"); }}>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Try another username, interest, or filter.</Text>
+            <Pressable onPress={clearFilters}>
               <Text style={[styles.resetText, { color: colors.primary }]}>Clear filters</Text>
             </Pressable>
           </View>
         }
       />
+      {upgradePrompt}
     </View>
   );
 }
@@ -236,6 +266,8 @@ function FindLoveScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   gateState: { paddingHorizontal: 16 },
+  nearbyEmpty: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 16, padding: 14 },
+  nearbyEmptyText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium" },
   listContent: { flexGrow: 1 },
   loadingContent: { width: "100%", maxWidth: 720, alignSelf: "center" },
   loadingGap: { marginTop: 18 },
@@ -244,6 +276,10 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 11, letterSpacing: 1.7, fontFamily: "Inter_700Bold" },
   title: { marginTop: 3, fontSize: 34, letterSpacing: -1.2, fontFamily: "Inter_700Bold" },
   heartMark: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  myAccount: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, minHeight: 44, marginTop: 14 },
+  myAccountText: { flexShrink: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  myAccountAction: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  flexSpacer: { flex: 1 },
   subtitle: { maxWidth: 560, fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: 7 },
   searchBox: { minHeight: 52, borderWidth: 1, borderRadius: 17, flexDirection: "row", alignItems: "center", paddingHorizontal: 15, marginTop: 20 },
   searchInput: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", paddingHorizontal: 10, paddingVertical: 12 },

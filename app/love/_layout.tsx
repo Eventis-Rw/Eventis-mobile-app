@@ -19,6 +19,7 @@ export default function LoveLayout() {
       }}
     >
       <Stack.Screen name="wallet" options={{ animation: "slide_from_bottom" }} />
+      <Stack.Screen name="membership" options={{ animation: "slide_from_bottom" }} />
     </Stack>
   );
 }

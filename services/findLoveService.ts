@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
+  DEMO_LAST_ACTIVE_MINUTES,
   MOCK_LOVE_PROFILES,
   type LoveConnectionStatus,
   type LoveGender,
@@ -9,6 +10,15 @@ import {
   type MyLoveProfileInput,
 } from "@/constants/loveProfiles";
 import { api, ApiError } from "@/utils/apiClient";
+import {
+  activeAccountType,
+  canConnect,
+  normalizeMembership,
+  PRIVATE_MEMBERSHIP_PLAN,
+  PUBLIC_MEMBERSHIP,
+  type LoveAccountType,
+  type LoveMembership,
+} from "@/utils/findLoveMembership";
 import {
   FREE_LOVE_PHOTO_LIMIT,
   isAdult,
@@ -72,6 +82,15 @@ function normalizeConnectionStatus(value: unknown): LoveConnectionStatus {
   return value === "pending" || value === "connected" ? value : "none";
 }
 
+/**
+ * Another member's account type. A membership object wins (checked for status
+ * and expiry); otherwise the server's accountType. Unknown means Public.
+ */
+function readAccountType(source: Record<string, unknown>): LoveAccountType {
+  if (source.membership && typeof source.membership === "object") return activeAccountType(normalizeMembership(source.membership));
+  return source.accountType === "private" || source.visibility === "private" ? "private" : "public";
+}
+
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -106,7 +125,7 @@ export function normalizeLoveProfile(value: unknown): LoveProfile | null {
     bio: String(source.bio ?? source.about ?? ""),
     interests: Array.isArray(source.interests) ? source.interests.map(String) : [],
     imageUrl: String(source.imageUrl ?? source.profileImage ?? source.avatarUrl ?? ""),
-    visibility: source.visibility === "private" ? "private" : "public",
+    accountType: readAccountType(source),
     isOnline: Boolean(source.isOnline ?? source.online ?? false),
     lastActiveAt: optionalString(source.lastActiveAt),
     neighborhood: optionalString(source.neighborhood ?? source.neighbourhood),
@@ -135,34 +154,63 @@ async function readDemoRequests(): Promise<string[]> {
 
 // INTEGRATION POINT: GET /api/v1/love-profiles -> LoveProfile[] | { profiles: LoveProfile[] }
 // connectionStatus on each row is the caller's status with that member.
+// lastActiveAt drives presence (utils/findLoveDiscovery.ts). accountType is the
+// member's ACTUAL type (active membership), so badges never show an unpaid Private.
 export async function fetchLoveProfiles(): Promise<LoveProfile[]> {
   if (!USE_FINDLOVE_API) {
     await wait(400);
     const requested = new Set(await readDemoRequests());
-    return MOCK_LOVE_PROFILES.map((profile) =>
-      requested.has(profile.id) && (profile.connectionStatus ?? "none") === "none"
-        ? { ...profile, connectionStatus: "pending" as const }
-        : profile,
-    );
+    const now = Date.now();
+    return MOCK_LOVE_PROFILES.map((profile) => {
+      const minutes = DEMO_LAST_ACTIVE_MINUTES[profile.id];
+      return {
+        ...profile,
+        lastActiveAt: minutes === undefined ? profile.lastActiveAt : new Date(now - minutes * 60000).toISOString(),
+        connectionStatus:
+          requested.has(profile.id) && (profile.connectionStatus ?? "none") === "none" ? "pending" : profile.connectionStatus,
+      };
+    });
   }
   const response = await withTimeout(api.get<unknown>("/api/v1/love-profiles"), PROFILES_TIMEOUT_MS);
   return readLoveProfilesResponse(response);
 }
 
+/** The member needs an active Private membership to connect with this person. */
+export class MembershipRequiredError extends Error {
+  constructor(message = "Connecting with Private members needs a Private membership.") {
+    super(message);
+    this.name = "MembershipRequiredError";
+  }
+}
+
 // INTEGRATION POINT: POST /api/v1/love-profiles/:id/connections -> { connectionStatus }
 // Returns the status the server recorded. Throws if the request was not saved.
-export async function requestLoveConnection(profileId: string): Promise<LoveConnectionStatus> {
+// The server MUST check membership (canConnect in utils/findLoveMembership.ts)
+// and answer 403 when the caller needs Private; that becomes MembershipRequiredError.
+export async function requestLoveConnection(profileId: string, userId?: string): Promise<LoveConnectionStatus> {
   if (!USE_FINDLOVE_API) {
     await wait(300);
+    // Play the server's part: check membership before saving the request.
+    const target = MOCK_LOVE_PROFILES.find((profile) => profile.id === profileId);
+    const me = userId ? normalizeMyLoveProfile((await readDemoMyProfiles())[userId]) : null;
+    if (target && !canConnect(activeAccountType(me?.membership), target.accountType).allowed) {
+      throw new MembershipRequiredError();
+    }
     const requested = await readDemoRequests();
     if (!requested.includes(profileId)) {
       await AsyncStorage.setItem(DEMO_REQUESTS_KEY, JSON.stringify([...requested, profileId]));
     }
     return "pending";
   }
-  const response = await api.post<{ connectionStatus?: unknown } | undefined>(
-    `/api/v1/love-profiles/${encodeURIComponent(profileId)}/connections`,
-  );
+  let response: { connectionStatus?: unknown } | undefined;
+  try {
+    response = await api.post<{ connectionStatus?: unknown } | undefined>(
+      `/api/v1/love-profiles/${encodeURIComponent(profileId)}/connections`,
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 403) throw new MembershipRequiredError(err.message || undefined);
+    throw err;
+  }
   const status = normalizeConnectionStatus(response?.connectionStatus);
   return status === "none" ? "pending" : status;
 }
@@ -235,7 +283,7 @@ export function normalizeMyLoveProfile(value: unknown): MyLoveProfile | null {
     username,
     gender,
     dateOfBirth,
-    visibility: source.visibility === "private" ? "private" : "public",
+    membership: normalizeMembership(source.membership),
     photoUrls: photos.map(String).filter(Boolean).slice(0, FREE_LOVE_PHOTO_LIMIT),
     bio: optionalString(source.bio),
     interests: Array.isArray(source.interests) ? source.interests.map(String).filter(Boolean) : [],
@@ -286,11 +334,16 @@ export async function saveMyLoveProfile(
     if (taken) throw new LoveProfileInputError("username", "That username is taken. Try another one.");
     const all = await readDemoMyProfiles();
     const now = new Date().toISOString();
+    // The profile form never changes membership. Choosing Private only starts
+    // it as "pending_payment" until payment is confirmed.
+    const existing = all[userId] ? normalizeMembership(all[userId].membership) : null;
+    const membership: LoveMembership =
+      existing ?? (input.accountType === "private" ? { type: "private", status: "pending_payment" } : PUBLIC_MEMBERSHIP);
     const saved: MyLoveProfile = {
       username,
       gender: input.gender,
       dateOfBirth: input.dateOfBirth,
-      visibility: input.visibility,
+      membership,
       photoUrls: input.photoUrls,
       ...cleanExtras(input),
       createdAt: all[userId]?.createdAt ?? now,
@@ -304,10 +357,9 @@ export async function saveMyLoveProfile(
     username,
     gender: input.gender.toLowerCase(),
     dateOfBirth: input.dateOfBirth,
-    visibility: input.visibility,
     photoUrls: input.photoUrls,
     ...cleanExtras(input),
-    ...(isNew ? { confirmedAdult: true } : {}),
+    ...(isNew ? { confirmedAdult: true, accountType: input.accountType ?? "public" } : {}),
   };
   try {
     const response = isNew
@@ -322,4 +374,76 @@ export async function saveMyLoveProfile(
     }
     throw err;
   }
+}
+// ---- Private membership checkout ---------------------------------------------
+
+export type LovePaymentMethod = "mtn_momo" | "airtel_money";
+
+/** Only used by the local demo so failure and cancel screens can be reviewed. */
+export type LoveDemoOutcome = "succeeded" | "failed" | "cancelled";
+
+export type LoveCheckoutResult =
+  | { status: "succeeded" }
+  /** Not confirmed yet; Private turns on once the server confirms the payment. */
+  | { status: "pending" }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+const PAYMENT_POLL_MS = 3000;
+const PAYMENT_POLL_LIMIT_MS = 2 * 60 * 1000;
+
+function readPayment(value: unknown): { paymentId: string; status: string; message?: string } {
+  const source = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return {
+    paymentId: String(source.paymentId ?? source.id ?? ""),
+    status: String(source.status ?? "pending"),
+    message: optionalString(source.message),
+  };
+}
+
+// INTEGRATION POINT:
+//   POST /api/v1/love-profiles/me/membership/checkout { planId, paymentMethod, payerPhone }
+//     -> { paymentId, status }
+//   GET  /api/v1/love-profiles/me/membership/payments/:paymentId
+//     -> { status: "pending" | "succeeded" | "failed" | "cancelled", message? }
+// Mobile money is asynchronous (the payer approves a USSD prompt), so the
+// payment is polled until it is final. The server activates Private only once
+// the payment provider confirms; callers then reload the profile to read the
+// membership rather than trusting this result.
+export async function buyPrivateMembership(
+  userId: string,
+  input: { paymentMethod: LovePaymentMethod; payerPhone: string },
+  demoOutcome: LoveDemoOutcome = "succeeded",
+): Promise<LoveCheckoutResult> {
+  if (!USE_FINDLOVE_API) {
+    await wait(2200);
+    if (demoOutcome === "failed") {
+      return { status: "failed", message: "The payment was declined. Check your balance and try again." };
+    }
+    if (demoOutcome === "cancelled") return { status: "cancelled" };
+    const all = await readDemoMyProfiles();
+    if (!all[userId]) return { status: "failed", message: "Create your FindLove profile first." };
+    const expiresAt = new Date(Date.now() + PRIVATE_MEMBERSHIP_PLAN.periodDays * 24 * 60 * 60 * 1000).toISOString();
+    const updated: MyLoveProfile = { ...all[userId], membership: { type: "private", status: "active", expiresAt } };
+    await AsyncStorage.setItem(DEMO_MY_PROFILE_KEY, JSON.stringify({ ...all, [userId]: updated }));
+    return { status: "succeeded" };
+  }
+
+  let payment = readPayment(
+    await api.post<unknown>("/api/v1/love-profiles/me/membership/checkout", { planId: PRIVATE_MEMBERSHIP_PLAN.id, ...input }),
+  );
+  const { paymentId } = payment;
+  const startedAt = Date.now();
+  // The checkout reply may already be final; otherwise poll until it is.
+  while (payment.status === "pending" && paymentId) {
+    if (Date.now() - startedAt >= PAYMENT_POLL_LIMIT_MS) return { status: "pending" };
+    await wait(PAYMENT_POLL_MS);
+    payment = readPayment(
+      await api.get<unknown>(`/api/v1/love-profiles/me/membership/payments/${encodeURIComponent(paymentId)}`),
+    );
+  }
+  if (payment.status === "succeeded") return { status: "succeeded" };
+  if (payment.status === "cancelled") return { status: "cancelled" };
+  if (payment.status === "pending") return { status: "pending" };
+  return { status: "failed", message: payment.message ?? "The payment did not go through. Please try again." };
 }

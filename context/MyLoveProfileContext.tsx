@@ -3,7 +3,15 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import type { MyLoveProfile, MyLoveProfileInput } from "@/constants/loveProfiles";
 import { useAuth } from "@/context/AuthContext";
 import { describeError } from "@/services/organiserService";
-import { fetchMyLoveProfile, saveMyLoveProfile } from "@/services/findLoveService";
+import {
+  buyPrivateMembership,
+  fetchMyLoveProfile,
+  saveMyLoveProfile,
+  type LoveCheckoutResult,
+  type LoveDemoOutcome,
+  type LovePaymentMethod,
+} from "@/services/findLoveService";
+import { activeAccountType, type LoveAccountType } from "@/utils/findLoveMembership";
 
 type Status = "idle" | "loading" | "ready" | "error";
 
@@ -17,6 +25,13 @@ interface MyLoveProfileContextValue {
   reload: () => Promise<void>;
   /** Creates or updates the profile. Throws so the form can show the error. */
   save: (input: MyLoveProfileInput) => Promise<MyLoveProfile>;
+  /** What the member actually has now: Private only with an active, paid membership. */
+  accountType: LoveAccountType;
+  /** Pays for Private, then reloads the profile so the membership comes from the server. */
+  buyPrivate: (
+    input: { paymentMethod: LovePaymentMethod; payerPhone: string },
+    demoOutcome?: LoveDemoOutcome,
+  ) => Promise<LoveCheckoutResult>;
 }
 
 const MyLoveProfileContext = createContext<MyLoveProfileContextValue | null>(null);
@@ -68,9 +83,27 @@ export function MyLoveProfileProvider({ children }: { children: React.ReactNode 
     [userId, myProfile],
   );
 
+  const buyPrivate = useCallback(
+    async (input: { paymentMethod: LovePaymentMethod; payerPhone: string }, demoOutcome?: LoveDemoOutcome) => {
+      if (!userId) throw new Error("Sign in to use FindLove.");
+      const result = await buyPrivateMembership(userId, input, demoOutcome);
+      if (result.status === "succeeded" || result.status === "pending") {
+        try {
+          setMyProfile(await fetchMyLoveProfile(userId));
+        } catch {
+          // The payment result stands; the next reload picks up the membership.
+        }
+      }
+      return result;
+    },
+    [userId],
+  );
+
+  const accountType = activeAccountType(myProfile?.membership);
+
   const value = useMemo(
-    () => ({ myProfile, status, error, ensureLoaded, reload, save }),
-    [myProfile, status, error, ensureLoaded, reload, save],
+    () => ({ myProfile, status, error, ensureLoaded, reload, save, accountType, buyPrivate }),
+    [myProfile, status, error, ensureLoaded, reload, save, accountType, buyPrivate],
   );
 
   return <MyLoveProfileContext.Provider value={value}>{children}</MyLoveProfileContext.Provider>;
