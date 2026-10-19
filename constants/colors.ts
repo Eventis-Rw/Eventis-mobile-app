@@ -56,4 +56,22 @@ const colors = {
   radius: 16,
 };
 
+/** FindLove's pink accent, applied on top of the Eventis palette inside /love. */
+export const lovePalette = {
+  light: {
+    tint: "#DB2777",
+    background: "#FDF2F7",
+    primary: "#DB2777",
+    accent: "#F472B6",
+    info: "#EC4899",
+  },
+  dark: {
+    tint: "#F0599A",
+    background: "#10060D",
+    primary: "#F0599A",
+    accent: "#F9A8D4",
+    info: "#F0599A",
+  },
+};
+
 export default colors;

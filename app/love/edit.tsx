@@ -80,7 +80,7 @@ export default function EditLoveProfileScreen() {
     };
   }, [values, touched, submitAttempted, serverErrors]);
 
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/findlove" as any));
+  const back = () => (router.canGoBack() ? router.back() : router.replace("/love" as any));
 
   if (!user || status === "error" || !myProfile || !values) {
     return (

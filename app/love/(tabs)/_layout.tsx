@@ -1,0 +1,121 @@
+import { Ionicons } from "@expo/vector-icons";
+import { Tabs, useRouter } from "expo-router";
+import React from "react";
+import { Platform, StyleSheet, View } from "react-native";
+
+import { FindLoveIntro } from "@/components/love/FindLoveIntro";
+import { LoveHeader } from "@/components/love/LoveHeader";
+import { SectionState } from "@/components/profile/ProfileSection";
+import { useAuth } from "@/context/AuthContext";
+import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
+import { useColors } from "@/hooks/useColors";
+import { describeAgeVerification, isAgeVerified } from "@/utils/findLoveAgeVerification";
+
+type IconName = keyof typeof Ionicons.glyphMap;
+
+// Members see the intro until they have a FindLove profile of their own, then
+// the ID age check until the server says they're verified. Only then the tabs.
+export default function FindLoveTabsLayout() {
+  const colors = useColors();
+  const { user } = useAuth();
+  const { myProfile, status, error, reload, verification } = useMyLoveProfile();
+  if (myProfile && isAgeVerified(verification)) return <LoveTabs />;
+  if (myProfile) return <AgeCheckGate />;
+  // Signed-out visitors also get the intro; "Get started" asks them to sign in.
+  if (status === "ready" || !user) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <LoveHeader title="FindLove" />
+        <FindLoveIntro />
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <LoveHeader title="FindLove" />
+      <View style={styles.gateState}>
+        {status === "error" ? (
+          <SectionState kind="error" message={error ?? "We couldn't load FindLove."} onRetry={() => void reload()} />
+        ) : (
+          <SectionState kind="loading" message="Opening FindLove…" />
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** Shown instead of FindLove until the member's ID age check is approved. */
+function AgeCheckGate() {
+  const colors = useColors();
+  const router = useRouter();
+  const { verification } = useMyLoveProfile();
+  const copy = describeAgeVerification(verification);
+  const rejected = verification.status === "rejected";
+  return (
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <LoveHeader title="FindLove" />
+      <View style={styles.gateState}>
+        <SectionState
+          kind="empty"
+          icon={rejected ? "hand-left-outline" : "shield-checkmark-outline"}
+          title={copy.title}
+          message={copy.message}
+          actionLabel={
+            rejected ? undefined : verification.status === "not_started" || verification.status === "failed" ? copy.action ?? undefined : "View status"
+          }
+          onAction={rejected ? undefined : () => router.push("/love/verify" as any)}
+        />
+      </View>
+    </View>
+  );
+}
+
+const TABS: { name: string; title: string; icon: IconName; activeIcon: IconName }[] = [
+  { name: "index", title: "Discover", icon: "compass-outline", activeIcon: "compass" },
+  { name: "messages", title: "Messages", icon: "chatbubbles-outline", activeIcon: "chatbubbles" },
+  { name: "me", title: "Me", icon: "person-circle-outline", activeIcon: "person-circle" },
+];
+
+function LoveTabs() {
+  const colors = useColors();
+  const insets = useAppSafeAreaInsets();
+  const isWeb = Platform.OS === "web";
+  return (
+    <Tabs
+      backBehavior="firstRoute"
+      screenOptions={{
+        headerShown: false,
+        sceneStyle: { backgroundColor: colors.background },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarLabelStyle: styles.label,
+        tabBarStyle: {
+          backgroundColor: colors.background,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.border,
+          height: isWeb ? 64 : 58 + insets.bottom,
+          paddingBottom: isWeb ? 8 : Math.max(insets.bottom - 4, 6),
+          paddingTop: 6,
+        },
+      }}
+    >
+      {TABS.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? tab.activeIcon : tab.icon} size={23} color={color} />,
+          }}
+        />
+      ))}
+    </Tabs>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  gateState: { flex: 1, paddingHorizontal: 16, paddingTop: 24 },
+  label: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+});

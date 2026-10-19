@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { MOCK_LOVE_PROFILES } from "@/constants/loveProfiles";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
@@ -19,12 +19,11 @@ export function FindLoveIntro() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
-  const top = Platform.OS === "web" ? 68 : insets.top;
 
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[styles.content, { paddingTop: top + 28, paddingBottom: (Platform.OS === "web" ? 110 : insets.bottom + 108) }]}
+      contentContainerStyle={[styles.content, { paddingTop: 12, paddingBottom: insets.bottom + 32 }]}
       showsVerticalScrollIndicator={false}
     >
       <MatchHero />

@@ -54,8 +54,9 @@ export default function LoveProfileDetailScreen() {
   const presence = presenceLabel(profile);
 
   function connect() {
-    if (pending || connected || !profile) return;
-    void connectWith(profile);
+    if (!profile || pending) return;
+    if (connected) router.push({ pathname: "/love/chat/[id]", params: { id: profile.id } } as any);
+    else void connectWith(profile);
   }
 
   return (
@@ -137,18 +138,18 @@ export default function LoveProfileDetailScreen() {
       <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 14) }]}>
         <Pressable
           onPress={connect}
-          disabled={pending || connected}
+          disabled={pending}
           accessibilityRole="button"
-          accessibilityLabel={`${pending ? "Connection pending with" : connected ? "Connected with" : "Connect with"} @${profile.username}`}
-          style={[styles.connectButton, { backgroundColor: pending || connected ? colors.secondary : colors.primary }]}
+          accessibilityLabel={`${pending ? "Connection pending with" : connected ? "Message" : "Connect with"} @${profile.username}`}
+          style={[styles.connectButton, { backgroundColor: pending ? colors.secondary : colors.primary }]}
         >
           <Ionicons
-            name={pending ? "time-outline" : connected ? "checkmark-circle-outline" : "heart"}
+            name={pending ? "time-outline" : connected ? "chatbubble-ellipses-outline" : "heart"}
             size={20}
-            color={pending || connected ? colors.mutedForeground : "#FFFFFF"}
+            color={pending ? colors.mutedForeground : "#FFFFFF"}
           />
-          <Text style={[styles.connectText, { color: pending || connected ? colors.mutedForeground : "#FFFFFF" }]}>
-            {pending ? "Request Pending" : connected ? "Connected" : `Connect with @${profile.username}`}
+          <Text style={[styles.connectText, { color: pending ? colors.mutedForeground : "#FFFFFF" }]}>
+            {pending ? "Request Pending" : connected ? `Message @${profile.username}` : `Connect with @${profile.username}`}
           </Text>
         </Pressable>
       </View>
