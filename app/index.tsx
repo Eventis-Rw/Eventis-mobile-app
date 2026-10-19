@@ -14,6 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useTheme } from "@/context/ThemeContext";
+import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 
 export default function AppEntryScreen() {
   const router = useRouter();
@@ -31,9 +32,15 @@ export default function AppEntryScreen() {
     hasNavigated.current = true;
 
     try {
-      const userCache = await AsyncStorage.getItem("@eventis_user_cache");
+      const [userCache, onboardingComplete, legacyOnboardingComplete] = await Promise.all([
+        AsyncStorage.getItem("@eventis_user_cache"),
+        AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY),
+        AsyncStorage.getItem("@eventis_onboarding_complete"),
+      ]);
       if (userCache) {
         router.replace("/(tabs)");
+      } else if (onboardingComplete === "true" || legacyOnboardingComplete === "true") {
+        router.replace("/auth/login");
       } else {
         router.replace("/onboarding" as any);
       }

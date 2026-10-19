@@ -69,7 +69,7 @@ function RootLayoutNav() {
     if (isAuthenticated && inAuthGroup) {
       router.replace("/(tabs)" as any);
     } else if (!isAuthenticated && !inAuthGroup && !inSplash) {
-      router.replace("/onboarding" as any);
+      router.replace("/auth/login" as any);
     }
   }, [isAuthenticated, isLoading, segments, router]);
 
@@ -83,9 +83,9 @@ function RootLayoutNav() {
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
       <Stack.Screen name="presentation-splash" options={{ gestureEnabled: false, animation: "fade" }} />
-      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
       <Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="auth" />
+      <Stack.Screen name="auth" options={{ animation: "none" }} />
       <Stack.Screen
         name="event/[id]"
         options={{ animation: "slide_from_right" }}
