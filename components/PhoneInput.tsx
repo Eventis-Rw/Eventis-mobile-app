@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -14,28 +14,34 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { useColors } from "@/hooks/useColors";
 
+// National limits exclude the country code and domestic trunk prefix.
+// Source: https://www.ituob.org/datasets/994-E.164C/
+const MAX_INTERNATIONAL_DIGITS = 15;
+const nationalDigitLimit = (country: Country) => Math.min(country.maxDigits, MAX_INTERNATIONAL_DIGITS - country.code.replace(/\D/g, "").length);
+
 export interface Country {
   name: string;
   code: string;
   flag: string;
+  maxDigits: number;
 }
 
 export const COUNTRIES: Country[] = [
-  { name: "Rwanda", code: "+250", flag: "🇷🇼" },
-  { name: "Kenya", code: "+254", flag: "🇰🇪" },
-  { name: "Uganda", code: "+256", flag: "🇺🇬" },
-  { name: "Tanzania", code: "+255", flag: "🇹🇿" },
-  { name: "Burundi", code: "+257", flag: "🇧🇮" },
-  { name: "DR Congo", code: "+243", flag: "🇨🇩" },
-  { name: "United States", code: "+1", flag: "🇺🇸" },
-  { name: "United Kingdom", code: "+44", flag: "🇬🇧" },
-  { name: "Canada", code: "+1", flag: "🇨🇦" },
-  { name: "South Africa", code: "+27", flag: "🇿🇦" },
-  { name: "Nigeria", code: "+234", flag: "🇳🇬" },
-  { name: "United Arab Emirates", code: "+971", flag: "🇦🇪" },
-  { name: "France", code: "+33", flag: "🇫🇷" },
-  { name: "Belgium", code: "+32", flag: "🇧🇪" },
-  { name: "Germany", code: "+49", flag: "🇩🇪" },
+  { name: "Rwanda", code: "+250", flag: "🇷🇼", maxDigits: 9 },
+  { name: "Kenya", code: "+254", flag: "🇰🇪", maxDigits: 10 },
+  { name: "Uganda", code: "+256", flag: "🇺🇬", maxDigits: 9 },
+  { name: "Tanzania", code: "+255", flag: "🇹🇿", maxDigits: 9 },
+  { name: "Burundi", code: "+257", flag: "🇧🇮", maxDigits: 8 },
+  { name: "DR Congo", code: "+243", flag: "🇨🇩", maxDigits: 9 },
+  { name: "United States", code: "+1", flag: "🇺🇸", maxDigits: 10 },
+  { name: "United Kingdom", code: "+44", flag: "🇬🇧", maxDigits: 10 },
+  { name: "Canada", code: "+1", flag: "🇨🇦", maxDigits: 10 },
+  { name: "South Africa", code: "+27", flag: "🇿🇦", maxDigits: 9 },
+  { name: "Nigeria", code: "+234", flag: "🇳🇬", maxDigits: 10 },
+  { name: "United Arab Emirates", code: "+971", flag: "🇦🇪", maxDigits: 9 },
+  { name: "France", code: "+33", flag: "🇫🇷", maxDigits: 9 },
+  { name: "Belgium", code: "+32", flag: "🇧🇪", maxDigits: 9 },
+  { name: "Germany", code: "+49", flag: "🇩🇪", maxDigits: 13 },
 ];
 
 export interface PhoneInputProps {
@@ -59,6 +65,11 @@ export function PhoneInput({
   const insets = useAppSafeAreaInsets();
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState("");
+  const maxDigits = nationalDigitLimit(selectedCountry);
+  const digits = value.replace(/\D/g, "").slice(0, maxDigits);
+  useEffect(() => {
+    if (value !== digits) onChangeText(digits);
+  }, [value, digits, onChangeText]);
 
   const filteredCountries = COUNTRIES.filter(
     (c) =>
@@ -103,8 +114,9 @@ export function PhoneInput({
           style={[styles.input, { color: colors.foreground }]}
           placeholder={placeholder}
           placeholderTextColor={colors.mutedForeground}
-          value={value}
-          onChangeText={onChangeText}
+          value={digits}
+          onChangeText={(text) => onChangeText(text.replace(/\D/g, "").slice(0, maxDigits))}
+          maxLength={maxDigits}
           keyboardType="phone-pad"
           autoCapitalize="none"
           autoCorrect={false}
@@ -112,6 +124,7 @@ export function PhoneInput({
         />
       </View>
 
+      <Text style={[styles.limitText, { color: colors.mutedForeground }]}>Up to {maxDigits} digits after {selectedCountry.code}</Text>
       {error ? (
         <Text style={[styles.errorText, { color: colors.destructive }]}>
           {error}
@@ -206,6 +219,7 @@ export function PhoneInput({
                   ]}
                   onPress={() => {
                     onSelectCountry(item);
+                    onChangeText(value.replace(/\D/g, "").slice(0, nationalDigitLimit(item)));
                     setModalVisible(false);
                     setSearch("");
                   }}
@@ -284,6 +298,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 6,
   },
+  limitText: { fontSize: 12, lineHeight: 18, marginTop: 6 },
   modalRoot: {
     flex: 1,
   },
