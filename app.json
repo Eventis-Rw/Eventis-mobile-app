@@ -27,7 +27,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow Eventis to attach photos to your messages.",
-          "cameraPermission": "Allow Eventis to take photos for your messages.",
+          "cameraPermission": "Allow Eventis to take photos for your messages and of your ID when you verify your age.",
           "microphonePermission": false
         }
       ],

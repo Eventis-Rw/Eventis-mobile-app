@@ -30,6 +30,7 @@ import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { useColors } from "@/hooks/useColors";
 import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
+import { describeAgeVerification, isAgeVerified } from "@/utils/findLoveAgeVerification";
 import {
   activeFilterCount,
   DEFAULT_DISCOVERY_FILTERS,
@@ -44,13 +45,15 @@ export default function FindLoveTab() {
   return <FindLoveGate />;
 }
 
-// Members see the intro until they have a FindLove profile of their own.
+// Members see the intro until they have a FindLove profile of their own, then
+// the ID age check until the server says they're verified.
 function FindLoveGate() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const { user } = useAuth();
-  const { myProfile, status, error, reload } = useMyLoveProfile();
-  if (myProfile) return <FindLoveScreen />;
+  const { myProfile, status, error, reload, verification } = useMyLoveProfile();
+  if (myProfile && isAgeVerified(verification)) return <FindLoveScreen />;
+  if (myProfile) return <AgeCheckGate />;
   // Signed-out visitors also get the intro; "Get started" asks them to sign in.
   if (status === "ready" || !user) return <FindLoveIntro />;
   return (
@@ -60,6 +63,30 @@ function FindLoveGate() {
       ) : (
         <SectionState kind="loading" message="Opening FindLove…" />
       )}
+    </View>
+  );
+}
+
+/** Shown instead of discovery until the member's ID age check is approved. */
+function AgeCheckGate() {
+  const colors = useColors();
+  const insets = useAppSafeAreaInsets();
+  const router = useRouter();
+  const { verification } = useMyLoveProfile();
+  const copy = describeAgeVerification(verification);
+  const rejected = verification.status === "rejected";
+  return (
+    <View style={[styles.root, styles.gateState, { backgroundColor: colors.background, paddingTop: (Platform.OS === "web" ? 68 : insets.top) + 24 }]}>
+      <SectionState
+        kind="empty"
+        icon={rejected ? "hand-left-outline" : "shield-checkmark-outline"}
+        title={copy.title}
+        message={copy.message}
+        actionLabel={
+          rejected ? undefined : verification.status === "not_started" || verification.status === "failed" ? copy.action ?? undefined : "View status"
+        }
+        onAction={rejected ? undefined : () => router.push("/love/verify" as any)}
+      />
     </View>
   );
 }

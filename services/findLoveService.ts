@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
 import {
   DEMO_LAST_ACTIVE_MINUTES,
@@ -10,6 +11,16 @@ import {
   type MyLoveProfileInput,
 } from "@/constants/loveProfiles";
 import { api, ApiError } from "@/utils/apiClient";
+import {
+  afterFailedRead,
+  AGE_VERIFICATION_NOT_STARTED,
+  canSubmitAgeVerification,
+  missingSides,
+  normalizeAgeVerification,
+  type AgeVerification,
+  type IdDocumentType,
+  type IdSide,
+} from "@/utils/findLoveAgeVerification";
 import {
   activeAccountType,
   canConnect,
@@ -52,6 +63,7 @@ export { MIN_LOVE_AGE };
 const PROFILES_TIMEOUT_MS = 5000;
 const DEMO_REQUESTS_KEY = "@eventis_love_demo_requests_v1";
 const DEMO_MY_PROFILE_KEY = "@eventis_love_demo_my_profile_v1";
+const DEMO_AGE_VERIFICATION_KEY = "@eventis_love_demo_age_verification_v1";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -318,7 +330,9 @@ export async function fetchMyLoveProfile(userId: string): Promise<MyLoveProfile 
 }
 
 // INTEGRATION POINT: POST (create) / PUT (update) /api/v1/love-profiles/me -> MyLoveProfile
-// The server must re-check age, username format and uniqueness (409 when taken).
+// The server must check username format and uniqueness (409 when taken), refuse
+// members whose ID isn't verified, and store the date of birth read from the ID
+// rather than the one sent here.
 // Photos are local URIs until the presigned upload endpoint exists (Q-B1).
 export async function saveMyLoveProfile(
   userId: string,
@@ -446,4 +460,137 @@ export async function buyPrivateMembership(
   if (payment.status === "cancelled") return { status: "cancelled" };
   if (payment.status === "pending") return { status: "pending" };
   return { status: "failed", message: payment.message ?? "The payment did not go through. Please try again." };
+}
+
+// ---- ID age check --------------------------------------------------------------
+
+/** Only used by the local demo so every result screen can be reviewed. */
+export type LoveDemoVerificationOutcome = "verified" | "unreadable" | "manual_review" | "rejected";
+
+export interface AgeVerificationInput {
+  documentType: IdDocumentType;
+  /** Local photo URIs, one per side the document needs. */
+  photos: Partial<Record<IdSide, string>>;
+  /** The member ticked "I'm 18 or older and this is my own ID". */
+  confirmedAdult: boolean;
+}
+
+const AGE_VERIFICATION_PATH = "/api/v1/users/me/age-verification";
+
+/** Demo date of birth "read" from the ID: 25 years ago today. */
+function demoDateOfBirth(now: Date): string {
+  const dob = new Date(now);
+  dob.setFullYear(now.getFullYear() - 25);
+  return dob.toISOString().slice(0, 10);
+}
+
+const VERIFICATION_POLL_MS = 3000;
+const VERIFICATION_POLL_LIMIT_MS = 60 * 1000;
+
+async function readDemoVerifications(): Promise<Record<string, AgeVerification>> {
+  try {
+    const stored = await AsyncStorage.getItem(DEMO_AGE_VERIFICATION_KEY);
+    const parsed: unknown = stored ? JSON.parse(stored) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, AgeVerification>) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeDemoVerification(userId: string, verification: AgeVerification): Promise<void> {
+  const all = await readDemoVerifications();
+  await AsyncStorage.setItem(DEMO_AGE_VERIFICATION_KEY, JSON.stringify({ ...all, [userId]: verification }));
+}
+
+// INTEGRATION POINT: GET /api/v1/users/me/age-verification
+//   -> { status, attemptsLeft, reason?, dateOfBirth?, updatedAt? }; 404 when nothing was sent yet.
+// Belongs to the Eventis account: it's checked before a FindLove profile exists.
+export async function fetchAgeVerification(userId: string): Promise<AgeVerification> {
+  if (!USE_FINDLOVE_API) {
+    await wait(150);
+    const stored = (await readDemoVerifications())[userId];
+    return stored ? normalizeAgeVerification(stored) : AGE_VERIFICATION_NOT_STARTED;
+  }
+  try {
+    return normalizeAgeVerification(
+      await withTimeout(api.get<unknown>(AGE_VERIFICATION_PATH), PROFILES_TIMEOUT_MS),
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return AGE_VERIFICATION_NOT_STARTED;
+    throw err;
+  }
+}
+
+/** A photo as a multipart part: a file reference on native, a Blob on web. */
+async function appendPhoto(form: FormData, field: string, uri: string): Promise<void> {
+  if (Platform.OS === "web") {
+    const blob = await (await fetch(uri)).blob();
+    form.append(field, blob, `${field}.jpg`);
+  } else {
+    form.append(field, { uri, name: `${field}.jpg`, type: "image/jpeg" } as unknown as Blob);
+  }
+}
+
+// INTEGRATION POINT:
+//   POST /api/v1/users/me/age-verification  multipart: documentType, confirmedAdult, front, back?
+//     -> { status, attemptsLeft, reason?, dateOfBirth? }
+// The server stores the photos securely, reads them (OCR), rejects anyone under
+// 18, counts failed reads and moves the case to manual review after the last
+// one. Once verified, the date of birth read from the ID is the one the profile
+// uses. The server must also refuse FindLove requests (including creating a
+// profile) from members who aren't verified; the app's gate is only for the UI.
+// A "processing" reply is polled for up to a minute, then returned as is.
+export async function submitAgeVerification(
+  userId: string,
+  input: AgeVerificationInput,
+  demoOutcome: LoveDemoVerificationOutcome = "verified",
+): Promise<AgeVerification> {
+  if (missingSides(input.documentType, input.photos).length) {
+    throw new Error("Add a photo of every side of your ID first.");
+  }
+  if (!input.confirmedAdult) throw new Error("Confirm that you are 18 or older and that this is your own ID.");
+
+  if (!USE_FINDLOVE_API) {
+    await wait(2500);
+    const current = await fetchAgeVerification(userId);
+    if (!canSubmitAgeVerification(current)) return current;
+    const now = new Date();
+    const next: AgeVerification =
+      demoOutcome === "verified"
+        ? { status: "verified", attemptsLeft: current.attemptsLeft, dateOfBirth: demoDateOfBirth(now), updatedAt: now.toISOString() }
+        : demoOutcome === "rejected"
+          ? {
+              status: "rejected",
+              attemptsLeft: current.attemptsLeft,
+              reason: "The date of birth on your ID shows you are under 18.",
+              updatedAt: now.toISOString(),
+            }
+          : demoOutcome === "manual_review"
+            ? { status: "manual_review", attemptsLeft: current.attemptsLeft, updatedAt: now.toISOString() }
+            : afterFailedRead(current, "We couldn't read your ID. Make sure the whole card is in the photo, in focus and without glare.", now);
+    await writeDemoVerification(userId, next);
+    return next;
+  }
+
+  const form = new FormData();
+  form.append("documentType", input.documentType);
+  form.append("confirmedAdult", "true");
+  for (const [side, uri] of Object.entries(input.photos)) {
+    if (uri) await appendPhoto(form, side, uri);
+  }
+  let verification = normalizeAgeVerification(await api.postForm<unknown>(AGE_VERIFICATION_PATH, form));
+  const startedAt = Date.now();
+  while (verification.status === "processing" && Date.now() - startedAt < VERIFICATION_POLL_LIMIT_MS) {
+    await wait(VERIFICATION_POLL_MS);
+    verification = await fetchAgeVerification(userId);
+  }
+  return verification;
+}
+
+/** Demo only: forget this account's ID check so every step can be tried again. */
+export async function resetDemoAgeVerification(userId: string): Promise<void> {
+  if (USE_FINDLOVE_API) return;
+  const all = await readDemoVerifications();
+  delete all[userId];
+  await AsyncStorage.setItem(DEMO_AGE_VERIFICATION_KEY, JSON.stringify(all));
 }
