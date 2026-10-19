@@ -359,7 +359,8 @@ function TabLayout() {
           name="findlove"
           listeners={{
             tabPress: (event) => {
-              if (!FIND_LOVE_ENABLED) event.preventDefault();
+              event.preventDefault();
+              if (FIND_LOVE_ENABLED) router.push("/love" as any);
             },
           }}
           options={{

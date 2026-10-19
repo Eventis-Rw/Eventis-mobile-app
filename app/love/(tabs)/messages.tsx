@@ -2,10 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import type { LoveActivity, LoveActivityType } from "@/context/FindLoveDemoContext";
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
+import { LoveHeader } from "@/components/love/LoveHeader";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useColors } from "@/hooks/useColors";
 
@@ -19,36 +19,32 @@ const ACTIVITY_ICONS: Record<LoveActivityType, keyof typeof Ionicons.glyphMap> =
   message: "chatbubble-ellipses-outline",
 };
 
-export default function LoveConnectionsScreen() {
+/** FindLove Messages tab: connected people (open a chat), pending requests and activity. */
+export default function LoveMessagesScreen() {
   const { tab } = useLocalSearchParams<{ tab?: ConnectionsTab }>();
   const router = useRouter();
   const colors = useColors();
-  const insets = useAppSafeAreaInsets();
   const initialTab = tab === "pending" || tab === "activity" ? tab : "connections";
   const [activeTab, setActiveTab] = useState<ConnectionsTab>(initialTab);
   const { connections, pendingProfiles, activity, tokenBalance } = useFindLoveDemo();
 
   const tabs = useMemo(() => [
-    { id: "connections" as const, label: "Connections", count: connections.length },
+    { id: "connections" as const, label: "Chats", count: connections.length },
     { id: "pending" as const, label: "Pending", count: pendingProfiles.length },
     { id: "activity" as const, label: "Activity", count: activity.length },
   ], [connections.length, pendingProfiles.length, activity.length]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.card }]} accessibilityRole="button" accessibilityLabel="Go back">
-          <Ionicons name="chevron-back" size={23} color={colors.foreground} />
-        </Pressable>
-        <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Your Love space</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Connections, requests, and activity</Text>
-        </View>
-        <Pressable onPress={() => router.push("/love/wallet" as any)} style={[styles.balanceBadge, { backgroundColor: colors.glass }]} accessibilityRole="button" accessibilityLabel={`${tokenBalance} gift tokens`}>
-          <Ionicons name="gift-outline" size={16} color={colors.primary} />
-          <Text style={[styles.balanceText, { color: colors.primary }]}>{tokenBalance}</Text>
-        </Pressable>
-      </View>
+      <LoveHeader
+        title="Messages"
+        right={
+          <Pressable onPress={() => router.push("/love/wallet" as any)} style={[styles.balanceBadge, { backgroundColor: colors.glass }]} accessibilityRole="button" accessibilityLabel={`${tokenBalance} gift tokens`}>
+            <Ionicons name="gift-outline" size={16} color={colors.primary} />
+            <Text style={[styles.balanceText, { color: colors.primary }]}>{tokenBalance}</Text>
+          </Pressable>
+        }
+      />
 
       <View style={[styles.tabs, { borderBottomColor: colors.border }]}>
         {tabs.map((item) => {
@@ -64,7 +60,7 @@ export default function LoveConnectionsScreen() {
         })}
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 30 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 30 }]} showsVerticalScrollIndicator={false}>
         {activeTab === "connections" ? (
           connections.length ? connections.map((profile) => (
             <View key={profile.id} style={[styles.connectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -147,11 +143,6 @@ function EmptyState({ icon, title, body, colors }: { icon: keyof typeof Ionicons
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 18, paddingBottom: 14, borderBottomWidth: 1 },
-  backButton: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  headerCopy: { flex: 1 },
-  title: { fontSize: 21, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   balanceBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11, height: 38, borderRadius: 14 },
   balanceText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   tabs: { flexDirection: "row", borderBottomWidth: 1, paddingHorizontal: 12 },

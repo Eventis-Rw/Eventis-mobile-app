@@ -19,9 +19,11 @@ interface LoveProfileCardProps {
   connectionStatus: LoveConnectionStatus;
   onOpen: () => void;
   onConnect: () => void;
+  /** Connected members get a Message button instead of Connect. */
+  onMessage: () => void;
 }
 
-function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect }: LoveProfileCardProps) {
+function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect, onMessage }: LoveProfileCardProps) {
   const colors = useColors();
   const [imageFailed, setImageFailed] = useState(false);
   const isPending = connectionStatus === "pending";
@@ -30,7 +32,8 @@ function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect
 
   function handleConnect(event: GestureResponderEvent) {
     event.stopPropagation();
-    if (!isPending && !isConnected) onConnect();
+    if (isConnected) onMessage();
+    else if (!isPending) onConnect();
   }
 
   return (
@@ -94,24 +97,24 @@ function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect
         </View>
         <Pressable
           onPress={handleConnect}
-          disabled={isPending || isConnected}
+          disabled={isPending}
           accessibilityRole="button"
-          accessibilityLabel={`${isPending ? "Connection pending with" : isConnected ? "Connected with" : "Connect with"} @${profile.username}`}
+          accessibilityLabel={`${isPending ? "Connection pending with" : isConnected ? "Message" : "Connect with"} @${profile.username}`}
           style={[
             styles.connectButton,
             {
-              backgroundColor: isPending || isConnected ? colors.secondary : colors.primary,
-              borderColor: isPending || isConnected ? colors.border : colors.primary,
+              backgroundColor: isPending ? colors.secondary : colors.primary,
+              borderColor: isPending ? colors.border : colors.primary,
             },
           ]}
         >
           <Ionicons
-            name={isPending ? "time-outline" : isConnected ? "checkmark-circle-outline" : "heart-outline"}
+            name={isPending ? "time-outline" : isConnected ? "chatbubble-ellipses-outline" : "heart-outline"}
             size={18}
-            color={isPending || isConnected ? colors.mutedForeground : "#FFFFFF"}
+            color={isPending ? colors.mutedForeground : "#FFFFFF"}
           />
-          <Text style={[styles.connectText, { color: isPending || isConnected ? colors.mutedForeground : "#FFFFFF" }]}>
-            {isPending ? "Pending" : isConnected ? "Connected" : "Connect"}
+          <Text style={[styles.connectText, { color: isPending ? colors.mutedForeground : "#FFFFFF" }]}>
+            {isPending ? "Pending" : isConnected ? "Message" : "Connect"}
           </Text>
         </Pressable>
       </View>

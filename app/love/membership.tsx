@@ -70,7 +70,7 @@ export default function LoveMembershipScreen() {
   }, [phase]);
 
   const leave = () => {
-    if (from === "create" || !router.canGoBack()) router.replace("/(tabs)/findlove" as any);
+    if (from === "create" || !router.canGoBack()) router.replace("/love" as any);
     else router.back();
   };
 
