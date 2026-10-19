@@ -50,10 +50,10 @@ export function OrganiserPortalHeader({
           onPress={leaveWorkspace}
           style={({ pressed }) => [styles.exitButton, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }, pressed && { backgroundColor: palette.surfacePressed }]}
           accessibilityRole="button"
-          accessibilityLabel="Return to personal Eventis"
+          accessibilityLabel="Return to Home"
         >
-          <Ionicons name="person-outline" size={16} color={palette.text} />
-          <Text style={[styles.exitText, { color: palette.text }]}>Personal</Text>
+          <Ionicons name="home-outline" size={16} color={palette.text} />
+          <Text style={[styles.exitText, { color: palette.text }]}>Home</Text>
         </Pressable>
       </View>
       <Text style={[styles.title, { color: palette.text }]} accessibilityRole="header">{title}</Text>
