@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Platform,
@@ -27,14 +27,11 @@ export default function OTPScreen() {
     phone?: string;
     fullName?: string;
   }>();
-  const { verifyOTP, clearOTPContext, completeOnboarding, signInWithPhoneSession, user, pendingSignup, verifySignupOTP, beginSignup } = useAuth();
-  const isSignup = purpose === "register";
+  const { verifyOTP, clearOTPContext, completeOnboarding, signInWithPhoneSession, user } = useAuth();
   const isCompleting = useRef(false);
   const [error, setError] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [canResend, setCanResend] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [message, setMessage] = useState("");
 
   useEffect(() => {
     if (countdown > 0) {
@@ -45,33 +42,20 @@ export default function OTPScreen() {
     }
   }, [countdown]);
 
-  const handleResend = useCallback(async () => {
-    if (!canResend || resending) return;
-    setResending(true);
-    setMessage("");
-    try {
-      if (isSignup && pendingSignup) await beginSignup(pendingSignup);
-      setCountdown(60);
-      setCanResend(false);
-      setError(false);
-    } catch { setMessage("Couldn't resend the code. Please try again."); }
-    finally { setResending(false); }
-  }, [canResend, resending, isSignup, pendingSignup, beginSignup]);
+  const handleResend = useCallback(() => {
+    if (!canResend) return;
+    setCountdown(60);
+    setCanResend(false);
+    setError(false);
+  }, [canResend]);
 
   const handleComplete = useCallback(
     async (code: string) => {
-      if (!new RegExp(`^\\d{${OTP_LENGTH}}$`).test(code) || isCompleting.current || resending) return;
+      if (!new RegExp(`^\\d{${OTP_LENGTH}}$`).test(code) || isCompleting.current) return;
       isCompleting.current = true;
       setError(false);
-      setMessage("");
 
       try {
-        if (isSignup) {
-          if (!(await verifySignupOTP(code))) throw new Error("Invalid verification code");
-          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-          router.replace("/auth/create-pin");
-          return;
-        }
         // Demo flow: any six digits create a local session immediately. Avoid
         // waiting on the verification API, which can strand an offline user.
         if (DEMO_AUTH) {
@@ -86,12 +70,11 @@ export default function OTPScreen() {
       } catch {
         isCompleting.current = false;
         setError(true);
-        setMessage("Couldn't verify the code. Check it and try again.");
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         setTimeout(() => setError(false), 1000);
       }
     },
-    [verifyOTP, clearOTPContext, completeOnboarding, fullName, phone, router, signInWithPhoneSession, user?.phone, isSignup, verifySignupOTP, resending]
+    [verifyOTP, clearOTPContext, completeOnboarding, fullName, phone, router, signInWithPhoneSession, user?.phone]
   );
 
   const purposeLabels: Record<string, { title: string; subtitle: string }> = {
@@ -114,9 +97,7 @@ export default function OTPScreen() {
   };
 
   const label = purposeLabels[purpose ?? "register"] ?? purposeLabels.register;
-  const contact = (isSignup ? pendingSignup?.phone : phone) ?? user?.phone ?? user?.email ?? "your phone number";
-
-  if (isSignup && !pendingSignup) return <Redirect href="/auth/register" />;
+  const contact = phone ?? user?.phone ?? user?.email ?? "your phone number";
 
   return (
     <View
@@ -145,7 +126,6 @@ export default function OTPScreen() {
         style={styles.content}
       >
         <Logo style={styles.brandLogo} variant="primary" />
-        {isSignup ? <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>Step 2 of 3 · Verify your phone</Text> : null}
 
         <Text style={[styles.title, { color: colors.foreground }]}>
           {label.title}
@@ -166,14 +146,13 @@ export default function OTPScreen() {
         <OTPInput length={OTP_LENGTH} onComplete={handleComplete} error={error} />
 
         <Text style={[styles.hintText, { color: colors.mutedForeground }]}>
-          {DEMO_AUTH ? `Demo: enter any 6 digits to ${isSignup ? "create your PIN" : "continue to Home"}` : "Enter the 6 digit code sent to your phone"}
+          {DEMO_AUTH ? "Demo: enter any 6 digits to continue to Home" : "Enter the 6 digit code sent to your phone"}
         </Text>
-        {message ? <Text accessibilityRole="alert" style={[styles.hintText, { color: colors.destructive }]}>{message}</Text> : null}
 
         <View style={styles.resendRow}>
           {canResend ? (
-            <Pressable onPress={handleResend} disabled={resending} accessibilityRole="button" accessibilityState={{ busy: resending }}>
-              <Text style={[styles.resendLink, { color: colors.primary }]}>{resending ? "Sending..." : "Resend code"}</Text>
+            <Pressable onPress={handleResend}>
+              <Text style={[styles.resendLink, { color: colors.primary }]}>Resend code</Text>
             </Pressable>
           ) : (
             <Text style={[styles.resendTimer, { color: colors.mutedForeground }]}>

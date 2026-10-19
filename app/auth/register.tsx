@@ -14,6 +14,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { PinInput } from "@/components/PinInput";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
 import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
@@ -26,16 +27,17 @@ export default function RegisterScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
-  const { beginSignup, pendingSignup } = useAuth();
+  const { register } = useAuth();
+  const [pin, setPin] = useState("");
   const [submitError, setSubmitError] = useState("");
-  const [fullName, setFullName] = useState(pendingSignup?.username ?? "");
-  const [selectedCountry, setSelectedCountry] = useState<Country>(() => COUNTRIES.find((country) => pendingSignup?.phone.startsWith(country.code)) ?? COUNTRIES[0]);
-  const [phone, setPhone] = useState(() => pendingSignup?.phone.slice(selectedCountry.code.length) ?? "");
-  const [errors, setErrors] = useState<{ fullName?: string; phone?: string }>({});
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // Rwanda (+250) default
+  const [errors, setErrors] = useState<{ fullName?: string; phone?: string; pin?: string }>({});
   const [loading, setLoading] = useState(false);
 
   const validate = () => {
-    const nextErrors: { fullName?: string; phone?: string } = {};
+    const nextErrors: { fullName?: string; phone?: string; pin?: string } = {};
     if (!fullName.trim() || fullName.trim().length < 2) {
       nextErrors.fullName = "Please enter your username";
     }
@@ -43,6 +45,7 @@ export default function RegisterScreen() {
     if (!cleanedPhone || cleanedPhone.length < 7) {
       nextErrors.phone = "Please enter a valid phone number";
     }
+    if (!/^\d{5}$/.test(pin)) nextErrors.pin = "Enter exactly 5 digits";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -51,10 +54,10 @@ export default function RegisterScreen() {
     if (loading || !validate()) return;
     setLoading(true);
     setSubmitError("");
-    const input = { phone: `${selectedCountry.code}${phone.replace(/\D/g, "")}`, username: fullName.trim() };
+    const input = { phone: `${selectedCountry.code}${phone.replace(/\D/g, "")}`, username: fullName.trim(), pin };
     try {
-      await beginSignup(input);
-      router.push({ pathname: "/auth/otp", params: { purpose: "register" } });
+      await register(input);
+      router.push({ pathname: "/auth/otp", params: { purpose: "register", phone: input.phone, fullName: input.username } });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Could not create your account. Please try again.");
     } finally { setLoading(false); }
@@ -90,7 +93,7 @@ export default function RegisterScreen() {
             style={styles.brandSection}
           >
             <Logo style={styles.brandLogo} />
-          <Text style={[styles.kicker, { color: colors.primary }]}>Step 1 of 3 · Your details</Text>
+          <Text style={[styles.kicker, { color: colors.primary }]}>Join Eventis</Text>
           <Text style={[styles.title, { color: colors.foreground }]}>
             Create an account
           </Text>
@@ -161,6 +164,7 @@ export default function RegisterScreen() {
           />
         </Animated.View>
 
+        <PinInput value={pin} onChangeText={(value) => { setPin(value); setErrors((e) => ({ ...e, pin: undefined })); }} error={errors.pin} />
         {submitError ? <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive }}>{submitError}</Text> : null}
 
         {/* Submit Button */}
