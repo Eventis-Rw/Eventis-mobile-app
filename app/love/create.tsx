@@ -1,20 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { LoveScreenShell } from "@/components/love/LoveScreenShell";
-import { LoveProfileForm, Section, type LoveProfileFormErrors, type LoveProfileFormValues } from "@/components/love/LoveProfileForm";
+import { LoveProfileForm, type LoveProfileFormErrors, type LoveProfileFormValues } from "@/components/love/LoveProfileForm";
 import { InlineError, SectionState } from "@/components/profile/ProfileSection";
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
@@ -22,29 +13,19 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import { describeError } from "@/services/organiserService";
 import { LoveProfileInputError } from "@/services/findLoveService";
-import {
-  isAdult,
-  MIN_LOVE_AGE,
-  parseDateOfBirth,
-  validateLoveGender,
-  validateLoveUsername,
-} from "@/utils/findLoveProfile";
+import { isAgeVerified } from "@/utils/findLoveAgeVerification";
+import { isAdult, MIN_LOVE_AGE, validateLoveGender, validateLoveUsername } from "@/utils/findLoveProfile";
 
-type Step = "age" | "underage" | "profile";
-
-/** Create a FindLove profile: 18+ check first, then the profile itself. */
+/**
+ * Create a FindLove profile. The ID age check (app/love/verify.tsx) comes
+ * first; the date of birth is the one read from the ID, never typed here.
+ */
 export default function CreateLoveProfileScreen() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { myProfile, status, save } = useMyLoveProfile();
-
-  const [step, setStep] = useState<Step>("age");
-  const [dob, setDob] = useState({ day: "", month: "", year: "" });
-  const [confirmed, setConfirmed] = useState(false);
-  const [ageError, setAgeError] = useState<string | null>(null);
-  const [dateOfBirth, setDateOfBirth] = useState("");
+  const { myProfile, status, save, verification } = useMyLoveProfile();
 
   const [values, setValues] = useState<LoveProfileFormValues>({ username: "", accountType: "public", photoUrls: [] });
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -118,25 +99,12 @@ export default function CreateLoveProfileScreen() {
     );
   }
 
-  const checkAge = () => {
-    const parsed = parseDateOfBirth(dob.day, dob.month, dob.year);
-    if ("error" in parsed) {
-      setAgeError(parsed.error);
-      return;
-    }
-    if (!isAdult(parsed.value)) {
-      if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      setStep("underage");
-      return;
-    }
-    if (!confirmed) {
-      setAgeError(`Tick the box to confirm you are ${MIN_LOVE_AGE} or older.`);
-      return;
-    }
-    setAgeError(null);
-    setDateOfBirth(parsed.value);
-    setStep("profile");
-  };
+  // Step 1 is the ID check; this screen opens again once it's verified.
+  if (!isAgeVerified(verification)) {
+    return <Redirect href={{ pathname: "/love/verify", params: { from: "create" } } as any} />;
+  }
+
+  const dateOfBirth = verification.dateOfBirth ?? "";
 
   const submit = async () => {
     setSubmitAttempted(true);
@@ -166,10 +134,7 @@ export default function CreateLoveProfileScreen() {
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (err instanceof LoveProfileInputError) {
-        if (err.field === "dateOfBirth" || err.field === "confirmedAdult") {
-          setStep("age");
-          setAgeError(err.message);
-        } else if (err.field === "username" || err.field === "photoUrls") {
+        if (err.field === "username" || err.field === "photoUrls") {
           setServerErrors({ [err.field]: err.message });
         } else {
           setSaveError(err.message);
@@ -182,7 +147,9 @@ export default function CreateLoveProfileScreen() {
     }
   };
 
-  if (step === "underage") {
+  // The server rejects under-18 IDs; this is a safety net in case a verified
+  // reply carries no usable date of birth.
+  if (!isAdult(dateOfBirth)) {
     return (
       <LoveScreenShell title="FindLove" onBack={back}>
         <View style={styles.blocked}>
@@ -205,58 +172,9 @@ export default function CreateLoveProfileScreen() {
     );
   }
 
-  if (step === "age") {
-    const setPart = (key: keyof typeof dob, text: string) => {
-      setAgeError(null);
-      setDob((d) => ({ ...d, [key]: text.replace(/\D/g, "") }));
-    };
-    return (
-      <LoveScreenShell title="Create profile" onBack={back} stepLabel="Step 1 of 2">
-        <Text style={[styles.lead, { color: colors.foreground }]}>First, confirm your age</Text>
-        <Text style={[styles.leadText, { color: colors.mutedForeground }]}>
-          FindLove is only for people aged {MIN_LOVE_AGE} and over. Your date of birth is used to show your age; it is
-          not shown in full to other members.
-        </Text>
-
-        <Section title="Date of birth">
-          <View style={styles.dobRow}>
-            <DobInput label="Day" placeholder="DD" maxLength={2} value={dob.day} onChangeText={(t) => setPart("day", t)} />
-            <DobInput label="Month" placeholder="MM" maxLength={2} value={dob.month} onChangeText={(t) => setPart("month", t)} />
-            <DobInput label="Year" placeholder="YYYY" maxLength={4} value={dob.year} onChangeText={(t) => setPart("year", t)} wide />
-          </View>
-        </Section>
-
-        <Pressable
-          onPress={() => {
-            setAgeError(null);
-            setConfirmed((c) => !c);
-          }}
-          style={[styles.confirmRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: confirmed }}
-        >
-          <Ionicons name={confirmed ? "checkbox" : "square-outline"} size={24} color={confirmed ? colors.primary : colors.mutedForeground} />
-          <Text style={[styles.confirmText, { color: colors.foreground }]}>
-            I confirm I am {MIN_LOVE_AGE} or older and the date above is my real date of birth.
-          </Text>
-        </Pressable>
-
-        {ageError ? <InlineError message={ageError} /> : null}
-
-        <Pressable
-          onPress={checkAge}
-          style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-          accessibilityRole="button"
-        >
-          <Text style={styles.primaryText}>Continue</Text>
-        </Pressable>
-      </LoveScreenShell>
-    );
-  }
-
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <LoveScreenShell title="Create profile" onBack={() => setStep("age")} stepLabel="Step 2 of 2">
+      <LoveScreenShell title="Create profile" onBack={back} stepLabel="Step 2 of 2">
         {saveError ? <InlineError message={saveError} /> : null}
         <LoveProfileForm
           values={values}
@@ -291,37 +209,8 @@ export default function CreateLoveProfileScreen() {
   );
 }
 
-function DobInput({
-  label,
-  wide,
-  ...props
-}: { label: string; wide?: boolean } & React.ComponentProps<typeof TextInput>) {
-  const colors = useColors();
-  return (
-    <View style={[styles.dobCell, wide && styles.dobWide]}>
-      <Text style={[styles.dobLabel, { color: colors.mutedForeground }]}>{label}</Text>
-      <TextInput
-        {...props}
-        keyboardType="number-pad"
-        placeholderTextColor={colors.mutedForeground}
-        accessibilityLabel={`Birth ${label.toLowerCase()}`}
-        style={[styles.dobInput, { color: colors.foreground, backgroundColor: colors.input, borderColor: colors.border }]}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  lead: { fontSize: 24, letterSpacing: -0.6, fontFamily: "Inter_700Bold" },
-  leadText: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: -8 },
-  dobRow: { flexDirection: "row", gap: 10 },
-  dobCell: { flex: 1, gap: 6 },
-  dobWide: { flex: 1.6 },
-  dobLabel: { fontSize: 12, fontFamily: "Inter_500Medium", paddingHorizontal: 4 },
-  dobInput: { minHeight: 50, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, fontSize: 17, fontFamily: "Inter_600SemiBold", textAlign: "center" },
-  confirmRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, borderWidth: 1, padding: 14 },
-  confirmText: { flex: 1, fontSize: 14, lineHeight: 20, fontFamily: "Inter_500Medium" },
   primaryBtn: { minHeight: 52, borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
   primaryText: { color: "#FFFFFF", fontSize: 16, fontFamily: "Inter_600SemiBold" },
   blocked: { alignItems: "center", paddingVertical: 40, gap: 14 },
