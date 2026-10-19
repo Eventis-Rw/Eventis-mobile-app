@@ -29,6 +29,10 @@ const api = {
     apiCalls.push(["POST", p, body]);
     return apiHandler("POST", p, body);
   },
+  postForm: (p, form) => {
+    apiCalls.push(["POST_FORM", p, form]);
+    return apiHandler("POST_FORM", p, form);
+  },
   put: (p, body) => {
     apiCalls.push(["PUT", p, body]);
     return apiHandler("PUT", p, body);
@@ -56,6 +60,7 @@ function load(relPath, env, resolve) {
 const rules = load("utils/findLoveProfile.ts", {}, () => undefined);
 const profiles = load("constants/loveProfiles.ts", {}, () => undefined);
 const membership = load("utils/findLoveMembership.ts", {}, () => undefined);
+const ageCheck = load("utils/findLoveAgeVerification.ts", {}, () => undefined);
 function loadService(env) {
   return load("services/findLoveService.ts", env, (name) => {
     if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
@@ -63,6 +68,8 @@ function loadService(env) {
     if (name === "@/utils/apiClient") return { api, ApiError };
     if (name === "@/utils/findLoveProfile") return rules;
     if (name === "@/utils/findLoveMembership") return membership;
+    if (name === "@/utils/findLoveAgeVerification") return ageCheck;
+    if (name === "react-native") return { Platform: { OS: "ios" } };
   });
 }
 
@@ -502,5 +509,99 @@ test("real mode: checkout returns the payment's final status", async () => {
     throw new ApiError(502, "Payment provider down");
   };
   await assert.rejects(real.buyPrivateMembership("u1", { paymentMethod: "mtn_momo", payerPhone: "+250788000000" }), /provider down/);
+  assert.equal(stored.size, 0, "real mode never writes demo storage");
+});
+
+// ---- ID age check ----
+
+const idPhotos = {
+  documentType: "national_id",
+  photos: { front: "file:///front.jpg", back: "file:///back.jpg" },
+  confirmedAdult: true,
+};
+
+test("age check replies never default to verified and attempts stay in range", () => {
+  assert.deepEqual(ageCheck.normalizeAgeVerification(undefined), ageCheck.AGE_VERIFICATION_NOT_STARTED);
+  assert.equal(ageCheck.normalizeAgeVerification({ status: "approved" }).status, "not_started");
+  assert.equal(ageCheck.normalizeAgeVerification({ status: "verified" }).status, "verified");
+  assert.equal(ageCheck.normalizeAgeVerification({ status: "failed", attemptsLeft: 99 }).attemptsLeft, ageCheck.MAX_AUTOMATIC_ATTEMPTS);
+  assert.equal(ageCheck.normalizeAgeVerification({ status: "failed", attemptsLeft: -2 }).attemptsLeft, 0);
+  assert.equal(ageCheck.normalizeAgeVerification({ status: "failed", attemptsLeft: "x" }).attemptsLeft, 0);
+  assert.equal(ageCheck.isAgeVerified(null), false);
+  assert.equal(ageCheck.normalizeAgeVerification({ status: "verified", dateOfBirth: "2000-02-29" }).dateOfBirth, "2000-02-29");
+  assert.equal(ageCheck.normalizeAgeVerification({ status: "verified", dateOfBirth: "29/02/2000" }).dateOfBirth, undefined);
+});
+
+test("a national ID needs front and back; a passport only its photo page", () => {
+  assert.deepEqual(ageCheck.missingSides("national_id", { front: "a" }), ["back"]);
+  assert.deepEqual(ageCheck.missingSides("national_id", { front: "a", back: "b" }), []);
+  assert.deepEqual(ageCheck.missingSides("passport", {}), ["front"]);
+});
+
+test("failed reads use up attempts, then the case goes to manual review", () => {
+  let state = ageCheck.AGE_VERIFICATION_NOT_STARTED;
+  for (let left = ageCheck.MAX_AUTOMATIC_ATTEMPTS - 1; left > 0; left--) {
+    state = ageCheck.afterFailedRead(state, "Blurry");
+    assert.equal(state.status, "failed");
+    assert.equal(state.attemptsLeft, left);
+    assert.equal(ageCheck.canSubmitAgeVerification(state), true);
+  }
+  state = ageCheck.afterFailedRead(state, "Blurry");
+  assert.equal(state.status, "manual_review");
+  assert.equal(ageCheck.canSubmitAgeVerification(state), false);
+  assert.equal(ageCheck.describeAgeVerification({ status: "rejected", attemptsLeft: 0 }).action, null);
+});
+
+test("demo: the ID check is per account and follows the chosen outcome", async () => {
+  assert.equal((await demo.fetchAgeVerification("u1")).status, "not_started");
+  assert.equal((await demo.submitAgeVerification("u1", idPhotos, "unreadable")).status, "failed");
+  assert.equal((await demo.fetchAgeVerification("u1")).attemptsLeft, ageCheck.MAX_AUTOMATIC_ATTEMPTS - 1);
+  assert.equal((await demo.fetchAgeVerification("u2")).status, "not_started", "another account is unaffected");
+  const verified = await demo.submitAgeVerification("u1", idPhotos, "verified");
+  assert.equal(verified.status, "verified");
+  assert.equal(rules.isAdult(verified.dateOfBirth), true, "a verified demo ID carries an adult date of birth");
+
+  const rejected = await demo.submitAgeVerification("u2", idPhotos, "rejected");
+  assert.equal(rejected.status, "rejected");
+  assert.equal((await demo.submitAgeVerification("u2", idPhotos, "verified")).status, "rejected", "a final no can't be retried");
+
+  await demo.resetDemoAgeVerification("u2");
+  assert.equal((await demo.fetchAgeVerification("u2")).status, "not_started");
+  assert.equal(apiCalls.length, 0, "demo mode never calls the API");
+});
+
+test("missing ID photos or a missing 18+ confirmation are refused before anything is sent", async () => {
+  await assert.rejects(
+    real.submitAgeVerification("u1", { documentType: "national_id", photos: { front: "f" }, confirmedAdult: true }),
+    /every side/,
+  );
+  await assert.rejects(real.submitAgeVerification("u1", { ...idPhotos, confirmedAdult: false }), /18 or older/);
+  assert.equal(apiCalls.length, 0);
+});
+
+test("real mode: the check belongs to the account; 404 means not started; photos go as multipart", async () => {
+  apiHandler = async () => {
+    throw new ApiError(404, "Not found");
+  };
+  assert.equal((await real.fetchAgeVerification("u1")).status, "not_started");
+
+  assert.equal(apiCalls[0][1], "/api/v1/users/me/age-verification");
+
+  apiHandler = async (method) =>
+    method === "POST_FORM" ? { status: "verified", attemptsLeft: 3, dateOfBirth: "1999-04-02" } : undefined;
+  const result = await real.submitAgeVerification("u1", idPhotos);
+  assert.equal(result.status, "verified");
+  assert.equal(result.dateOfBirth, "1999-04-02");
+  const [method, p, form] = apiCalls[1];
+  assert.equal(method, "POST_FORM");
+  assert.equal(p, "/api/v1/users/me/age-verification");
+  assert.equal(form.get("documentType"), "national_id");
+  assert.equal(form.get("confirmedAdult"), "true");
+  assert.ok(form.get("front") && form.get("back"));
+
+  apiHandler = async () => {
+    throw new ApiError(500, "OCR down");
+  };
+  await assert.rejects(real.submitAgeVerification("u1", idPhotos), /OCR down/);
   assert.equal(stored.size, 0, "real mode never writes demo storage");
 });
