@@ -43,7 +43,7 @@ export default function CreateLoveProfileScreen() {
     };
   }, [values, touched, submitAttempted, serverErrors]);
 
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/findlove" as any));
+  const back = () => (router.canGoBack() ? router.back() : router.replace("/love" as any));
 
   if (!user) {
     return (
@@ -129,7 +129,7 @@ export default function CreateLoveProfileScreen() {
       if (values.accountType === "private") {
         router.replace({ pathname: "/love/membership", params: { from: "create" } } as any);
       } else {
-        router.replace("/(tabs)/findlove" as any);
+        router.replace("/love" as any);
       }
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
