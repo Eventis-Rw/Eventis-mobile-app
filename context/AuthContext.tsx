@@ -208,10 +208,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setHasCompletedOnboarding(true);
   }, []);
   const logout = useCallback(async () => {
-    setUser(null);
-    setHasCompletedOnboarding(false);
     await clearToken();
-    await AsyncStorage.multiRemove([USER_CACHE_KEY, ONBOARDING_KEY, ONBOARDING_COMPLETE_KEY, BOOKINGS_CACHE_KEY]);
+    await AsyncStorage.multiRemove([USER_CACHE_KEY, BOOKINGS_CACHE_KEY]);
+    await AsyncStorage.multiSet([[ONBOARDING_KEY, "true"], [ONBOARDING_COMPLETE_KEY, "true"]]);
+    setHasCompletedOnboarding(true);
+    setUser(null);
     void Promise.race([
       api.post("/auth/logout").catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, 1500)),

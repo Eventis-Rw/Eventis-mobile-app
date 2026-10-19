@@ -27,7 +27,7 @@ export default function OTPScreen() {
     phone?: string;
     fullName?: string;
   }>();
-  const { verifyOTP, clearOTPContext, completeOnboarding, signInWithPhoneSession, user } = useAuth();
+  const { verifyOTP, clearOTPContext, signInWithPhoneSession, user } = useAuth();
   const isCompleting = useRef(false);
   const [error, setError] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -64,9 +64,7 @@ export default function OTPScreen() {
           throw new Error("Invalid verification code");
         }
         clearOTPContext();
-        await completeOnboarding();
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        router.replace("/(tabs)" as any);
       } catch {
         isCompleting.current = false;
         setError(true);
@@ -74,7 +72,7 @@ export default function OTPScreen() {
         setTimeout(() => setError(false), 1000);
       }
     },
-    [verifyOTP, clearOTPContext, completeOnboarding, fullName, phone, router, signInWithPhoneSession, user?.phone]
+    [verifyOTP, clearOTPContext, fullName, phone, signInWithPhoneSession, user?.phone]
   );
 
   const purposeLabels: Record<string, { title: string; subtitle: string }> = {

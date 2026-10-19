@@ -25,7 +25,7 @@ export default function LoginScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
 
-  const { login, completeOnboarding } = useAuth();
+  const { login } = useAuth();
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState("");
   const [phone, setPhone] = useState("");
@@ -43,8 +43,6 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login({ phone: `${selectedCountry.code}${cleaned}`, pin });
-      await completeOnboarding();
-      router.replace("/(tabs)");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign in. Please try again.");
     } finally { setLoading(false); }

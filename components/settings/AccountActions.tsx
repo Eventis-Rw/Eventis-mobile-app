@@ -23,7 +23,6 @@ export function AccountActions() {
     try {
       await logout();
       setConfirming(false);
-      router.replace("/onboarding" as any);
     } catch {
       setConfirming(false);
       setError("We couldn't log you out. Please try again.");
