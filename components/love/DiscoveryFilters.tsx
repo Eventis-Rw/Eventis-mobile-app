@@ -5,7 +5,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import type { DiscoveryFilters as Filters, GenderFilter, PresenceFilter } from "@/utils/findLoveDiscovery";
-import { LOVE_NEIGHBORHOODS } from "@/utils/findLoveProfile";
+import type { LOVE_NEIGHBORHOODS } from "@/utils/findLoveProfile";
 
 const GENDERS: { value: GenderFilter; label: string }[] = [
   { value: "All", label: "All" },
@@ -18,8 +18,19 @@ const PRESENCE: { value: PresenceFilter; label: string }[] = [
   { value: "recent", label: "Active today" },
 ];
 
-/** Gender, presence and neighbourhood filters for the discovery list. */
-export function DiscoveryFilters({ filters, onChange }: { filters: Filters; onChange: (next: Filters) => void }) {
+/**
+ * Gender, presence and neighbourhood filters for the discovery list. The area
+ * filter only shows when the member's country has neighbourhoods listed.
+ */
+export function DiscoveryFilters({
+  filters,
+  onChange,
+  neighborhoods,
+}: {
+  filters: Filters;
+  onChange: (next: Filters) => void;
+  neighborhoods: typeof LOVE_NEIGHBORHOODS;
+}) {
   const [picking, setPicking] = useState(false);
 
   return (
@@ -42,17 +53,20 @@ export function DiscoveryFilters({ filters, onChange }: { filters: Filters; onCh
             />
           );
         })}
-        <Chip
-          label={filters.neighborhood ?? "Any area"}
-          icon="location-outline"
-          trailing="chevron-down"
-          selected={!!filters.neighborhood}
-          onPress={() => setPicking(true)}
-        />
+        {neighborhoods.length ? (
+          <Chip
+            label={filters.neighborhood ?? "Any area"}
+            icon="location-outline"
+            trailing="chevron-down"
+            selected={!!filters.neighborhood}
+            onPress={() => setPicking(true)}
+          />
+        ) : null}
       </ScrollView>
 
       <NeighborhoodPicker
         visible={picking}
+        neighborhoods={neighborhoods}
         value={filters.neighborhood}
         onClose={() => setPicking(false)}
         onPick={(neighborhood) => {
@@ -98,11 +112,13 @@ function Chip({
 
 function NeighborhoodPicker({
   visible,
+  neighborhoods,
   value,
   onClose,
   onPick,
 }: {
   visible: boolean;
+  neighborhoods: typeof LOVE_NEIGHBORHOODS;
   value?: string;
   onClose: () => void;
   onPick: (neighborhood: string | undefined) => void;
@@ -111,12 +127,13 @@ function NeighborhoodPicker({
   const insets = useAppSafeAreaInsets();
   const options: { name?: string; label: string }[] = [
     { name: undefined, label: "Any area" },
-    ...LOVE_NEIGHBORHOODS.map(({ name, city }) => ({ name, label: city === "Kigali" ? name : `${name}, ${city}` })),
+    ...neighborhoods.map(({ name, city }) => ({ name, label: city === "Kigali" ? name : `${name}, ${city}` })),
   ];
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 }]}>
+      {/* Solid background: the glass `card` colour lets the screen show through and the list is hard to read. */}
+        <View style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: insets.bottom + 16 }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
         <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Neighbourhood</Text>
         <ScrollView style={styles.list}>
@@ -146,8 +163,8 @@ const styles = StyleSheet.create({
   divider: { width: 1, height: 24, backgroundColor: "rgba(127,127,127,0.3)", marginHorizontal: 2 },
   chip: { height: 38, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 6 },
   chipText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 10, maxHeight: "70%" },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, maxHeight: "70%" },
   handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, marginBottom: 12 },
   sheetTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 6 },
   list: { flexGrow: 0 },

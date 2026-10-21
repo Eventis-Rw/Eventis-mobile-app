@@ -9,7 +9,7 @@ import {
   LOVE_BIO_MAX,
   LOVE_INTERESTS,
   LOVE_INTERESTS_MAX,
-  LOVE_NEIGHBORHOODS,
+  neighborhoodsFor,
 } from "@/utils/findLoveProfile";
 
 export interface LoveProfileExtrasValues {
@@ -23,17 +23,21 @@ export type LoveProfileExtrasErrors = Partial<Record<keyof LoveProfileExtrasValu
 /** Optional profile details, edited after the profile is created. */
 export function LoveProfileExtras({
   values,
+  country,
   errors,
   onChange,
   disabled,
 }: {
   values: LoveProfileExtrasValues;
+  /** Neighbourhoods are listed per country; none are shown where there is no list yet. */
+  country?: string;
   errors: LoveProfileExtrasErrors;
   onChange: (next: LoveProfileExtrasValues) => void;
   disabled?: boolean;
 }) {
   const colors = useColors();
   const atLimit = values.interests.length >= LOVE_INTERESTS_MAX;
+  const neighborhoods = neighborhoodsFor(country);
 
   const toggleInterest = (interest: string) => {
     const has = values.interests.includes(interest);
@@ -85,28 +89,30 @@ export function LoveProfileExtras({
         {errors.interests ? <InlineError message={errors.interests} /> : null}
       </Section>
 
-      <Section
-        title="Neighbourhood (optional)"
-        hint="Helps people nearby find you. Only the neighbourhood is shown, never your exact location."
-      >
-        <View style={styles.chips}>
-          {LOVE_NEIGHBORHOODS.map(({ name, city }) => {
-            const selected = values.neighborhood === name;
-            return (
-              <Chip
-                key={name}
-                label={city === "Kigali" ? name : `${name}, ${city}`}
-                selected={selected}
-                // Tapping the selected one again clears it.
-                onPress={() => onChange({ ...values, neighborhood: selected ? undefined : name })}
-                disabled={disabled}
-                role="radio"
-              />
-            );
-          })}
-        </View>
-        {errors.neighborhood ? <InlineError message={errors.neighborhood} /> : null}
-      </Section>
+      {neighborhoods.length ? (
+        <Section
+          title="Neighbourhood (optional)"
+          hint="Helps people nearby find you. Only the neighbourhood is shown, never your exact location."
+        >
+          <View style={styles.chips}>
+            {neighborhoods.map(({ name, city }) => {
+              const selected = values.neighborhood === name;
+              return (
+                <Chip
+                  key={name}
+                  label={city === "Kigali" ? name : `${name}, ${city}`}
+                  selected={selected}
+                  // Tapping the selected one again clears it.
+                  onPress={() => onChange({ ...values, neighborhood: selected ? undefined : name })}
+                  disabled={disabled}
+                  role="radio"
+                />
+              );
+            })}
+          </View>
+          {errors.neighborhood ? <InlineError message={errors.neighborhood} /> : null}
+        </Section>
+      ) : null}
     </>
   );
 }

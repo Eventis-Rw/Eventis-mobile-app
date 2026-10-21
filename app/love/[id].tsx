@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { Skeleton } from "@/components/SkeletonLoader";
@@ -19,6 +19,7 @@ export default function LoveProfileDetailScreen() {
   const { isLoading, getProfileById, getConnectionStatus } = useLoveProfiles();
   const { connect: connectWith, upgradePrompt } = useLoveConnect();
   const [imageFailed, setImageFailed] = useState(false);
+  const [openPost, setOpenPost] = useState<string | null>(null);
   const profile = getProfileById(id ?? "");
 
   if (isLoading && !profile) {
@@ -52,6 +53,7 @@ export default function LoveProfileDetailScreen() {
   const pending = connectionStatus === "pending";
   const connected = connectionStatus === "connected";
   const presence = presenceLabel(profile);
+  const posts = profile.postImageUrls.slice(0, 3);
 
   function connect() {
     if (!profile || pending) return;
@@ -64,7 +66,7 @@ export default function LoveProfileDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 118 + insets.bottom }}>
         <View style={styles.hero}>
           {profile.imageUrl && !imageFailed ? (
-            <Image source={{ uri: profile.imageUrl }} style={styles.heroImage} resizeMode="cover" onError={() => setImageFailed(true)} accessibilityLabel={`Profile photo of @${profile.username}`} />
+            <Image source={{ uri: profile.imageUrl }} style={styles.heroImage} resizeMode="cover" onError={() => setImageFailed(true)} accessibilityLabel={`Profile photo of ${profile.username}`} />
           ) : (
             <View style={[styles.heroImage, styles.fallback, { backgroundColor: colors.secondary }]}>
               <Text style={[styles.initials, { color: colors.primary }]}>{profile.username.slice(0, 2).toUpperCase()}</Text>
@@ -81,7 +83,7 @@ export default function LoveProfileDetailScreen() {
           </Pressable>
           <View style={styles.heroCopy}>
             <View style={styles.heroNameRow}>
-              <Text style={styles.heroName} numberOfLines={1}>@{profile.username}</Text>
+              <Text style={styles.heroName} numberOfLines={1}>{profile.username}</Text>
               {profile.verified ? <Ionicons name="checkmark-circle" size={21} color="#8AB4FF" /> : null}
               <MembershipBadge type={profile.accountType} iconOnly />
             </View>
@@ -125,6 +127,25 @@ export default function LoveProfileDetailScreen() {
             ))}
           </View>
 
+          {posts.length ? (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Posts</Text>
+              <View style={styles.posts}>
+                {posts.map((url, index) => (
+                  <Pressable
+                    key={url}
+                    onPress={() => setOpenPost(url)}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={`Open ${profile.username}'s post ${index + 1}`}
+                    style={[styles.post, { backgroundColor: colors.secondary }]}
+                  >
+                    <Image source={{ uri: url }} style={styles.postImage} resizeMode="cover" />
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : null}
+
           <View style={[styles.safetyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Ionicons name="shield-checkmark-outline" size={22} color={colors.success} />
             <View style={styles.safetyCopy}>
@@ -140,7 +161,7 @@ export default function LoveProfileDetailScreen() {
           onPress={connect}
           disabled={pending}
           accessibilityRole="button"
-          accessibilityLabel={`${pending ? "Connection pending with" : connected ? "Message" : "Connect with"} @${profile.username}`}
+          accessibilityLabel={`${pending ? "Connection pending with" : connected ? "Message" : "Connect with"} ${profile.username}`}
           style={[styles.connectButton, { backgroundColor: pending ? colors.secondary : colors.primary }]}
         >
           <Ionicons
@@ -149,10 +170,18 @@ export default function LoveProfileDetailScreen() {
             color={pending ? colors.mutedForeground : "#FFFFFF"}
           />
           <Text style={[styles.connectText, { color: pending ? colors.mutedForeground : "#FFFFFF" }]}>
-            {pending ? "Request Pending" : connected ? `Message @${profile.username}` : `Connect with @${profile.username}`}
+            {pending ? "Request Pending" : connected ? `Message ${profile.username}` : `Connect with ${profile.username}`}
           </Text>
         </Pressable>
       </View>
+      <Modal visible={!!openPost} transparent animationType="fade" onRequestClose={() => setOpenPost(null)}>
+        <Pressable style={styles.viewer} onPress={() => setOpenPost(null)} accessibilityRole="button" accessibilityLabel="Close post">
+          {openPost ? <Image source={{ uri: openPost }} style={styles.viewerImage} resizeMode="contain" /> : null}
+          <View style={[styles.viewerClose, { top: insets.top + 12 }]}>
+            <Ionicons name="close" size={26} color="#FFFFFF" />
+          </View>
+        </Pressable>
+      </Modal>
       {upgradePrompt}
     </View>
   );
@@ -181,6 +210,12 @@ const styles = StyleSheet.create({
   interests: { flexDirection: "row", flexWrap: "wrap", gap: 9, marginTop: 12 },
   interest: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 9 },
   interestText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  posts: { flexDirection: "row", gap: 8, marginTop: 12 },
+  post: { flex: 1, aspectRatio: 1, borderRadius: 14, overflow: "hidden" },
+  postImage: { width: "100%", height: "100%" },
+  viewer: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center" },
+  viewerImage: { width: "100%", height: "80%" },
+  viewerClose: { position: "absolute", right: 18, width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)" },
   safetyCard: { flexDirection: "row", gap: 12, borderWidth: 1, borderRadius: 20, padding: 16, marginTop: 30 },
   safetyCopy: { flex: 1 },
   safetyTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },

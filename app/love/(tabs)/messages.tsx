@@ -64,23 +64,23 @@ export default function LoveMessagesScreen() {
         {activeTab === "connections" ? (
           connections.length ? connections.map((profile) => (
             <View key={profile.id} style={[styles.connectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Image source={{ uri: profile.imageUrl }} style={styles.avatar} accessibilityLabel={`Profile photo of @${profile.username}`} />
+              <Image source={{ uri: profile.imageUrl }} style={styles.avatar} accessibilityLabel={`Profile photo of ${profile.username}`} />
               <View style={styles.profileCopy}>
                 <View style={styles.nameRow}>
-                  <Text style={[styles.name, { color: colors.foreground }]}>@{profile.username}</Text>
+                  <Text style={[styles.name, { color: colors.foreground }]}>{profile.username}</Text>
                   {profile.verified ? <Ionicons name="checkmark-circle" size={16} color={colors.primary} /> : null}
                   <MembershipBadge type={profile.accountType} size="sm" iconOnly />
                 </View>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>{profile.city} · {profile.occupation}</Text>
                 <View style={styles.cardActions}>
-                  <Pressable onPress={() => router.push({ pathname: "/love/chat/[id]", params: { id: profile.id } } as any)} style={[styles.primaryAction, { backgroundColor: colors.primary }]} accessibilityRole="button" accessibilityLabel={`Message @${profile.username}`}>
+                  <Pressable onPress={() => router.push({ pathname: "/love/chat/[id]", params: { id: profile.id } } as any)} style={[styles.primaryAction, { backgroundColor: colors.primary }]} accessibilityRole="button" accessibilityLabel={`Message ${profile.username}`}>
                     <Ionicons name="chatbubble-ellipses-outline" size={16} color="#FFFFFF" />
                     <Text style={styles.primaryActionText}>Message</Text>
                   </Pressable>
-                  <Pressable onPress={() => router.push({ pathname: "/love/chat/[id]", params: { id: profile.id, gift: "1" } } as any)} style={[styles.iconAction, { backgroundColor: colors.secondary, borderColor: colors.border }]} accessibilityRole="button" accessibilityLabel={`Send a gift to @${profile.username}`}>
+                  <Pressable onPress={() => router.push({ pathname: "/love/chat/[id]", params: { id: profile.id, gift: "1" } } as any)} style={[styles.iconAction, { backgroundColor: colors.secondary, borderColor: colors.border }]} accessibilityRole="button" accessibilityLabel={`Send a gift to ${profile.username}`}>
                     <Ionicons name="gift-outline" size={18} color={colors.primary} />
                   </Pressable>
-                  <Pressable onPress={() => router.push({ pathname: "/love/[id]", params: { id: profile.id } } as any)} style={[styles.iconAction, { backgroundColor: colors.secondary, borderColor: colors.border }]} accessibilityRole="button" accessibilityLabel={`View @${profile.username}'s profile`}>
+                  <Pressable onPress={() => router.push({ pathname: "/love/[id]", params: { id: profile.id } } as any)} style={[styles.iconAction, { backgroundColor: colors.secondary, borderColor: colors.border }]} accessibilityRole="button" accessibilityLabel={`View ${profile.username}'s profile`}>
                     <Ionicons name="person-outline" size={18} color={colors.foreground} />
                   </Pressable>
                 </View>
@@ -95,7 +95,7 @@ export default function LoveMessagesScreen() {
               <Image source={{ uri: profile.imageUrl }} style={styles.pendingAvatar} />
               <View style={styles.profileCopy}>
                 <View style={styles.nameRow}>
-                  <Text style={[styles.name, { color: colors.foreground }]}>@{profile.username}</Text>
+                  <Text style={[styles.name, { color: colors.foreground }]}>{profile.username}</Text>
                   <MembershipBadge type={profile.accountType} size="sm" iconOnly />
                 </View>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>{profile.city} · Request awaiting response</Text>

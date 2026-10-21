@@ -19,7 +19,14 @@ import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
 import { describeError } from "@/services/organiserService";
 import { LoveProfileInputError } from "@/services/findLoveService";
-import { ageOn, formatDateOfBirth, validateLoveGender, validateLoveUsername } from "@/utils/findLoveProfile";
+import {
+  ageOn,
+  formatDateOfBirth,
+  neighborhoodsFor,
+  validateLoveCountry,
+  validateLoveGender,
+  validateLoveUsername,
+} from "@/utils/findLoveProfile";
 
 type EditValues = LoveProfileFormValues & LoveProfileExtrasValues;
 
@@ -38,6 +45,7 @@ export default function EditLoveProfileScreen() {
         ? {
             username: myProfile.username,
             gender: myProfile.gender,
+            country: myProfile.country,
             photoUrls: myProfile.photoUrls,
             bio: myProfile.bio ?? "",
             interests: myProfile.interests,
@@ -76,6 +84,8 @@ export default function EditLoveProfileScreen() {
     return {
       username: serverErrors.username ?? (shown("username") ? validateLoveUsername(values.username) : undefined),
       gender: shown("gender") ? validateLoveGender(values.gender) : undefined,
+      // Profiles made before country was asked show this straight away.
+      country: serverErrors.country ?? validateLoveCountry(values.country),
       photoUrls: serverErrors.photoUrls,
     };
   }, [values, touched, submitAttempted, serverErrors]);
@@ -115,7 +125,13 @@ export default function EditLoveProfileScreen() {
   const submit = async () => {
     setSubmitAttempted(true);
     setSaveError(null);
-    if (validateLoveUsername(values.username) || validateLoveGender(values.gender) || !values.gender) {
+    if (
+      validateLoveUsername(values.username) ||
+      validateLoveGender(values.gender) ||
+      validateLoveCountry(values.country) ||
+      !values.gender ||
+      !values.country
+    ) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
@@ -128,6 +144,7 @@ export default function EditLoveProfileScreen() {
       await save({
         username: values.username,
         gender: values.gender,
+        country: values.country,
         dateOfBirth: myProfile.dateOfBirth,
         photoUrls: values.photoUrls,
         bio: values.bio,
@@ -139,7 +156,7 @@ export default function EditLoveProfileScreen() {
       back();
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      if (err instanceof LoveProfileInputError && (err.field === "username" || err.field === "photoUrls")) {
+      if (err instanceof LoveProfileInputError && (err.field === "username" || err.field === "country" || err.field === "photoUrls")) {
         setServerErrors({ [err.field]: err.message });
       } else if (err instanceof LoveProfileInputError && (err.field === "bio" || err.field === "interests" || err.field === "neighborhood")) {
         setExtrasErrors({ [err.field]: err.message });
@@ -164,7 +181,13 @@ export default function EditLoveProfileScreen() {
           onChange={(next) => {
             setSaveError(null);
             setServerErrors({});
-            setValues((v) => v && { ...v, ...next });
+            setValues((v) => {
+              if (!v) return v;
+              const merged = { ...v, ...next };
+              // Neighbourhoods belong to a country; drop one that doesn't exist in the new one.
+              const keepArea = neighborhoodsFor(merged.country).some((n) => n.name === merged.neighborhood);
+              return keepArea ? merged : { ...merged, neighborhood: undefined };
+            });
           }}
           onBlur={(field) => setTouched((t) => ({ ...t, [field]: true }))}
           phone={user.phone}
@@ -173,6 +196,7 @@ export default function EditLoveProfileScreen() {
 
         <LoveProfileExtras
           values={values}
+          country={values.country}
           errors={extrasErrors}
           onChange={(next) => {
             setSaveError(null);

@@ -41,7 +41,7 @@ export function UpgradePrompt({
             Private membership needed
           </Text>
           <View style={styles.badgeRow}>
-            <Text style={[styles.text, { color: colors.mutedForeground }]}>@{username} has a</Text>
+            <Text style={[styles.text, { color: colors.mutedForeground }]}>{username} has a</Text>
             <MembershipBadge type="private" size="sm" />
             <Text style={[styles.text, { color: colors.mutedForeground }]}>account.</Text>
           </View>

@@ -19,6 +19,7 @@ import { LoveHeader } from "@/components/love/LoveHeader";
 import { useLoveConnect } from "@/components/love/UpgradePrompt";
 import type { LoveProfile } from "@/constants/loveProfiles";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
+import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
 import {
   activeFilterCount,
@@ -26,6 +27,7 @@ import {
   filterProfiles,
   type DiscoveryFilters as Filters,
 } from "@/utils/findLoveDiscovery";
+import { countryName, neighborhoodsFor } from "@/utils/findLoveProfile";
 
 /** FindLove's landing tab: search, filters and the people grid. */
 export default function DiscoverScreen() {
@@ -34,11 +36,17 @@ export default function DiscoverScreen() {
   const { width } = useWindowDimensions();
   const { profiles, isLoading, error, refreshProfiles, getConnectionStatus } = useLoveProfiles();
   const { connect, upgradePrompt } = useLoveConnect();
+  const country = useMyLoveProfile().myProfile?.country;
+  const place = countryName(country);
+  const neighborhoods = useMemo(() => neighborhoodsFor(country), [country]);
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Filters>(DEFAULT_DISCOVERY_FILTERS);
   const deferredQuery = useDeferredValue(query);
-  const columns = width >= 960 ? 3 : width >= 620 ? 2 : 1;
-  const horizontalPadding = width < 360 ? 16 : 20;
+  // Always at least two people per row; wide screens get three.
+  const columns = width >= 960 ? 3 : 2;
+  const horizontalPadding = width < 360 ? 12 : 16;
+  const gridWidth = Math.min(width - horizontalPadding * 2, MAX_GRID_WIDTH);
+  const cellWidth = (gridWidth - GRID_GAP * (columns - 1)) / columns;
 
   const filteredProfiles = useMemo(
     () => filterProfiles(profiles, { ...filters, query: deferredQuery }),
@@ -60,7 +68,7 @@ export default function DiscoverScreen() {
   }, [router]);
 
   const renderProfile = useCallback(({ item }: { item: LoveProfile }) => (
-    <View style={styles.cardCell}>
+    <View style={[styles.cardCell, { width: cellWidth }]}>
       <LoveProfileCard
         profile={item}
         connectionStatus={getConnectionStatus(item.id)}
@@ -69,7 +77,7 @@ export default function DiscoverScreen() {
         onMessage={() => openChat(item)}
       />
     </View>
-  ), [connect, getConnectionStatus, openChat, openProfile]);
+  ), [cellWidth, connect, getConnectionStatus, openChat, openProfile]);
 
   if (isLoading && profiles.length === 0) {
     return (
@@ -77,8 +85,12 @@ export default function DiscoverScreen() {
         <LoveHeader title="Discover" />
         <View style={[styles.loadingContent, { paddingHorizontal: horizontalPadding }]}>
           <Skeleton height={50} borderRadius={16} />
-          <Skeleton height={400} borderRadius={24} style={styles.loadingGap} />
-          <Skeleton height={400} borderRadius={24} style={styles.loadingGap} />
+          {[0, 1].map((row) => (
+            <View key={row} style={[styles.columnRow, styles.loadingGap]}>
+              <Skeleton width={cellWidth} height={300} borderRadius={20} />
+              <Skeleton width={cellWidth} height={300} borderRadius={20} />
+            </View>
+          ))}
         </View>
       </View>
     );
@@ -93,7 +105,7 @@ export default function DiscoverScreen() {
         numColumns={columns}
         keyExtractor={(item) => item.id}
         renderItem={renderProfile}
-        columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
+        columnWrapperStyle={styles.columnRow}
         contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -119,7 +131,7 @@ export default function DiscoverScreen() {
               ) : null}
             </View>
 
-            <DiscoveryFilters filters={filters} onChange={setFilters} />
+            <DiscoveryFilters filters={filters} onChange={setFilters} neighborhoods={neighborhoods} />
 
             {error ? (
               <View style={[styles.errorBanner, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
@@ -132,7 +144,7 @@ export default function DiscoverScreen() {
             ) : null}
 
             <View style={styles.resultsRow}>
-              <Text style={[styles.resultsTitle, { color: colors.foreground }]}>{filtering ? "Results" : "People to discover"}</Text>
+              <Text style={[styles.resultsTitle, { color: colors.foreground }]}>{filtering ? "Results" : place ? `People in ${place}` : "People to discover"}</Text>
               <Text style={[styles.resultsCount, { color: colors.mutedForeground }]}>{filteredProfiles.length} profiles</Text>
             </View>
           </View>
@@ -143,10 +155,16 @@ export default function DiscoverScreen() {
               <Ionicons name="heart-dislike-outline" size={32} color={colors.primary} />
             </View>
             <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No profiles found</Text>
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Try another username, interest, or filter.</Text>
-            <Pressable onPress={clearFilters}>
-              <Text style={[styles.resetText, { color: colors.primary }]}>Clear filters</Text>
-            </Pressable>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+              {filtering
+                ? "Try another username, interest, or filter."
+                : `No one${place ? ` in ${place}` : ""} is on FindLove yet. Check back soon.`}
+            </Text>
+            {filtering ? (
+              <Pressable onPress={clearFilters}>
+                <Text style={[styles.resetText, { color: colors.primary }]}>Clear filters</Text>
+              </Pressable>
+            ) : null}
           </View>
         }
       />
@@ -155,10 +173,13 @@ export default function DiscoverScreen() {
   );
 }
 
+const GRID_GAP = 12;
+const MAX_GRID_WIDTH = 1080;
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   listContent: { flexGrow: 1, paddingTop: 4, paddingBottom: 24 },
-  loadingContent: { width: "100%", maxWidth: 720, alignSelf: "center", paddingTop: 4 },
+  loadingContent: { width: "100%", maxWidth: MAX_GRID_WIDTH, alignSelf: "center", paddingTop: 4 },
   loadingGap: { marginTop: 18 },
   header: { width: "100%", maxWidth: 1080, alignSelf: "center", paddingBottom: 10 },
   searchBox: { minHeight: 52, borderWidth: 1, borderRadius: 17, flexDirection: "row", alignItems: "center", paddingHorizontal: 15 },
@@ -169,8 +190,8 @@ const styles = StyleSheet.create({
   resultsRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 4, marginBottom: 13 },
   resultsTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   resultsCount: { fontSize: 12, fontFamily: "Inter_500Medium" },
-  columnRow: { gap: 14, maxWidth: 1080, width: "100%", alignSelf: "center" },
-  cardCell: { flex: 1, minWidth: 0, maxWidth: 500, alignSelf: "stretch" },
+  columnRow: { flexDirection: "row", gap: GRID_GAP, maxWidth: MAX_GRID_WIDTH, width: "100%", alignSelf: "center" },
+  cardCell: { alignSelf: "stretch" },
   emptyState: { alignItems: "center", justifyContent: "center", paddingVertical: 70, paddingHorizontal: 24 },
   emptyIcon: { width: 72, height: 72, borderRadius: 24, alignItems: "center", justifyContent: "center" },
   emptyTitle: { fontSize: 20, fontFamily: "Inter_700Bold", marginTop: 18 },
