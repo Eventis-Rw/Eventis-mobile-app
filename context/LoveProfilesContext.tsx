@@ -2,8 +2,10 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 
 import type { LoveConnectionStatus, LoveProfile } from "@/constants/loveProfiles";
 import { useAuth } from "@/context/AuthContext";
+import { useMyLoveProfileState } from "@/context/MyLoveProfileContext";
 import { describeError } from "@/services/organiserService";
 import { fetchLoveProfiles, MembershipRequiredError, requestLoveConnection } from "@/services/findLoveService";
+import { inCountry } from "@/utils/findLoveDiscovery";
 
 /** "upgrade_required": the server says this connection needs a Private membership. */
 export type LoveConnectResult = "sent" | "upgrade_required" | "failed";
@@ -24,6 +26,8 @@ const LoveProfilesContext = createContext<LoveProfilesContextValue | null>(null)
 
 export function LoveProfilesProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  // Members only discover people from the country on their FindLove profile.
+  const country = useMyLoveProfileState().myProfile?.country;
   const [profiles, setProfiles] = useState<LoveProfile[]>([]);
   // True until the first load finishes, so screens show loading, not "unavailable".
   const [isLoading, setIsLoading] = useState(true);
@@ -35,13 +39,18 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
     setIsLoading(true);
     setError(null);
     try {
-      setProfiles(await fetchLoveProfiles());
+      setProfiles(await fetchLoveProfiles(country));
     } catch (err) {
       setError(describeError(err, "FindLove could not be reached. Pull to try again."));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [country]);
+
+  // A new country means a different list; reload if one was already shown.
+  useEffect(() => {
+    if (loadStarted.current) void refreshProfiles();
+  }, [refreshProfiles]);
 
   // Nothing loads at app start; the first FindLove screen to open triggers it.
   const ensureLoaded = useCallback(() => {
@@ -53,9 +62,12 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
       profiles.filter(
         (profile) =>
           // Public and Private members are both discoverable; membership only limits connecting.
-          profile.active && profile.eligible && profile.userId !== user?.id,
+          profile.active &&
+          profile.eligible &&
+          profile.userId !== user?.id &&
+          inCountry(profile, country),
       ),
-    [profiles, user?.id],
+    [profiles, user?.id, country],
   );
 
   const getProfileById = useCallback(

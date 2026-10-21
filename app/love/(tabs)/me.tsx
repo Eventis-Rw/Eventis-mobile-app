@@ -9,6 +9,7 @@ import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
 import { formatMembershipPrice, PRIVATE_MEMBERSHIP_PLAN } from "@/utils/findLoveMembership";
+import { countryName } from "@/utils/findLoveProfile";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -47,9 +48,10 @@ export default function LoveMeScreen() {
             </View>
           )}
           <View style={styles.profileCopy}>
-            <Text style={[styles.username, { color: colors.foreground }]} numberOfLines={1}>@{myProfile?.username}</Text>
+            <Text style={[styles.username, { color: colors.foreground }]} numberOfLines={1}>{myProfile?.username}</Text>
             <Text style={[styles.meta, { color: colors.mutedForeground }]} numberOfLines={1}>
-              {[myProfile?.gender, myProfile?.neighborhood].filter(Boolean).join(" · ") || "Add your neighbourhood"}
+              {[myProfile?.gender, myProfile?.neighborhood, countryName(myProfile?.country)].filter(Boolean).join(" · ") ||
+                "Add your country"}
             </Text>
             <View style={styles.badgeRow}>
               <MembershipBadge type={accountType} size="sm" />

@@ -46,6 +46,14 @@ export function presenceLabel(profile: Pick<DiscoverableProfile, "lastActiveAt" 
   return minutes < 60 ? `Active ${minutes}m ago` : `Active ${Math.floor(minutes / 60)}h ago`;
 }
 
+/**
+ * Members only see people from their own country. Before a member has picked
+ * one (profiles made before country was asked) nobody is hidden.
+ */
+export function inCountry(profile: { country?: string }, country: string | undefined): boolean {
+  return !country || profile.country === country;
+}
+
 export type GenderFilter = "All" | "Woman" | "Man";
 export type PresenceFilter = "any" | "online" | "recent";
 

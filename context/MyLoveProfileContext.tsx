@@ -162,10 +162,16 @@ export function MyLoveProfileProvider({ children }: { children: React.ReactNode 
   return <MyLoveProfileContext.Provider value={value}>{children}</MyLoveProfileContext.Provider>;
 }
 
-/** For FindLove screens: loads the member's profile the first time one of them opens. */
-export function useMyLoveProfile() {
+/** Profile state without triggering a load, for providers that derive from it. */
+export function useMyLoveProfileState() {
   const context = useContext(MyLoveProfileContext);
   if (!context) throw new Error("useMyLoveProfile must be used within MyLoveProfileProvider");
+  return context;
+}
+
+/** For FindLove screens: loads the member's profile the first time one of them opens. */
+export function useMyLoveProfile() {
+  const context = useMyLoveProfileState();
   const { ensureLoaded } = context;
   useEffect(() => {
     ensureLoaded();
