@@ -670,3 +670,16 @@ test("real mode asks the server for the member's country and sends it on save", 
   assert.equal(apiCalls[1][2].country, "RW");
   assert.equal(saved.country, "RW");
 });
+
+const settings = load("utils/findLoveSettings.ts", {}, () => undefined);
+
+test("stored FindLove settings fall back to safe defaults", () => {
+  assert.deepEqual(settings.normalizeLoveSettings(null), settings.DEFAULT_LOVE_SETTINGS);
+  assert.deepEqual(settings.normalizeLoveSettings("junk"), settings.DEFAULT_LOVE_SETTINGS);
+  const saved = settings.normalizeLoveSettings({ maxDistanceKm: 50, showOnlineStatus: false, readReceipts: false, pauseProfile: true });
+  assert.deepEqual(saved, { maxDistanceKm: 50, showOnlineStatus: false, readReceipts: false, pauseProfile: true });
+  // Only the listed distances are allowed; anything else is the default.
+  assert.equal(settings.normalizeLoveSettings({ maxDistanceKm: 7 }).maxDistanceKm, 25);
+  assert.equal(settings.normalizeLoveSettings({ maxDistanceKm: "50" }).maxDistanceKm, 25);
+  assert.equal(settings.normalizeLoveSettings({ readReceipts: "no" }).readReceipts, true);
+});

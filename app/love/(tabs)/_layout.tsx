@@ -4,7 +4,7 @@ import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
 import { FindLoveIntro } from "@/components/love/FindLoveIntro";
-import { LoveHeader } from "@/components/love/LoveHeader";
+import { LoveHeader, useExitFindLove } from "@/components/love/LoveHeader";
 import { SectionState } from "@/components/profile/ProfileSection";
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
@@ -72,13 +72,15 @@ function AgeCheckGate() {
 }
 
 const TABS: { name: string; title: string; icon: IconName; activeIcon: IconName }[] = [
-  { name: "index", title: "Discover", icon: "compass-outline", activeIcon: "compass" },
-  { name: "messages", title: "Messages", icon: "chatbubbles-outline", activeIcon: "chatbubbles" },
+  { name: "index", title: "Home", icon: "home-outline", activeIcon: "home" },
+  { name: "messages", title: "Inbox", icon: "chatbubbles-outline", activeIcon: "chatbubbles" },
+  { name: "eventis", title: "Eventis", icon: "calendar-outline", activeIcon: "calendar" },
   { name: "me", title: "Me", icon: "person-circle-outline", activeIcon: "person-circle" },
 ];
 
 function LoveTabs() {
   const colors = useColors();
+  const exit = useExitFindLove();
   const insets = useAppSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   return (
@@ -104,6 +106,17 @@ function LoveTabs() {
         <Tabs.Screen
           key={tab.name}
           name={tab.name}
+          // The Eventis tab is a way out of FindLove, not a screen.
+          listeners={
+            tab.name === "eventis"
+              ? {
+                  tabPress: (event) => {
+                    event.preventDefault();
+                    exit();
+                  },
+                }
+              : undefined
+          }
           options={{
             title: tab.title,
             tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? tab.activeIcon : tab.icon} size={23} color={color} />,

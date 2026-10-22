@@ -18,12 +18,15 @@ interface LoveProfileCardProps {
   profile: LoveProfile;
   connectionStatus: LoveConnectionStatus;
   onOpen: () => void;
+  /** Like = send a connection request. */
   onConnect: () => void;
-  /** Connected members get a Message button instead of Connect. */
+  /** Hides the person from Home. Only offered before any request is sent. */
+  onSkip: () => void;
+  /** Connected members get a Message button instead of Like. */
   onMessage: () => void;
 }
 
-function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect, onMessage }: LoveProfileCardProps) {
+function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect, onSkip, onMessage }: LoveProfileCardProps) {
   const colors = useColors();
   const [imageFailed, setImageFailed] = useState(false);
   const isPending = connectionStatus === "pending";
@@ -34,6 +37,11 @@ function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect
     event.stopPropagation();
     if (isConnected) onMessage();
     else if (!isPending) onConnect();
+  }
+
+  function handleSkip(event: GestureResponderEvent) {
+    event.stopPropagation();
+    onSkip();
   }
 
   return (
@@ -95,28 +103,40 @@ function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect
             </View>
           ))}
         </View>
-        <Pressable
-          onPress={handleConnect}
-          disabled={isPending}
-          accessibilityRole="button"
-          accessibilityLabel={`${isPending ? "Connection pending with" : isConnected ? "Message" : "Connect with"} ${profile.username}`}
-          style={[
-            styles.connectButton,
-            {
-              backgroundColor: isPending ? colors.secondary : colors.primary,
-              borderColor: isPending ? colors.border : colors.primary,
-            },
-          ]}
-        >
-          <Ionicons
-            name={isPending ? "time-outline" : isConnected ? "chatbubble-ellipses-outline" : "heart-outline"}
-            size={16}
-            color={isPending ? colors.mutedForeground : "#FFFFFF"}
-          />
-          <Text style={[styles.connectText, { color: isPending ? colors.mutedForeground : "#FFFFFF" }]}>
-            {isPending ? "Pending" : isConnected ? "Message" : "Connect"}
-          </Text>
-        </Pressable>
+        <View style={styles.actions}>
+          {connectionStatus === "none" ? (
+            <Pressable
+              onPress={handleSkip}
+              accessibilityRole="button"
+              accessibilityLabel={`Skip ${profile.username}`}
+              style={[styles.skipButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+            >
+              <Ionicons name="close" size={20} color={colors.mutedForeground} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={handleConnect}
+            disabled={isPending}
+            accessibilityRole="button"
+            accessibilityLabel={`${isPending ? "Like pending with" : isConnected ? "Message" : "Like"} ${profile.username}`}
+            style={[
+              styles.connectButton,
+              {
+                backgroundColor: isPending ? colors.secondary : colors.primary,
+                borderColor: isPending ? colors.border : colors.primary,
+              },
+            ]}
+          >
+            <Ionicons
+              name={isPending ? "time-outline" : isConnected ? "chatbubble-ellipses-outline" : "heart"}
+              size={16}
+              color={isPending ? colors.mutedForeground : "#FFFFFF"}
+            />
+            <Text style={[styles.connectText, { color: isPending ? colors.mutedForeground : "#FFFFFF" }]}>
+              {isPending ? "Pending" : isConnected ? "Message" : "Like"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </Pressable>
   );
@@ -148,6 +168,8 @@ const styles = StyleSheet.create({
   interests: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 8, marginBottom: 10 },
   interest: { borderWidth: 1, borderRadius: 99, paddingHorizontal: 7, paddingVertical: 3 },
   interestText: { fontSize: 10, fontFamily: "Inter_500Medium" },
-  connectButton: { minHeight: 40, marginTop: "auto", borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  actions: { flexDirection: "row", gap: 8, marginTop: "auto" },
+  skipButton: { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  connectButton: { flex: 1, minHeight: 40, borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   connectText: { fontSize: 13, fontFamily: "Inter_700Bold" },
 });
