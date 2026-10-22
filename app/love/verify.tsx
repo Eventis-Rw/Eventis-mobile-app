@@ -12,7 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
 import { describeError } from "@/services/organiserService";
-import { USE_FINDLOVE_API, type LoveDemoVerificationOutcome } from "@/services/findLoveService";
+import { USE_FINDLOVE_API } from "@/services/findLoveService";
 import { MIN_LOVE_AGE } from "@/utils/findLoveProfile";
 import {
   describeAgeVerification,
@@ -24,7 +24,6 @@ import {
 } from "@/utils/findLoveAgeVerification";
 
 const SHOW_DEMO_CONTROLS = __DEV__ && !USE_FINDLOVE_API;
-const DEMO_OUTCOMES: LoveDemoVerificationOutcome[] = ["verified", "unreadable", "manual_review", "rejected"];
 
 const TIPS = [
   "The whole document is inside the photo",
@@ -54,7 +53,6 @@ export default function VerifyAgeScreen() {
   const [photos, setPhotos] = useState<Partial<Record<IdSide, string>>>({});
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [demoOutcome, setDemoOutcome] = useState<LoveDemoVerificationOutcome>("verified");
 
   // Leaving while the photos upload would hide the result, so the back button waits.
   useEffect(() => {
@@ -115,7 +113,7 @@ export default function VerifyAgeScreen() {
     setError(null);
     setSending(true);
     try {
-      const result = await submitVerification({ documentType, photos, confirmedAdult: true }, demoOutcome);
+      const result = await submitVerification({ documentType, photos, confirmedAdult: true });
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(
           result.status === "verified" ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning,
@@ -273,25 +271,6 @@ export default function VerifyAgeScreen() {
         </View>
       </Section>
 
-      {SHOW_DEMO_CONTROLS ? (
-        <View style={[styles.demo, { borderColor: colors.border }]}>
-          <Text style={[styles.demoTitle, { color: colors.mutedForeground }]}>DEMO · SIMULATE RESULT</Text>
-          <View style={styles.demoRow}>
-            {DEMO_OUTCOMES.map((outcome) => (
-              <Pressable
-                key={outcome}
-                onPress={() => setDemoOutcome(outcome)}
-                style={[styles.demoChip, { backgroundColor: demoOutcome === outcome ? colors.foreground : colors.secondary }]}
-              >
-                <Text style={[styles.demoChipText, { color: demoOutcome === outcome ? colors.background : colors.foreground }]}>
-                  {outcome.replace("_", " ")}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      ) : null}
-
       <Pressable
         onPress={() => {
           setError(null);
@@ -353,13 +332,13 @@ function PhotoSlot({
     <View style={[styles.slot, { backgroundColor: colors.card, borderColor: uri ? colors.success : colors.border }]}>
       <View style={styles.slotHeader}>
         <Text style={[styles.slotLabel, { color: colors.foreground }]}>{label}</Text>
-        {uri ? <Ionicons name="checkmark-circle" size={18} color={colors.success} /> : null}
+        {uri ? <Ionicons name="checkmark-circle" size={16} color={colors.success} /> : null}
       </View>
       {uri ? (
         <Image source={{ uri }} style={styles.preview} resizeMode="cover" accessibilityLabel={`${label} photo`} />
       ) : (
         <View style={[styles.preview, styles.placeholder, { backgroundColor: colors.secondary }]}>
-          <Ionicons name="card-outline" size={34} color={colors.mutedForeground} />
+          <Ionicons name="card-outline" size={24} color={colors.mutedForeground} />
         </View>
       )}
       <View style={styles.slotActions}>
@@ -369,8 +348,8 @@ function PhotoSlot({
           accessibilityRole="button"
           accessibilityLabel={`${uri ? "Retake" : "Take"} photo: ${label}`}
         >
-          <Ionicons name="camera-outline" size={16} color="#FFFFFF" />
-          <Text style={styles.slotButtonText}>{uri ? "Retake" : "Take photo"}</Text>
+          <Ionicons name="camera-outline" size={15} color="#FFFFFF" />
+          <Text style={styles.slotButtonText}>{uri ? "Retake" : "Camera"}</Text>
         </Pressable>
         <Pressable
           onPress={() => void choose()}
@@ -378,8 +357,8 @@ function PhotoSlot({
           accessibilityRole="button"
           accessibilityLabel={`Choose from photos: ${label}`}
         >
-          <Ionicons name="images-outline" size={16} color={colors.foreground} />
-          <Text style={[styles.slotButtonText, { color: colors.foreground }]}>Choose</Text>
+          <Ionicons name="images-outline" size={15} color={colors.foreground} />
+          <Text style={[styles.slotButtonText, { color: colors.foreground }]}>Gallery</Text>
         </Pressable>
       </View>
     </View>
@@ -424,25 +403,21 @@ const styles = StyleSheet.create({
   documentCopy: { flex: 1, gap: 2 },
   documentLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   documentText: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
-  slots: { gap: 12 },
-  slot: { borderRadius: 18, borderWidth: 1.5, padding: 12, gap: 10 },
-  slotHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  slotLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  preview: { width: "100%", aspectRatio: 1.586, borderRadius: 12 },
+  // Side by side, each half the width, so front and back fit on one row.
+  slots: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  slot: { flexBasis: "47%", flexGrow: 0, flexShrink: 1, maxWidth: 260, borderRadius: 14, borderWidth: 1.5, padding: 8, gap: 7 },
+  slotHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 4 },
+  slotLabel: { flexShrink: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  preview: { width: "100%", aspectRatio: 1.586, borderRadius: 9 },
   placeholder: { alignItems: "center", justifyContent: "center" },
-  slotActions: { flexDirection: "row", gap: 10 },
-  slotButton: { flex: 1, minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12 },
-  slotButtonText: { color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  slotActions: { flexDirection: "row", gap: 6 },
+  slotButton: { flex: 1, minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: 9 },
+  slotButtonText: { color: "#FFFFFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
   tips: { gap: 6, marginTop: 10 },
   confirmRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, borderWidth: 1, padding: 14 },
   confirmText: { flex: 1, fontSize: 14, lineHeight: 20, fontFamily: "Inter_500Medium" },
   tip: { flexDirection: "row", alignItems: "center", gap: 8 },
   tipText: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
-  demo: { borderWidth: 1, borderStyle: "dashed", borderRadius: 14, padding: 12, gap: 8 },
-  demoTitle: { fontSize: 11, letterSpacing: 0.8, fontFamily: "Inter_600SemiBold" },
-  demoRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  demoChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 99 },
-  demoChipText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   primary: { alignSelf: "stretch", minHeight: 52, borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
   primaryText: { color: "#FFFFFF", fontSize: 16, fontFamily: "Inter_600SemiBold" },
   textBtn: { minHeight: 44, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },

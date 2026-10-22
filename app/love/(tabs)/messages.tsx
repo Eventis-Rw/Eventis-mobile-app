@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import type { LoveActivity, LoveActivityType } from "@/context/FindLoveDemoContext";
@@ -9,7 +9,7 @@ import { LoveHeader } from "@/components/love/LoveHeader";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useColors } from "@/hooks/useColors";
 
-type ConnectionsTab = "connections" | "pending" | "activity";
+type ConnectionsTab = "connections" | "pending" | "notifications";
 
 const ACTIVITY_ICONS: Record<LoveActivityType, keyof typeof Ionicons.glyphMap> = {
   connection: "heart-circle-outline",
@@ -19,32 +19,33 @@ const ACTIVITY_ICONS: Record<LoveActivityType, keyof typeof Ionicons.glyphMap> =
   message: "chatbubble-ellipses-outline",
 };
 
-/** FindLove Messages tab: connected people (open a chat), pending requests and activity. */
-export default function LoveMessagesScreen() {
-  const { tab } = useLocalSearchParams<{ tab?: ConnectionsTab }>();
+function tabFromParam(tab: string | undefined): ConnectionsTab {
+  return tab === "pending" || tab === "notifications" ? tab : "connections";
+}
+
+/** FindLove Inbox tab: chats with connected people, pending likes and notifications such as new matches. */
+export default function LoveInboxScreen() {
+  // `at` changes on every bell tap, so the effect below runs again even for the same tab.
+  const { tab, at } = useLocalSearchParams<{ tab?: string; at?: string }>();
   const router = useRouter();
   const colors = useColors();
-  const initialTab = tab === "pending" || tab === "activity" ? tab : "connections";
-  const [activeTab, setActiveTab] = useState<ConnectionsTab>(initialTab);
-  const { connections, pendingProfiles, activity, tokenBalance } = useFindLoveDemo();
+  const [activeTab, setActiveTab] = useState<ConnectionsTab>(tabFromParam(tab));
+  const { connections, pendingProfiles, activity } = useFindLoveDemo();
+
+  // The Home bell opens this tab with tab=notifications, even when it is already mounted.
+  useEffect(() => {
+    if (tab) setActiveTab(tabFromParam(tab));
+  }, [tab, at]);
 
   const tabs = useMemo(() => [
     { id: "connections" as const, label: "Chats", count: connections.length },
     { id: "pending" as const, label: "Pending", count: pendingProfiles.length },
-    { id: "activity" as const, label: "Activity", count: activity.length },
+    { id: "notifications" as const, label: "Notifications", count: activity.length },
   ], [connections.length, pendingProfiles.length, activity.length]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <LoveHeader
-        title="Messages"
-        right={
-          <Pressable onPress={() => router.push("/love/wallet" as any)} style={[styles.balanceBadge, { backgroundColor: colors.glass }]} accessibilityRole="button" accessibilityLabel={`${tokenBalance} gift tokens`}>
-            <Ionicons name="gift-outline" size={16} color={colors.primary} />
-            <Text style={[styles.balanceText, { color: colors.primary }]}>{tokenBalance}</Text>
-          </Pressable>
-        }
-      />
+      <LoveHeader title="Inbox" showExit={false} />
 
       <View style={[styles.tabs, { borderBottomColor: colors.border }]}>
         {tabs.map((item) => {
@@ -77,9 +78,6 @@ export default function LoveMessagesScreen() {
                     <Ionicons name="chatbubble-ellipses-outline" size={16} color="#FFFFFF" />
                     <Text style={styles.primaryActionText}>Message</Text>
                   </Pressable>
-                  <Pressable onPress={() => router.push({ pathname: "/love/chat/[id]", params: { id: profile.id, gift: "1" } } as any)} style={[styles.iconAction, { backgroundColor: colors.secondary, borderColor: colors.border }]} accessibilityRole="button" accessibilityLabel={`Send a gift to ${profile.username}`}>
-                    <Ionicons name="gift-outline" size={18} color={colors.primary} />
-                  </Pressable>
                   <Pressable onPress={() => router.push({ pathname: "/love/[id]", params: { id: profile.id } } as any)} style={[styles.iconAction, { backgroundColor: colors.secondary, borderColor: colors.border }]} accessibilityRole="button" accessibilityLabel={`View ${profile.username}'s profile`}>
                     <Ionicons name="person-outline" size={18} color={colors.foreground} />
                   </Pressable>
@@ -108,8 +106,8 @@ export default function LoveMessagesScreen() {
           )) : <EmptyState icon="time-outline" title="No pending requests" body="New connection requests will appear here." colors={colors} />
         ) : null}
 
-        {activeTab === "activity" ? (
-          activity.length ? activity.map((entry) => <ActivityRow key={entry.id} entry={entry} colors={colors} />) : <EmptyState icon="pulse-outline" title="No activity yet" body="Connections, messages, and gifts will appear here." colors={colors} />
+        {activeTab === "notifications" ? (
+          activity.length ? activity.map((entry) => <ActivityRow key={entry.id} entry={entry} colors={colors} />) : <EmptyState icon="notifications-outline" title="No notifications yet" body="New matches and messages will appear here." colors={colors} />
         ) : null}
       </ScrollView>
     </View>
@@ -143,8 +141,6 @@ function EmptyState({ icon, title, body, colors }: { icon: keyof typeof Ionicons
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  balanceBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11, height: 38, borderRadius: 14 },
-  balanceText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   tabs: { flexDirection: "row", borderBottomWidth: 1, paddingHorizontal: 12 },
   tab: { flex: 1, minHeight: 52, borderBottomWidth: 2, borderBottomColor: "transparent", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 },
   tabText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
