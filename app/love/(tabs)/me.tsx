@@ -3,28 +3,32 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { LoveHeader, useExitFindLove } from "@/components/love/LoveHeader";
+import { LoveHeader } from "@/components/love/LoveHeader";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
+import { useLoveSettings } from "@/hooks/useLoveSettings";
 import { formatMembershipPrice, PRIVATE_MEMBERSHIP_PLAN } from "@/utils/findLoveMembership";
+import { countryName } from "@/utils/findLoveProfile";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-/** FindLove "Me" tab: the member's own profile, membership, tokens and settings. */
+/** FindLove "Me" tab: the member's own profile, membership, tokens and settings. Leaving FindLove is the Eventis tab. */
 export default function LoveMeScreen() {
   const colors = useColors();
   const router = useRouter();
-  const exit = useExitFindLove();
   const { myProfile, accountType, verification } = useMyLoveProfile();
   const { tokenBalance } = useFindLoveDemo();
+  const { settings } = useLoveSettings();
   const [photoFailed, setPhotoFailed] = useState(false);
   const photo = myProfile?.photoUrls[0];
   const isPrivate = accountType === "private";
 
   const rows: { icon: IconName; label: string; value?: string; onPress: () => void }[] = [
-    { icon: "create-outline", label: "Edit profile", onPress: () => router.push("/love/edit" as any) },
+    { icon: "create-outline", label: "Edit profile, bio & photos", onPress: () => router.push("/love/edit" as any) },
+    { icon: "locate-outline", label: "Match distance", value: `${settings.maxDistanceKm} km`, onPress: () => router.push("/love/settings" as any) },
+    { icon: "lock-closed-outline", label: "Account safety", onPress: () => router.push("/love/settings" as any) },
     { icon: "gift-outline", label: "Gift tokens", value: String(tokenBalance), onPress: () => router.push("/love/wallet" as any) },
     {
       icon: "shield-checkmark-outline",
@@ -36,7 +40,7 @@ export default function LoveMeScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <LoveHeader title="Me" />
+      <LoveHeader title="Me" showExit={false} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {photo && !photoFailed ? (
@@ -47,9 +51,10 @@ export default function LoveMeScreen() {
             </View>
           )}
           <View style={styles.profileCopy}>
-            <Text style={[styles.username, { color: colors.foreground }]} numberOfLines={1}>@{myProfile?.username}</Text>
+            <Text style={[styles.username, { color: colors.foreground }]} numberOfLines={1}>{myProfile?.username}</Text>
             <Text style={[styles.meta, { color: colors.mutedForeground }]} numberOfLines={1}>
-              {[myProfile?.gender, myProfile?.neighborhood].filter(Boolean).join(" · ") || "Add your neighbourhood"}
+              {[myProfile?.gender, myProfile?.neighborhood, countryName(myProfile?.country)].filter(Boolean).join(" · ") ||
+                "Add your country"}
             </Text>
             <View style={styles.badgeRow}>
               <MembershipBadge type={accountType} size="sm" />
@@ -97,17 +102,6 @@ export default function LoveMeScreen() {
             </Pressable>
           ))}
         </View>
-
-        <Pressable
-          onPress={exit}
-          style={[styles.list, styles.row, { backgroundColor: colors.card, borderColor: colors.border }]}
-          accessibilityRole="button"
-        >
-          <View style={[styles.rowIcon, { backgroundColor: colors.secondary }]}>
-            <Ionicons name="exit-outline" size={19} color={colors.foreground} />
-          </View>
-          <Text style={[styles.rowLabel, { color: colors.foreground }]}>Back to Eventis</Text>
-        </Pressable>
       </ScrollView>
     </View>
   );

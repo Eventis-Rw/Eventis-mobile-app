@@ -27,24 +27,31 @@ export function useExitFindLove() {
   return useContext(ExitContext);
 }
 
-/** Top bar for FindLove's main screens: back to Eventis, the screen title, an optional action. */
-export function LoveHeader({ title, right }: { title: string; right?: React.ReactNode }) {
+/**
+ * Top bar for FindLove's main screens: back to Eventis, the screen title, an
+ * optional action. Tab screens hide the back button; the Eventis tab does that job.
+ */
+export function LoveHeader({ title, right, showExit = true }: { title: string; right?: React.ReactNode; showExit?: boolean }) {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const exit = useExitFindLove();
 
   return (
     <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
-      <Pressable
-        onPress={exit}
-        hitSlop={8}
-        style={[styles.exit, { backgroundColor: colors.card, borderColor: colors.border }]}
-        accessibilityRole="button"
-        accessibilityLabel="Back to Eventis"
-      >
-        <Ionicons name="chevron-back" size={18} color={colors.foreground} />
-        <Text style={[styles.exitText, { color: colors.foreground }]}>Eventis</Text>
-      </Pressable>
+      {showExit ? (
+        <Pressable
+          onPress={exit}
+          hitSlop={8}
+          style={[styles.exit, { backgroundColor: colors.card, borderColor: colors.border }]}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Eventis"
+        >
+          <Ionicons name="chevron-back" size={18} color={colors.foreground} />
+          <Text style={[styles.exitText, { color: colors.foreground }]}>Eventis</Text>
+        </Pressable>
+      ) : (
+        <View style={styles.right} />
+      )}
       <View style={styles.titleWrap}>
         <Ionicons name="heart" size={18} color={colors.primary} />
         <Text style={[styles.title, { color: colors.foreground }]} numberOfLines={1}>{title}</Text>

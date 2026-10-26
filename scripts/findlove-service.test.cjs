@@ -145,7 +145,8 @@ test("both list response shapes are read and invalid rows filtered", () => {
 test("every mock profile passes the same rules as server data", () => {
   for (const profile of profiles.MOCK_LOVE_PROFILES) {
     assert.ok(demo.normalizeLoveProfile(profile), `${profile.id} would be dropped`);
-    assert.ok(profile.username && profile.neighborhood, `${profile.id} is missing new fields`);
+    assert.ok(profile.username && profile.country, `${profile.id} is missing new fields`);
+    if (rules.neighborhoodsFor(profile.country).length) assert.ok(profile.neighborhood, `${profile.id} has no neighbourhood`);
   }
 });
 
@@ -223,6 +224,7 @@ const validInput = {
   dateOfBirth: "1998-03-05",
   accountType: "public",
   photoUrls: ["file:///a.jpg"],
+  country: "RW",
   confirmedAdult: true,
 };
 
@@ -243,6 +245,8 @@ test("own-profile input breaking a rule is rejected with the field name", () => 
   assert.equal(field({ ...validInput, photoUrls: [] }), null, "photos are optional");
   assert.equal(field({ ...validInput, photoUrls: ["1", "2", "3"] }), "photoUrls");
   assert.equal(field({ ...validInput, username: "x" }), "username");
+  assert.equal(field({ ...validInput, country: undefined }), "country");
+  assert.equal(field({ ...validInput, country: "XX" }), "country", "only listed countries");
 });
 
 test("demo mode creates, reloads and updates a profile per account", async () => {
@@ -604,4 +608,78 @@ test("real mode: the check belongs to the account; 404 means not started; photos
   };
   await assert.rejects(real.submitAgeVerification("u1", idPhotos), /OCR down/);
   assert.equal(stored.size, 0, "real mode never writes demo storage");
+});
+
+// ---- Country ----
+
+test("countries are listed with unique codes and readable names", () => {
+  const codes = rules.LOVE_COUNTRIES.map((c) => c.code);
+  assert.equal(new Set(codes).size, codes.length);
+  assert.ok(codes.every((code) => /^[A-Z]{2}$/.test(code)));
+  assert.equal(rules.countryName("RW"), "Rwanda");
+  assert.equal(rules.countryName("XX"), undefined);
+  assert.equal(rules.countryFlag("RW"), "\u{1F1F7}\u{1F1FC}");
+  assert.equal(rules.validateLoveCountry("KE"), undefined);
+  assert.ok(rules.validateLoveCountry(undefined));
+});
+
+test("neighbourhoods belong to Rwanda; elsewhere none can be picked", () => {
+  assert.ok(rules.neighborhoodsFor("RW").length > 0);
+  assert.deepEqual(rules.neighborhoodsFor("KE"), []);
+  assert.equal(rules.validateLoveNeighborhood("Remera", "RW"), undefined);
+  assert.ok(rules.validateLoveNeighborhood("Remera", "KE"));
+  const field = (input) => {
+    try {
+      demo.checkMyLoveProfileInput({ ...validInput, ...input }, false, TODAY);
+      return null;
+    } catch (err) {
+      return err.field;
+    }
+  };
+  assert.equal(field({ country: "KE", neighborhood: "Remera" }), "neighborhood");
+});
+
+test("country is saved and read back, and normalised from server data", async () => {
+  const created = await demo.saveMyLoveProfile("u1", { ...validInput, country: "KE" }, true);
+  assert.equal(created.country, "KE");
+  assert.equal((await demo.fetchMyLoveProfile("u1")).country, "KE");
+  assert.equal(demo.normalizeLoveProfile({ id: "a", age: 22, gender: "F", country: "ug" }).country, "UG");
+  assert.equal(demo.normalizeLoveProfile({ id: "a", age: 22, gender: "F", countryCode: "Uganda" }).country, undefined);
+});
+
+test("discovery only lists people from the member's country", async () => {
+  const rwanda = await demo.fetchLoveProfiles("RW");
+  assert.ok(rwanda.length > 0 && rwanda.every((p) => p.country === "RW"));
+  const kenya = await demo.fetchLoveProfiles("KE");
+  assert.ok(kenya.length > 0 && kenya.every((p) => p.country === "KE"));
+  assert.equal((await demo.fetchLoveProfiles()).length, profiles.MOCK_LOVE_PROFILES.length, "no country, no filter");
+
+  assert.equal(discovery.inCountry({ country: "RW" }, "RW"), true);
+  assert.equal(discovery.inCountry({ country: "KE" }, "RW"), false);
+  assert.equal(discovery.inCountry({}, "RW"), false, "unknown country is hidden once the member has one");
+  assert.equal(discovery.inCountry({ country: "KE" }, undefined), true);
+});
+
+test("real mode asks the server for the member's country and sends it on save", async () => {
+  apiHandler = async () => [];
+  await real.fetchLoveProfiles("RW");
+  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/love-profiles?country=RW"]);
+
+  apiHandler = async (_method, _path, body) => ({ ...body, gender: "female" });
+  const saved = await real.saveMyLoveProfile("u1", validInput, true);
+  assert.equal(apiCalls[1][2].country, "RW");
+  assert.equal(saved.country, "RW");
+});
+
+const settings = load("utils/findLoveSettings.ts", {}, () => undefined);
+
+test("stored FindLove settings fall back to safe defaults", () => {
+  assert.deepEqual(settings.normalizeLoveSettings(null), settings.DEFAULT_LOVE_SETTINGS);
+  assert.deepEqual(settings.normalizeLoveSettings("junk"), settings.DEFAULT_LOVE_SETTINGS);
+  const saved = settings.normalizeLoveSettings({ maxDistanceKm: 50, showOnlineStatus: false, readReceipts: false, pauseProfile: true });
+  assert.deepEqual(saved, { maxDistanceKm: 50, showOnlineStatus: false, readReceipts: false, pauseProfile: true });
+  // Only the listed distances are allowed; anything else is the default.
+  assert.equal(settings.normalizeLoveSettings({ maxDistanceKm: 7 }).maxDistanceKm, 25);
+  assert.equal(settings.normalizeLoveSettings({ maxDistanceKm: "50" }).maxDistanceKm, 25);
+  assert.equal(settings.normalizeLoveSettings({ readReceipts: "no" }).readReceipts, true);
 });

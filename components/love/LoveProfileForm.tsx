@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { FormField } from "@/components/OrganisationForm";
+import { CountryPicker } from "@/components/love/CountryPicker";
 import { InlineError } from "@/components/profile/ProfileSection";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import type { LoveAccountType } from "@/constants/loveProfiles";
@@ -19,12 +20,14 @@ import {
 export interface LoveProfileFormValues {
   username: string;
   gender?: LoveGender;
+  /** ISO code from LOVE_COUNTRIES; decides who the member discovers. */
+  country?: string;
   /** Create only. Membership changes after that go through the upgrade flow. */
   accountType?: LoveAccountType;
   photoUrls: string[];
 }
 
-export type LoveProfileFormErrors = Partial<Record<"username" | "gender" | "photoUrls", string>>;
+export type LoveProfileFormErrors = Partial<Record<"username" | "gender" | "country" | "photoUrls", string>>;
 
 interface Props {
   values: LoveProfileFormValues;
@@ -111,6 +114,19 @@ export function LoveProfileForm({ values, errors, onChange, onBlur, phone, disab
             </View>
             {errors.gender ? <InlineError message={errors.gender} /> : null}
           </View>
+
+          <CountryPicker
+            value={values.country}
+            onChange={(country) => {
+              set("country", country);
+              onBlur("country");
+            }}
+            error={errors.country}
+            disabled={disabled}
+          />
+          <Text style={[styles.hint, { color: colors.mutedForeground }]}>
+            You'll see people from this country only.
+          </Text>
 
           <View style={styles.group}>
             <Text style={[styles.label, { color: colors.foreground }]}>Phone number</Text>

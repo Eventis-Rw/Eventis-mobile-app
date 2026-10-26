@@ -52,6 +52,93 @@ export const LOVE_INTERESTS = [
 ] as const;
 
 /**
+ * Members pick their country from this list (ISO 3166-1 alpha-2 codes, sorted
+ * by name). Discovery only shows members from the same country.
+ */
+export const LOVE_COUNTRIES: { code: string; name: string }[] = [
+  { code: "DZ", name: "Algeria" },
+  { code: "AO", name: "Angola" },
+  { code: "BE", name: "Belgium" },
+  { code: "BJ", name: "Benin" },
+  { code: "BW", name: "Botswana" },
+  { code: "BF", name: "Burkina Faso" },
+  { code: "BI", name: "Burundi" },
+  { code: "CV", name: "Cabo Verde" },
+  { code: "CM", name: "Cameroon" },
+  { code: "CA", name: "Canada" },
+  { code: "CF", name: "Central African Republic" },
+  { code: "TD", name: "Chad" },
+  { code: "CN", name: "China" },
+  { code: "KM", name: "Comoros" },
+  { code: "CG", name: "Congo" },
+  { code: "CI", name: "Côte d'Ivoire" },
+  { code: "CD", name: "DR Congo" },
+  { code: "DJ", name: "Djibouti" },
+  { code: "EG", name: "Egypt" },
+  { code: "GQ", name: "Equatorial Guinea" },
+  { code: "ER", name: "Eritrea" },
+  { code: "SZ", name: "Eswatini" },
+  { code: "ET", name: "Ethiopia" },
+  { code: "FR", name: "France" },
+  { code: "GA", name: "Gabon" },
+  { code: "GM", name: "Gambia" },
+  { code: "DE", name: "Germany" },
+  { code: "GH", name: "Ghana" },
+  { code: "GN", name: "Guinea" },
+  { code: "GW", name: "Guinea-Bissau" },
+  { code: "IN", name: "India" },
+  { code: "KE", name: "Kenya" },
+  { code: "LS", name: "Lesotho" },
+  { code: "LR", name: "Liberia" },
+  { code: "LY", name: "Libya" },
+  { code: "MG", name: "Madagascar" },
+  { code: "MW", name: "Malawi" },
+  { code: "ML", name: "Mali" },
+  { code: "MR", name: "Mauritania" },
+  { code: "MU", name: "Mauritius" },
+  { code: "MA", name: "Morocco" },
+  { code: "MZ", name: "Mozambique" },
+  { code: "NA", name: "Namibia" },
+  { code: "NL", name: "Netherlands" },
+  { code: "NE", name: "Niger" },
+  { code: "NG", name: "Nigeria" },
+  { code: "RW", name: "Rwanda" },
+  { code: "ST", name: "São Tomé and Príncipe" },
+  { code: "SN", name: "Senegal" },
+  { code: "SC", name: "Seychelles" },
+  { code: "SL", name: "Sierra Leone" },
+  { code: "SO", name: "Somalia" },
+  { code: "ZA", name: "South Africa" },
+  { code: "SS", name: "South Sudan" },
+  { code: "SD", name: "Sudan" },
+  { code: "TZ", name: "Tanzania" },
+  { code: "TG", name: "Togo" },
+  { code: "TN", name: "Tunisia" },
+  { code: "UG", name: "Uganda" },
+  { code: "AE", name: "United Arab Emirates" },
+  { code: "GB", name: "United Kingdom" },
+  { code: "US", name: "United States" },
+  { code: "ZM", name: "Zambia" },
+  { code: "ZW", name: "Zimbabwe" },
+];
+
+export const DEFAULT_LOVE_COUNTRY = "RW";
+
+export function countryName(code: string | undefined): string | undefined {
+  return LOVE_COUNTRIES.find((country) => country.code === code)?.name;
+}
+
+/** Flag emoji from the two-letter code (regional indicator symbols). */
+export function countryFlag(code: string): string {
+  return /^[A-Z]{2}$/.test(code) ? String.fromCodePoint(...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)) : "";
+}
+
+export function validateLoveCountry(value: string | undefined): string | undefined {
+  if (!value) return "Select your country.";
+  return LOVE_COUNTRIES.some((country) => country.code === value) ? undefined : "Pick a country from the list.";
+}
+
+/**
  * Members pick a neighbourhood from this list. An exact location is never
  * asked for, stored or shown.
  */
@@ -74,6 +161,11 @@ export const LOVE_NEIGHBORHOODS: { name: string; city: string }[] = [
   { name: "Gisenyi", city: "Rubavu" },
 ];
 
+/** Neighbourhoods offered for a country. Only Rwanda has a list so far. */
+export function neighborhoodsFor(country: string | undefined): typeof LOVE_NEIGHBORHOODS {
+  return !country || country === DEFAULT_LOVE_COUNTRY ? LOVE_NEIGHBORHOODS : [];
+}
+
 export function validateLoveBio(value: string | undefined): string | undefined {
   return (value ?? "").trim().length > LOVE_BIO_MAX ? `Keep your bio to ${LOVE_BIO_MAX} characters.` : undefined;
 }
@@ -84,9 +176,9 @@ export function validateLoveInterests(values: string[]): string | undefined {
   return undefined;
 }
 
-export function validateLoveNeighborhood(value: string | undefined): string | undefined {
+export function validateLoveNeighborhood(value: string | undefined, country?: string): string | undefined {
   if (!value) return undefined;
-  return LOVE_NEIGHBORHOODS.some((n) => n.name === value) ? undefined : "Pick a neighbourhood from the list.";
+  return neighborhoodsFor(country).some((n) => n.name === value) ? undefined : "Pick a neighbourhood from the list.";
 }
 
 /** Usernames are stored lowercase so "Amara.K" and "amara.k" cannot both exist. */

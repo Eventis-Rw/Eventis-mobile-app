@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useDeferredValue, useMemo, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -15,10 +15,11 @@ import {
 import { LoveProfileCard } from "@/components/LoveProfileCard";
 import { Skeleton } from "@/components/SkeletonLoader";
 import { DiscoveryFilters } from "@/components/love/DiscoveryFilters";
-import { LoveHeader } from "@/components/love/LoveHeader";
 import { useLoveConnect } from "@/components/love/UpgradePrompt";
 import type { LoveProfile } from "@/constants/loveProfiles";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
+import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import {
   activeFilterCount,
@@ -26,29 +27,61 @@ import {
   filterProfiles,
   type DiscoveryFilters as Filters,
 } from "@/utils/findLoveDiscovery";
+import { countryName } from "@/utils/findLoveProfile";
 
-/** FindLove's landing tab: search, filters and the people grid. */
-export default function DiscoverScreen() {
+/** FindLove's Home tab: the people grid with like/skip, filters and search. */
+export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { profiles, isLoading, error, refreshProfiles, getConnectionStatus } = useLoveProfiles();
+  const { profiles, isLoading, error, refreshProfiles, getConnectionStatus, skippedIds, skipProfile, unskipProfile, clearSkipped } =
+    useLoveProfiles();
   const { connect, upgradePrompt } = useLoveConnect();
+  const country = useMyLoveProfile().myProfile?.country;
+  const place = countryName(country);
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_DISCOVERY_FILTERS);
+  // The last person skipped, so the member can undo it for a few seconds.
+  const [lastSkipped, setLastSkipped] = useState<LoveProfile | null>(null);
   const deferredQuery = useDeferredValue(query);
-  const columns = width >= 960 ? 3 : width >= 620 ? 2 : 1;
-  const horizontalPadding = width < 360 ? 16 : 20;
+  // Always at least two people per row; wide screens get three.
+  const columns = width >= 960 ? 3 : 2;
+  const horizontalPadding = width < 360 ? 12 : 16;
+  const gridWidth = Math.min(width - horizontalPadding * 2, MAX_GRID_WIDTH);
+  const cellWidth = (gridWidth - GRID_GAP * (columns - 1)) / columns;
 
+  const unskippedProfiles = useMemo(() => profiles.filter((profile) => !skippedIds.has(profile.id)), [profiles, skippedIds]);
   const filteredProfiles = useMemo(
-    () => filterProfiles(profiles, { ...filters, query: deferredQuery }),
-    [profiles, filters, deferredQuery],
+    () => filterProfiles(unskippedProfiles, { ...filters, query: deferredQuery }),
+    [unskippedProfiles, filters, deferredQuery],
   );
   const filtering = activeFilterCount(filters) > 0 || !!query.trim();
+  const seenEveryone = !filtering && profiles.length > 0 && unskippedProfiles.length === 0;
+
+  useEffect(() => {
+    if (!lastSkipped) return;
+    const timer = setTimeout(() => setLastSkipped(null), 4000);
+    return () => clearTimeout(timer);
+  }, [lastSkipped]);
 
   const clearFilters = () => {
     setQuery("");
     setFilters(DEFAULT_DISCOVERY_FILTERS);
+  };
+
+  const toggleSearch = () => {
+    if (searchOpen) setQuery("");
+    setSearchOpen((open) => !open);
+  };
+
+  const skip = useCallback((profile: LoveProfile) => {
+    skipProfile(profile.id);
+    setLastSkipped(profile);
+  }, [skipProfile]);
+
+  const openNotifications = () => {
+    router.navigate({ pathname: "/love/messages", params: { tab: "notifications", at: String(Date.now()) } } as any);
   };
 
   const openProfile = useCallback((profile: LoveProfile) => {
@@ -60,25 +93,32 @@ export default function DiscoverScreen() {
   }, [router]);
 
   const renderProfile = useCallback(({ item }: { item: LoveProfile }) => (
-    <View style={styles.cardCell}>
+    <View style={[styles.cardCell, { width: cellWidth }]}>
       <LoveProfileCard
         profile={item}
         connectionStatus={getConnectionStatus(item.id)}
         onOpen={() => openProfile(item)}
         onConnect={() => void connect(item)}
+        onSkip={() => skip(item)}
         onMessage={() => openChat(item)}
       />
     </View>
-  ), [connect, getConnectionStatus, openChat, openProfile]);
+  ), [cellWidth, connect, getConnectionStatus, openChat, openProfile, skip]);
+
+  const topBar = <HomeTopBar searchOpen={searchOpen} onSearch={toggleSearch} onNotifications={openNotifications} />;
 
   if (isLoading && profiles.length === 0) {
     return (
       <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <LoveHeader title="Discover" />
+        {topBar}
         <View style={[styles.loadingContent, { paddingHorizontal: horizontalPadding }]}>
-          <Skeleton height={50} borderRadius={16} />
-          <Skeleton height={400} borderRadius={24} style={styles.loadingGap} />
-          <Skeleton height={400} borderRadius={24} style={styles.loadingGap} />
+          <Skeleton height={38} borderRadius={19} />
+          {[0, 1].map((row) => (
+            <View key={row} style={[styles.columnRow, styles.loadingGap]}>
+              <Skeleton width={cellWidth} height={300} borderRadius={20} />
+              <Skeleton width={cellWidth} height={300} borderRadius={20} />
+            </View>
+          ))}
         </View>
       </View>
     );
@@ -86,38 +126,41 @@ export default function DiscoverScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <LoveHeader title="Discover" />
+      {topBar}
       <FlatList
         key={`love-grid-${columns}`}
         data={filteredProfiles}
         numColumns={columns}
         keyExtractor={(item) => item.id}
         renderItem={renderProfile}
-        columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
+        columnWrapperStyle={styles.columnRow}
         contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => void refreshProfiles()} tintColor={colors.primary} />}
         ListHeaderComponent={
           <View style={styles.header}>
-            <View style={[styles.searchBox, { backgroundColor: colors.input, borderColor: colors.border }]}>
-              <Ionicons name="search-outline" size={20} color={colors.mutedForeground} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search username, area, interests..."
-                placeholderTextColor={colors.mutedForeground}
-                style={[styles.searchInput, { color: colors.foreground }]}
-                returnKeyType="search"
-                autoCapitalize="none"
-                accessibilityLabel="Search Love profiles"
-              />
-              {query ? (
-                <Pressable onPress={() => setQuery("")} hitSlop={10} accessibilityRole="button" accessibilityLabel="Clear search">
-                  <Ionicons name="close-circle" size={20} color={colors.mutedForeground} />
-                </Pressable>
-              ) : null}
-            </View>
+            {searchOpen ? (
+              <View style={[styles.searchBox, { backgroundColor: colors.input, borderColor: colors.border }]}>
+                <Ionicons name="search-outline" size={20} color={colors.mutedForeground} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search username, area, interests..."
+                  placeholderTextColor={colors.mutedForeground}
+                  style={[styles.searchInput, { color: colors.foreground }]}
+                  returnKeyType="search"
+                  autoCapitalize="none"
+                  autoFocus
+                  accessibilityLabel="Search Love profiles"
+                />
+                {query ? (
+                  <Pressable onPress={() => setQuery("")} hitSlop={10} accessibilityRole="button" accessibilityLabel="Clear search">
+                    <Ionicons name="close-circle" size={20} color={colors.mutedForeground} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
 
             <DiscoveryFilters filters={filters} onChange={setFilters} />
 
@@ -132,7 +175,7 @@ export default function DiscoverScreen() {
             ) : null}
 
             <View style={styles.resultsRow}>
-              <Text style={[styles.resultsTitle, { color: colors.foreground }]}>{filtering ? "Results" : "People to discover"}</Text>
+              <Text style={[styles.resultsTitle, { color: colors.foreground }]}>{filtering ? "Results" : place ? `People in ${place}` : "People to discover"}</Text>
               <Text style={[styles.resultsCount, { color: colors.mutedForeground }]}>{filteredProfiles.length} profiles</Text>
             </View>
           </View>
@@ -142,26 +185,96 @@ export default function DiscoverScreen() {
             <View style={[styles.emptyIcon, { backgroundColor: colors.secondary }]}>
               <Ionicons name="heart-dislike-outline" size={32} color={colors.primary} />
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No profiles found</Text>
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Try another username, interest, or filter.</Text>
-            <Pressable onPress={clearFilters}>
-              <Text style={[styles.resetText, { color: colors.primary }]}>Clear filters</Text>
-            </Pressable>
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{seenEveryone ? "You've seen everyone" : "No profiles found"}</Text>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+              {filtering
+                ? "Try another username, interest, or filter."
+                : seenEveryone
+                  ? "New people will show up here. You can also look again at the people you skipped."
+                  : `No one${place ? ` in ${place}` : ""} is on FindLove yet. Check back soon.`}
+            </Text>
+            {filtering ? (
+              <Pressable onPress={clearFilters}>
+                <Text style={[styles.resetText, { color: colors.primary }]}>Clear filters</Text>
+              </Pressable>
+            ) : seenEveryone ? (
+              <Pressable onPress={clearSkipped}>
+                <Text style={[styles.resetText, { color: colors.primary }]}>Show skipped people</Text>
+              </Pressable>
+            ) : null}
           </View>
         }
       />
+      {lastSkipped ? (
+        <View style={[styles.toast, { backgroundColor: colors.foreground }]} accessibilityLiveRegion="polite">
+          <Text style={[styles.toastText, { color: colors.background }]} numberOfLines={1}>Skipped {lastSkipped.username}</Text>
+          <Pressable
+            onPress={() => {
+              unskipProfile(lastSkipped.id);
+              setLastSkipped(null);
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.toastAction, { color: colors.primary }]}>Undo</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {upgradePrompt}
     </View>
   );
 }
 
+/** FindLove brand on the left; notifications and search on the right. */
+function HomeTopBar({ searchOpen, onSearch, onNotifications }: { searchOpen: boolean; onSearch: () => void; onNotifications: () => void }) {
+  const colors = useColors();
+  const insets = useAppSafeAreaInsets();
+  return (
+    <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+      <View style={styles.brand}>
+        <Ionicons name="heart" size={22} color={colors.primary} />
+        <Text style={[styles.brandText, { color: colors.foreground }]}>FindLove</Text>
+      </View>
+      <Pressable
+        onPress={onNotifications}
+        hitSlop={6}
+        style={[styles.topIcon, { backgroundColor: colors.card, borderColor: colors.border }]}
+        accessibilityRole="button"
+        accessibilityLabel="Notifications"
+      >
+        <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
+      </Pressable>
+      <Pressable
+        onPress={onSearch}
+        hitSlop={6}
+        style={[styles.topIcon, { backgroundColor: searchOpen ? colors.primary : colors.card, borderColor: searchOpen ? colors.primary : colors.border }]}
+        accessibilityRole="button"
+        accessibilityLabel={searchOpen ? "Close search" : "Search"}
+        accessibilityState={{ expanded: searchOpen }}
+      >
+        <Ionicons name={searchOpen ? "close" : "search-outline"} size={20} color={searchOpen ? "#FFFFFF" : colors.foreground} />
+      </Pressable>
+    </View>
+  );
+}
+
+const GRID_GAP = 12;
+const MAX_GRID_WIDTH = 1080;
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingBottom: 6 },
+  brand: { flex: 1, flexDirection: "row", alignItems: "center", gap: 7 },
+  brandText: { fontSize: 22, letterSpacing: -0.6, fontFamily: "Inter_700Bold" },
+  topIcon: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  toast: { position: "absolute", left: 16, right: 16, bottom: 16, maxWidth: 520, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13 },
+  toastText: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
+  toastAction: { fontSize: 14, fontFamily: "Inter_700Bold" },
   listContent: { flexGrow: 1, paddingTop: 4, paddingBottom: 24 },
-  loadingContent: { width: "100%", maxWidth: 720, alignSelf: "center", paddingTop: 4 },
+  loadingContent: { width: "100%", maxWidth: MAX_GRID_WIDTH, alignSelf: "center", paddingTop: 4 },
   loadingGap: { marginTop: 18 },
   header: { width: "100%", maxWidth: 1080, alignSelf: "center", paddingBottom: 10 },
-  searchBox: { minHeight: 52, borderWidth: 1, borderRadius: 17, flexDirection: "row", alignItems: "center", paddingHorizontal: 15 },
+  searchBox: { minHeight: 52, marginTop: 6, borderWidth: 1, borderRadius: 17, flexDirection: "row", alignItems: "center", paddingHorizontal: 15 },
   searchInput: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", paddingHorizontal: 10, paddingVertical: 12 },
   errorBanner: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 15, paddingHorizontal: 13, paddingVertical: 11, marginBottom: 14 },
   errorText: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
@@ -169,8 +282,8 @@ const styles = StyleSheet.create({
   resultsRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 4, marginBottom: 13 },
   resultsTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   resultsCount: { fontSize: 12, fontFamily: "Inter_500Medium" },
-  columnRow: { gap: 14, maxWidth: 1080, width: "100%", alignSelf: "center" },
-  cardCell: { flex: 1, minWidth: 0, maxWidth: 500, alignSelf: "stretch" },
+  columnRow: { flexDirection: "row", gap: GRID_GAP, maxWidth: MAX_GRID_WIDTH, width: "100%", alignSelf: "center" },
+  cardCell: { alignSelf: "stretch" },
   emptyState: { alignItems: "center", justifyContent: "center", paddingVertical: 70, paddingHorizontal: 24 },
   emptyIcon: { width: 72, height: 72, borderRadius: 24, alignItems: "center", justifyContent: "center" },
   emptyTitle: { fontSize: 20, fontFamily: "Inter_700Bold", marginTop: 18 },

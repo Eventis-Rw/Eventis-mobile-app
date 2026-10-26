@@ -14,7 +14,7 @@ import { useColors } from "@/hooks/useColors";
 import { describeError } from "@/services/organiserService";
 import { LoveProfileInputError } from "@/services/findLoveService";
 import { isAgeVerified } from "@/utils/findLoveAgeVerification";
-import { isAdult, MIN_LOVE_AGE, validateLoveGender, validateLoveUsername } from "@/utils/findLoveProfile";
+import { isAdult, MIN_LOVE_AGE, validateLoveCountry, validateLoveGender, validateLoveUsername } from "@/utils/findLoveProfile";
 
 /**
  * Create a FindLove profile. The ID age check (app/love/verify.tsx) comes
@@ -39,6 +39,7 @@ export default function CreateLoveProfileScreen() {
     return {
       username: serverErrors.username ?? (shown("username") ? validateLoveUsername(values.username) : undefined),
       gender: shown("gender") ? validateLoveGender(values.gender) : undefined,
+      country: serverErrors.country ?? (shown("country") ? validateLoveCountry(values.country) : undefined),
       photoUrls: serverErrors.photoUrls,
     };
   }, [values, touched, submitAttempted, serverErrors]);
@@ -76,7 +77,7 @@ export default function CreateLoveProfileScreen() {
           kind="empty"
           icon="heart-outline"
           title="You already have a profile"
-          message={`You're on FindLove as @${myProfile.username}.`}
+          message={`You're on FindLove as ${myProfile.username}.`}
           actionLabel="Edit my profile"
           onAction={() => router.replace("/love/edit" as any)}
         />
@@ -109,8 +110,9 @@ export default function CreateLoveProfileScreen() {
   const submit = async () => {
     setSubmitAttempted(true);
     setSaveError(null);
-    const hasErrors = !!validateLoveUsername(values.username) || !!validateLoveGender(values.gender);
-    if (hasErrors || !values.gender) {
+    const hasErrors =
+      !!validateLoveUsername(values.username) || !!validateLoveGender(values.gender) || !!validateLoveCountry(values.country);
+    if (hasErrors || !values.gender || !values.country) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
@@ -119,6 +121,7 @@ export default function CreateLoveProfileScreen() {
       await save({
         username: values.username,
         gender: values.gender,
+        country: values.country,
         dateOfBirth,
         accountType: values.accountType,
         photoUrls: values.photoUrls,
@@ -134,7 +137,7 @@ export default function CreateLoveProfileScreen() {
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (err instanceof LoveProfileInputError) {
-        if (err.field === "username" || err.field === "photoUrls") {
+        if (err.field === "username" || err.field === "country" || err.field === "photoUrls") {
           setServerErrors({ [err.field]: err.message });
         } else {
           setSaveError(err.message);

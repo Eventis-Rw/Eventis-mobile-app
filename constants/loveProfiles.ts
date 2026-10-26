@@ -17,6 +17,8 @@ export interface MyLoveProfile {
   membership: LoveMembership;
   /** Main photo first; may be empty. Free members can have up to FREE_LOVE_PHOTO_LIMIT. */
   photoUrls: string[];
+  /** ISO country code from LOVE_COUNTRIES. Discovery shows members from this country only. Missing on profiles made before it was asked. */
+  country?: string;
   /** Optional extras, edited after creation. */
   bio?: string;
   interests: string[];
@@ -37,6 +39,8 @@ export interface MyLoveProfileInput {
    */
   accountType?: LoveAccountType;
   photoUrls: string[];
+  /** ISO country code from LOVE_COUNTRIES. Required. */
+  country: string;
   bio?: string;
   interests?: string[];
   neighborhood?: string;
@@ -53,10 +57,14 @@ export interface LoveProfile {
   gender: LoveGender;
   age: number;
   city: string;
+  /** ISO country code; discovery only lists members from the viewer's country. */
+  country?: string;
   occupation: string;
   bio: string;
   interests: string[];
   imageUrl: string;
+  /** Photos the member has posted, newest first. The profile page shows up to three. */
+  postImageUrls: string[];
   /** The member's actual account type (active membership), as the server reports it. */
   accountType: LoveAccountType;
   isOnline: boolean;
@@ -79,10 +87,16 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     gender: "Woman",
     age: 25,
     city: "Kigali",
+    country: "RW",
     occupation: "Creative strategist",
     bio: "Live music, quiet coffee shops, and spontaneous weekend plans. Looking for someone kind and curious.",
     interests: ["Live music", "Coffee", "Travel"],
     imageUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=85",
+    postImageUrls: [
+      "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80",
+    ],
     accountType: "public",
     isOnline: true,
     neighborhood: "Kimihurura",
@@ -99,10 +113,16 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     gender: "Man",
     age: 28,
     city: "Kigali",
+    country: "RW",
     occupation: "Product designer",
     bio: "Designing by day, discovering new food spots by night. Always ready for a good concert.",
     interests: ["Design", "Food", "Concerts"],
     imageUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=85",
+    postImageUrls: [
+      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1561070791-2526d30994b5?auto=format&fit=crop&w=600&q=80",
+    ],
     accountType: "public",
     isOnline: false,
     neighborhood: "Remera",
@@ -118,10 +138,16 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     gender: "Woman",
     age: 26,
     city: "Musanze",
+    country: "RW",
     occupation: "Travel photographer",
     bio: "Usually outdoors with a camera. I value honest conversations, laughter, and people who love adventure.",
     interests: ["Photography", "Hiking", "Art"],
     imageUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=85",
+    postImageUrls: [
+      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1452587925148-ce544e77e70d?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=600&q=80",
+    ],
     accountType: "public",
     isOnline: true,
     neighborhood: "Muhoza",
@@ -137,10 +163,16 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     gender: "Man",
     age: 30,
     city: "Kigali",
+    country: "RW",
     occupation: "Software engineer",
     bio: "Tech enthusiast, runner, and amateur chef. Here for real connections and memorable experiences.",
     interests: ["Technology", "Running", "Cooking"],
     imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=900&q=85",
+    postImageUrls: [
+      "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80",
+    ],
     accountType: "public",
     isOnline: false,
     neighborhood: "Kicukiro",
@@ -155,10 +187,16 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     gender: "Woman",
     age: 27,
     city: "Huye",
+    country: "RW",
     occupation: "Event producer",
     bio: "I create experiences for a living and collect great stories along the way. Dancing is always a yes.",
     interests: ["Dance", "Festivals", "Books"],
     imageUrl: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=85",
+    postImageUrls: [
+      "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80",
+    ],
     accountType: "public",
     isOnline: true,
     neighborhood: "Ngoma",
@@ -173,10 +211,16 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     gender: "Man",
     age: 29,
     city: "Rubavu",
+    country: "RW",
     occupation: "Architect",
     bio: "Drawn to good architecture, lakeside sunsets, and conversations that run longer than expected.",
     interests: ["Architecture", "Jazz", "Travel"],
     imageUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=85",
+    postImageUrls: [
+      "https://images.unsplash.com/photo-1487958449943-2429e8be8625?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=80",
+    ],
     accountType: "public",
     isOnline: false,
     neighborhood: "Gisenyi",
@@ -194,13 +238,43 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     gender: "Woman",
     age: 31,
     city: "Kigali",
+    country: "RW",
     occupation: "Lawyer",
     bio: "Private profile. Weekend hikes and good books.",
     interests: ["Hiking", "Books"],
     imageUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=900&q=85",
+    postImageUrls: [
+      "https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=600&q=80",
+    ],
     accountType: "private",
     isOnline: true,
     neighborhood: "Remera",
+    active: true,
+    eligible: true,
+  },
+  {
+    // Outside Rwanda: only members who chose Kenya see her.
+    id: "love-wanjiru",
+    userId: "user-wanjiru",
+    username: "wanjiru.w",
+    name: "Wanjiru",
+    gender: "Woman",
+    age: 27,
+    city: "Nairobi",
+    country: "KE",
+    occupation: "Marketing lead",
+    bio: "Weekend road trips, rooftop jazz and long brunches. Say hi if you love live shows.",
+    interests: ["Live music", "Travel", "Food"],
+    imageUrl: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=900&q=85",
+    postImageUrls: [
+      "https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80",
+    ],
+    accountType: "public",
+    isOnline: true,
     active: true,
     eligible: true,
   },
@@ -218,4 +292,5 @@ export const DEMO_LAST_ACTIVE_MINUTES: Record<string, number> = {
   "love-keza": 0,
   "love-samuel": 60 * 5,
   "love-claire": 2,
+  "love-wanjiru": 20,
 };

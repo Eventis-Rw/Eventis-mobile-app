@@ -36,6 +36,7 @@ import {
   MIN_LOVE_AGE,
   normalizeLoveUsername,
   validateLoveBio,
+  validateLoveCountry,
   validateLoveGender,
   validateLoveInterests,
   validateLoveNeighborhood,
@@ -107,6 +108,12 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/** Two-letter country code, uppercased; anything else is treated as unknown. */
+function optionalCountry(value: unknown): string | undefined {
+  const code = optionalString(value)?.toUpperCase();
+  return code && /^[A-Z]{2}$/.test(code) ? code : undefined;
+}
+
 /**
  * Maps one API row to a profile. FindLove is 18+ only and gender is required,
  * so a row without a whole-number age of at least 18 or a known gender is
@@ -133,10 +140,12 @@ export function normalizeLoveProfile(value: unknown): LoveProfile | null {
     gender,
     age,
     city: String(source.city ?? "Kigali"),
+    country: optionalCountry(source.country ?? source.countryCode),
     occupation: String(source.occupation ?? source.jobTitle ?? "Eventis member"),
     bio: String(source.bio ?? source.about ?? ""),
     interests: Array.isArray(source.interests) ? source.interests.map(String) : [],
     imageUrl: String(source.imageUrl ?? source.profileImage ?? source.avatarUrl ?? ""),
+    postImageUrls: readPostImages(source.postImageUrls ?? source.posts),
     accountType: readAccountType(source),
     isOnline: Boolean(source.isOnline ?? source.online ?? false),
     lastActiveAt: optionalString(source.lastActiveAt),
@@ -146,6 +155,14 @@ export function normalizeLoveProfile(value: unknown): LoveProfile | null {
     verified: Boolean(source.verified ?? source.isVerified ?? false),
     connectionStatus: normalizeConnectionStatus(source.connectionStatus),
   };
+}
+
+/** Accepts plain URLs or post objects ({ imageUrl } / { url }). */
+function readPostImages(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((post) => (typeof post === "string" ? post : post && typeof post === "object" ? (post as Record<string, unknown>).imageUrl ?? (post as Record<string, unknown>).url : ""))
+    .filter((url): url is string => typeof url === "string" && url.length > 0);
 }
 
 export function readLoveProfilesResponse(value: unknown): LoveProfile[] {
@@ -164,16 +181,19 @@ async function readDemoRequests(): Promise<string[]> {
   }
 }
 
-// INTEGRATION POINT: GET /api/v1/love-profiles -> LoveProfile[] | { profiles: LoveProfile[] }
+// INTEGRATION POINT: GET /api/v1/love-profiles?country=RW -> LoveProfile[] | { profiles: LoveProfile[] }
+// The server must only return members from the requested country (the caller's
+// own); LoveProfilesContext filters again so a missed filter can't leak others.
 // connectionStatus on each row is the caller's status with that member.
 // lastActiveAt drives presence (utils/findLoveDiscovery.ts). accountType is the
 // member's ACTUAL type (active membership), so badges never show an unpaid Private.
-export async function fetchLoveProfiles(): Promise<LoveProfile[]> {
+export async function fetchLoveProfiles(country?: string): Promise<LoveProfile[]> {
   if (!USE_FINDLOVE_API) {
     await wait(400);
     const requested = new Set(await readDemoRequests());
     const now = Date.now();
-    return MOCK_LOVE_PROFILES.map((profile) => {
+    const rows = country ? MOCK_LOVE_PROFILES.filter((profile) => profile.country === country) : MOCK_LOVE_PROFILES;
+    return rows.map((profile) => {
       const minutes = DEMO_LAST_ACTIVE_MINUTES[profile.id];
       return {
         ...profile,
@@ -183,7 +203,8 @@ export async function fetchLoveProfiles(): Promise<LoveProfile[]> {
       };
     });
   }
-  const response = await withTimeout(api.get<unknown>("/api/v1/love-profiles"), PROFILES_TIMEOUT_MS);
+  const path = country ? `/api/v1/love-profiles?country=${encodeURIComponent(country)}` : "/api/v1/love-profiles";
+  const response = await withTimeout(api.get<unknown>(path), PROFILES_TIMEOUT_MS);
   return readLoveProfilesResponse(response);
 }
 
@@ -237,6 +258,7 @@ export class LoveProfileInputError extends Error {
       | "gender"
       | "dateOfBirth"
       | "photoUrls"
+      | "country"
       | "confirmedAdult"
       | "bio"
       | "interests"
@@ -260,6 +282,8 @@ export function checkMyLoveProfileInput(input: MyLoveProfileInput, isNew: boolea
   if (isNew && !input.confirmedAdult) {
     throw new LoveProfileInputError("confirmedAdult", `Confirm that you are ${MIN_LOVE_AGE} or older.`);
   }
+  const countryError = validateLoveCountry(input.country);
+  if (countryError) throw new LoveProfileInputError("country", countryError);
   // Photos are optional; members can add them later from Edit profile.
   if (input.photoUrls.length > FREE_LOVE_PHOTO_LIMIT) {
     throw new LoveProfileInputError("photoUrls", `You can add up to ${FREE_LOVE_PHOTO_LIMIT} photos.`);
@@ -268,7 +292,7 @@ export function checkMyLoveProfileInput(input: MyLoveProfileInput, isNew: boolea
   if (bioError) throw new LoveProfileInputError("bio", bioError);
   const interestsError = validateLoveInterests(input.interests ?? []);
   if (interestsError) throw new LoveProfileInputError("interests", interestsError);
-  const neighborhoodError = validateLoveNeighborhood(input.neighborhood);
+  const neighborhoodError = validateLoveNeighborhood(input.neighborhood, input.country);
   if (neighborhoodError) throw new LoveProfileInputError("neighborhood", neighborhoodError);
 }
 
@@ -297,6 +321,7 @@ export function normalizeMyLoveProfile(value: unknown): MyLoveProfile | null {
     dateOfBirth,
     membership: normalizeMembership(source.membership),
     photoUrls: photos.map(String).filter(Boolean).slice(0, FREE_LOVE_PHOTO_LIMIT),
+    country: optionalCountry(source.country ?? source.countryCode),
     bio: optionalString(source.bio),
     interests: Array.isArray(source.interests) ? source.interests.map(String).filter(Boolean) : [],
     neighborhood: optionalString(source.neighborhood ?? source.neighbourhood),
@@ -359,6 +384,7 @@ export async function saveMyLoveProfile(
       dateOfBirth: input.dateOfBirth,
       membership,
       photoUrls: input.photoUrls,
+      country: input.country,
       ...cleanExtras(input),
       createdAt: all[userId]?.createdAt ?? now,
       updatedAt: now,
@@ -372,6 +398,7 @@ export async function saveMyLoveProfile(
     gender: input.gender.toLowerCase(),
     dateOfBirth: input.dateOfBirth,
     photoUrls: input.photoUrls,
+    country: input.country,
     ...cleanExtras(input),
     ...(isNew ? { confirmedAdult: true, accountType: input.accountType ?? "public" } : {}),
   };

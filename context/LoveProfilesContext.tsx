@@ -1,9 +1,12 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LoveConnectionStatus, LoveProfile } from "@/constants/loveProfiles";
 import { useAuth } from "@/context/AuthContext";
+import { useMyLoveProfileState } from "@/context/MyLoveProfileContext";
 import { describeError } from "@/services/organiserService";
 import { fetchLoveProfiles, MembershipRequiredError, requestLoveConnection } from "@/services/findLoveService";
+import { inCountry } from "@/utils/findLoveDiscovery";
 
 /** "upgrade_required": the server says this connection needs a Private membership. */
 export type LoveConnectResult = "sent" | "upgrade_required" | "failed";
@@ -18,30 +21,74 @@ interface LoveProfilesContextValue {
   getProfileById: (id: string) => LoveProfile | undefined;
   getConnectionStatus: (id: string) => LoveConnectionStatus;
   sendConnectionRequest: (id: string) => Promise<LoveConnectResult>;
+  /** People the member skipped on Home; they stay reachable by link and chat. */
+  skippedIds: ReadonlySet<string>;
+  skipProfile: (id: string) => void;
+  unskipProfile: (id: string) => void;
+  clearSkipped: () => void;
 }
+
+// Skips are kept on the device until the API records them.
+const skippedKey = (userId: string) => `@eventis_findlove_skipped_v1_${userId}`;
 
 const LoveProfilesContext = createContext<LoveProfilesContextValue | null>(null);
 
 export function LoveProfilesProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  // Members only discover people from the country on their FindLove profile.
+  const country = useMyLoveProfileState().myProfile?.country;
   const [profiles, setProfiles] = useState<LoveProfile[]>([]);
   // True until the first load finishes, so screens show loading, not "unavailable".
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loadStarted = useRef(false);
+  const [skippedIds, setSkippedIds] = useState<ReadonlySet<string>>(new Set());
+
+  useEffect(() => {
+    setSkippedIds(new Set());
+    if (!user?.id) return;
+    let cancelled = false;
+    AsyncStorage.getItem(skippedKey(user.id))
+      .then((stored) => {
+        const ids = stored ? JSON.parse(stored) : [];
+        if (!cancelled && Array.isArray(ids)) setSkippedIds(new Set(ids.filter((id) => typeof id === "string")));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const updateSkipped = useCallback((change: (current: Set<string>) => void) => {
+    setSkippedIds((current) => {
+      const next = new Set(current);
+      change(next);
+      if (user?.id) void AsyncStorage.setItem(skippedKey(user.id), JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  }, [user?.id]);
+
+  const skipProfile = useCallback((id: string) => updateSkipped((ids) => ids.add(id)), [updateSkipped]);
+  const unskipProfile = useCallback((id: string) => updateSkipped((ids) => ids.delete(id)), [updateSkipped]);
+  const clearSkipped = useCallback(() => updateSkipped((ids) => ids.clear()), [updateSkipped]);
 
   const refreshProfiles = useCallback(async () => {
     loadStarted.current = true;
     setIsLoading(true);
     setError(null);
     try {
-      setProfiles(await fetchLoveProfiles());
+      setProfiles(await fetchLoveProfiles(country));
     } catch (err) {
       setError(describeError(err, "FindLove could not be reached. Pull to try again."));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [country]);
+
+  // A new country means a different list; reload if one was already shown.
+  useEffect(() => {
+    if (loadStarted.current) void refreshProfiles();
+  }, [refreshProfiles]);
 
   // Nothing loads at app start; the first FindLove screen to open triggers it.
   const ensureLoaded = useCallback(() => {
@@ -53,9 +100,12 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
       profiles.filter(
         (profile) =>
           // Public and Private members are both discoverable; membership only limits connecting.
-          profile.active && profile.eligible && profile.userId !== user?.id,
+          profile.active &&
+          profile.eligible &&
+          profile.userId !== user?.id &&
+          inCountry(profile, country),
       ),
-    [profiles, user?.id],
+    [profiles, user?.id, country],
   );
 
   const getProfileById = useCallback(
@@ -98,8 +148,25 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
       getProfileById,
       getConnectionStatus,
       sendConnectionRequest,
+      skippedIds,
+      skipProfile,
+      unskipProfile,
+      clearSkipped,
     }),
-    [visibleProfiles, isLoading, error, ensureLoaded, refreshProfiles, getProfileById, getConnectionStatus, sendConnectionRequest],
+    [
+      visibleProfiles,
+      isLoading,
+      error,
+      ensureLoaded,
+      refreshProfiles,
+      getProfileById,
+      getConnectionStatus,
+      sendConnectionRequest,
+      skippedIds,
+      skipProfile,
+      unskipProfile,
+      clearSkipped,
+    ],
   );
 
   return <LoveProfilesContext.Provider value={value}>{children}</LoveProfilesContext.Provider>;
