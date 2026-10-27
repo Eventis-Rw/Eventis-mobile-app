@@ -9,12 +9,17 @@ import {
   LOVE_BIO_MAX,
   LOVE_INTERESTS,
   LOVE_INTERESTS_MAX,
+  LOVE_LOOKING_FOR_MAX,
+  LOVE_RELATIONSHIP_GOALS,
   neighborhoodsFor,
+  type LoveRelationshipGoal,
 } from "@/utils/findLoveProfile";
 
 export interface LoveProfileExtrasValues {
   bio: string;
   interests: string[];
+  relationshipGoal?: LoveRelationshipGoal;
+  lookingFor: string;
   neighborhood?: string;
 }
 
@@ -89,6 +94,39 @@ export function LoveProfileExtras({
         {errors.interests ? <InlineError message={errors.interests} /> : null}
       </Section>
 
+      <Section title="Relationship goal (optional)" hint="Let people know what you are here for.">
+        <View style={styles.chips}>
+          {LOVE_RELATIONSHIP_GOALS.map((goal) => {
+            const selected = values.relationshipGoal === goal;
+            return (
+              <Chip
+                key={goal}
+                label={goal}
+                selected={selected}
+                // Tapping the selected one again clears it.
+                onPress={() => onChange({ ...values, relationshipGoal: selected ? undefined : goal })}
+                disabled={disabled}
+                role="radio"
+              />
+            );
+          })}
+        </View>
+        {errors.relationshipGoal ? <InlineError message={errors.relationshipGoal} /> : null}
+        <View style={[styles.card, styles.lookingFor, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <FormField
+            label="What I'm looking for"
+            placeholder="e.g. Someone kind who loves live music as much as I do."
+            multiline
+            showCount
+            maxLength={LOVE_LOOKING_FOR_MAX}
+            value={values.lookingFor}
+            onChangeText={(lookingFor) => onChange({ ...values, lookingFor })}
+            error={errors.lookingFor}
+            editable={!disabled}
+          />
+        </View>
+      </Section>
+
       {neighborhoods.length ? (
         <Section
           title="Neighbourhood (optional)"
@@ -153,6 +191,7 @@ function Chip({
 
 const styles = StyleSheet.create({
   card: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 14 },
+  lookingFor: { marginTop: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { paddingHorizontal: 14, minHeight: 38, justifyContent: "center", borderRadius: 999, borderWidth: 1 },
   chipText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },

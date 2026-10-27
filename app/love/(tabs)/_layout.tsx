@@ -7,6 +7,7 @@ import { FindLoveIntro } from "@/components/love/FindLoveIntro";
 import { LoveHeader, useExitFindLove } from "@/components/love/LoveHeader";
 import { SectionState } from "@/components/profile/ProfileSection";
 import { useAuth } from "@/context/AuthContext";
+import { useFindLoveChat } from "@/context/FindLoveChatContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
@@ -81,6 +82,7 @@ const TABS: { name: string; title: string; icon: IconName; activeIcon: IconName 
 function LoveTabs() {
   const colors = useColors();
   const exit = useExitFindLove();
+  const { totalUnread } = useFindLoveChat();
   const insets = useAppSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   return (
@@ -119,6 +121,8 @@ function LoveTabs() {
           }
           options={{
             title: tab.title,
+            tabBarBadge: tab.name === "messages" && totalUnread > 0 ? (totalUnread > 99 ? "99+" : totalUnread) : undefined,
+            tabBarBadgeStyle: { backgroundColor: colors.primary, color: "#FFFFFF", fontSize: 10 },
             tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? tab.activeIcon : tab.icon} size={23} color={color} />,
           }}
         />

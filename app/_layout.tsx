@@ -27,6 +27,7 @@ import { BookingsProvider } from "@/context/BookingsContext";
 import { EventsProvider } from "@/context/EventsContext";
 import { StoriesProvider } from "@/context/StoriesContext";
 import { AnalyticsProvider } from "@/context/AnalyticsContext";
+import { FindLoveChatProvider } from "@/context/FindLoveChatContext";
 import { FindLoveDemoProvider } from "@/context/FindLoveDemoContext";
 import { LoveProfilesProvider } from "@/context/LoveProfilesContext";
 import { MyLoveProfileProvider } from "@/context/MyLoveProfileContext";
@@ -147,7 +148,9 @@ function FindLoveProviders({ children }: { children: React.ReactNode }) {
   return (
     <MyLoveProfileProvider>
       <LoveProfilesProvider>
-        <FindLoveDemoProvider>{children}</FindLoveDemoProvider>
+        <FindLoveDemoProvider>
+          <FindLoveChatProvider>{children}</FindLoveChatProvider>
+        </FindLoveDemoProvider>
       </LoveProfilesProvider>
     </MyLoveProfileProvider>
   );

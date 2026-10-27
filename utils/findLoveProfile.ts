@@ -59,6 +59,19 @@ export const LOVE_INTERESTS = [
   "Volunteering",
 ] as const;
 
+/** What a member wants from FindLove. Shown on their profile page. */
+export const LOVE_RELATIONSHIP_GOALS = [
+  "Long-term relationship",
+  "Marriage",
+  "Something casual",
+  "New friends",
+  "Still figuring it out",
+] as const;
+export type LoveRelationshipGoal = (typeof LOVE_RELATIONSHIP_GOALS)[number];
+
+/** A short line on the kind of person they hope to meet. */
+export const LOVE_LOOKING_FOR_MAX = 120;
+
 /**
  * Members pick their country from this list (ISO 3166-1 alpha-2 codes, sorted
  * by name). Discovery only shows members from the same country.
@@ -182,6 +195,21 @@ export function validateLoveInterests(values: string[]): string | undefined {
   if (values.length > LOVE_INTERESTS_MAX) return `Pick up to ${LOVE_INTERESTS_MAX} interests.`;
   if (values.some((value) => !(LOVE_INTERESTS as readonly string[]).includes(value))) return "Pick interests from the list.";
   return undefined;
+}
+
+export function validateLoveRelationshipGoal(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return (LOVE_RELATIONSHIP_GOALS as readonly string[]).includes(value) ? undefined : "Pick a goal from the list.";
+}
+
+export function validateLoveLookingFor(value: string | undefined): string | undefined {
+  return (value ?? "").trim().length > LOVE_LOOKING_FOR_MAX ? `Keep this to ${LOVE_LOOKING_FOR_MAX} characters.` : undefined;
+}
+
+/** Matches a goal case-insensitively; anything not on the list is dropped. */
+export function normalizeLoveRelationshipGoal(value: unknown): LoveRelationshipGoal | undefined {
+  const text = String(value ?? "").trim().toLowerCase();
+  return LOVE_RELATIONSHIP_GOALS.find((goal) => goal.toLowerCase() === text);
 }
 
 export function validateLoveNeighborhood(value: string | undefined, country?: string): string | undefined {

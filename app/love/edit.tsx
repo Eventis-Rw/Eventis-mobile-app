@@ -51,6 +51,8 @@ export default function EditLoveProfileScreen() {
             photoUrls: myProfile.photoUrls,
             bio: myProfile.bio ?? "",
             interests: myProfile.interests,
+            relationshipGoal: myProfile.relationshipGoal,
+            lookingFor: myProfile.lookingFor ?? "",
             neighborhood: myProfile.neighborhood,
           }
         : null,
@@ -155,6 +157,8 @@ export default function EditLoveProfileScreen() {
         photoUrls: values.photoUrls,
         bio: values.bio,
         interests: values.interests,
+        relationshipGoal: values.relationshipGoal,
+        lookingFor: values.lookingFor,
         neighborhood: values.neighborhood,
       });
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -164,7 +168,7 @@ export default function EditLoveProfileScreen() {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (err instanceof LoveProfileInputError && (err.field === "username" || err.field === "country" || err.field === "photoUrls")) {
         setServerErrors({ [err.field]: err.message });
-      } else if (err instanceof LoveProfileInputError && (err.field === "bio" || err.field === "interests" || err.field === "neighborhood")) {
+      } else if (err instanceof LoveProfileInputError && ["bio", "interests", "relationshipGoal", "lookingFor", "neighborhood"].includes(err.field)) {
         setExtrasErrors({ [err.field]: err.message });
       } else {
         setSaveError(describeError(err, "We couldn't save your changes. Please try again."));

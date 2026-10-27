@@ -122,6 +122,10 @@ test("rows are mapped to the FindLove profile model", () => {
   assert.equal(profile.isOnline, true);
   assert.equal(profile.neighborhood, "Remera");
   assert.equal(profile.connectionStatus, "connected");
+  const withGoal = demo.normalizeLoveProfile({ id: "g", age: 26, gender: "F", relationship_goal: "long-term relationship", looking_for: "  A kind soul " });
+  assert.equal(withGoal.relationshipGoal, "Long-term relationship");
+  assert.equal(withGoal.lookingFor, "A kind soul");
+  assert.equal(demo.normalizeLoveProfile({ id: "h", age: 26, gender: "F", relationshipGoal: "secret" }).relationshipGoal, undefined);
 
   const sparse = demo.normalizeLoveProfile({ id: "x", age: 21, gender: "F", accountType: "secret", connectionStatus: "weird" });
   assert.equal(sparse.accountType, "public");
@@ -323,6 +327,9 @@ test("bio, interests and neighbourhood are optional but checked when given", () 
   assert.equal(field({ interests: ["Coffee", "Dance", "Art", "Books", "Food", "Travel"] }), "interests");
   assert.equal(field({ interests: ["Knitting"] }), "interests", "only listed interests");
   assert.equal(field({ neighborhood: "Exact GPS spot" }), "neighborhood", "only listed neighbourhoods");
+  assert.equal(field({ relationshipGoal: "Marriage", lookingFor: "Someone kind" }), null);
+  assert.equal(field({ relationshipGoal: "Anything" }), "relationshipGoal", "only listed goals");
+  assert.equal(field({ lookingFor: "x".repeat(rules.LOVE_LOOKING_FOR_MAX + 1) }), "lookingFor");
 });
 
 test("extras are saved, trimmed and read back; empty ones are dropped", async () => {
@@ -692,4 +699,53 @@ test("stored FindLove settings fall back to safe defaults", () => {
   assert.equal(settings.normalizeLoveSettings({ maxDistanceKm: 7 }).maxDistanceKm, 25);
   assert.equal(settings.normalizeLoveSettings({ maxDistanceKm: "50" }).maxDistanceKm, 25);
   assert.equal(settings.normalizeLoveSettings({ readReceipts: "no" }).readReceipts, true);
+});
+
+const chat = load("utils/findLoveChat.ts", {}, () => undefined);
+const chatStore = load("services/findLoveChatService.ts", {}, (name) => {
+  if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
+});
+
+test("inbox counts unread messages from the other person after the last read", () => {
+  const msg = (id, sentAt, own) => ({ id, sentAt, own, kind: "text", text: id });
+  const thread = {
+    readAt: "2026-10-27T10:00:00.000Z",
+    messages: [msg("a", "2026-10-27T09:00:00.000Z", false), msg("b", "2026-10-27T11:00:00.000Z", true), msg("c", "2026-10-27T12:00:00.000Z", false)],
+  };
+  assert.equal(chat.countUnread(thread), 1, "own messages and older ones are not unread");
+  assert.equal(chat.countUnread({ messages: thread.messages }), 2, "never-opened chats count every incoming message");
+  assert.equal(chat.countUnread(undefined), 0);
+
+  const order = chat.summarizeConversations(["none", "old", "new"], {
+    old: { messages: [msg("o", "2026-10-20T08:00:00.000Z", true)] },
+    new: { messages: [msg("n", "2026-10-27T08:00:00.000Z", false)] },
+  });
+  assert.deepEqual(order.map((s) => s.profileId), ["new", "old", "none"], "newest chat first, empty chats last");
+  assert.equal(order[0].unreadCount, 1);
+
+  assert.equal(chat.loveMessagePreview(msg("hi", "2026-10-27T08:00:00.000Z", true)), "You: hi");
+  assert.equal(chat.loveMessagePreview({ id: "v", sentAt: "", own: false, kind: "voice", uri: "x", durationMs: 1 }), "Voice message");
+});
+
+test("inbox and chat times read naturally", () => {
+  const now = new Date(2026, 9, 27, 15, 0);
+  const at = (d, h = 9, m = 5) => new Date(2026, 9, d, h, m).toISOString();
+  assert.equal(chat.formatInboxTime(at(27), now), "09:05");
+  assert.equal(chat.formatInboxTime(at(26), now), "Yesterday");
+  assert.equal(chat.formatInboxTime(at(23), now), "Fri");
+  assert.equal(chat.formatInboxTime(at(12), now), "12 Oct");
+  assert.equal(chat.formatInboxTime(new Date(2025, 0, 3).toISOString(), now), "3 Jan 2025");
+  assert.equal(chat.formatChatDay(at(27), now), "Today");
+  assert.equal(chat.formatChatDay(at(12), now), "Mon 12 Oct");
+  assert.equal(chat.startsNewDay({ sentAt: at(27) }, { sentAt: at(27, 8) }), false);
+  assert.equal(chat.startsNewDay({ sentAt: at(27) }, { sentAt: at(26) }), true);
+});
+
+test("FindLove chats are saved per member and seeded once", async () => {
+  const seeded = await chatStore.loadLoveChats("u1");
+  assert.ok(chat.countUnread(seeded["love-amara"]) > 0, "demo starts with an unread chat");
+  const threads = { "love-amara": { messages: [{ id: "m", sentAt: new Date().toISOString(), own: true, kind: "text", text: "hey" }] } };
+  await chatStore.saveLoveChats("u1", threads);
+  assert.deepEqual(await chatStore.loadLoveChats("u1"), threads);
+  assert.notDeepEqual(await chatStore.loadLoveChats("u2"), threads, "another member never sees these chats");
 });

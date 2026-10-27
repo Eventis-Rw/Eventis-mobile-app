@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect } from "react";
+import { useVideoPlayer, VideoView } from "expo-video";
+import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
@@ -15,8 +16,12 @@ import Animated, {
 
 import { useColors } from "@/hooks/useColors";
 
-/** How long the animation plays before FindLove opens on its own. */
+/** How long the fallback animation plays before FindLove opens on its own. */
 export const FINDLOVE_SPLASH_MS = 2600;
+/** Longest the intro video may hold the screen (it is ~15 s), in case it stalls. */
+const VIDEO_MAX_MS = 16000;
+
+const INTRO_VIDEO = require("@/assets/videos/findlove-intro.mp4");
 
 // Small hearts that float up behind the logo: x offset (px), delay (ms), size.
 const FLOATING_HEARTS = [
@@ -28,10 +33,60 @@ const FLOATING_HEARTS = [
 ];
 
 /**
- * Animated splash played each time FindLove is opened from Eventis. It stands
- * in for a video until one is supplied; tapping anywhere skips it.
+ * Intro played each time FindLove is opened from Eventis: the FindLove video,
+ * or the animated logo if the video cannot play. Tapping anywhere skips it.
  */
 export function FindLoveSplash({ onDone }: { onDone: () => void }) {
+  const [videoFailed, setVideoFailed] = useState(false);
+  return videoFailed ? <AnimatedSplash onDone={onDone} /> : <VideoSplash onDone={onDone} onError={() => setVideoFailed(true)} />;
+}
+
+function VideoSplash({ onDone, onError }: { onDone: () => void; onError: () => void }) {
+  const player = useVideoPlayer(INTRO_VIDEO, (video) => {
+    video.loop = false;
+    // Muted so opening FindLove never plays sound out loud unexpectedly.
+    video.muted = true;
+    video.play();
+  });
+
+  useEffect(() => {
+    const end = player.addListener("playToEnd", onDone);
+    const status = player.addListener("statusChange", ({ status }) => {
+      if (status === "error") onError();
+    });
+    const timer = setTimeout(onDone, VIDEO_MAX_MS);
+    return () => {
+      end.remove();
+      status.remove();
+      clearTimeout(timer);
+    };
+  }, [player]);
+
+  return (
+    <Animated.View exiting={FadeOut.duration(300)} style={[StyleSheet.absoluteFill, styles.videoRoot]}>
+      <VideoView
+        player={player}
+        style={[StyleSheet.absoluteFill, { width: "100%", height: "100%" }]}
+        contentFit="cover"
+        nativeControls={false}
+        allowsPictureInPicture={false}
+      />
+      <Pressable
+        onPress={onDone}
+        style={StyleSheet.absoluteFill}
+        accessibilityRole="button"
+        accessibilityLabel="Skip intro and open FindLove"
+      >
+        <View style={styles.skipPill}>
+          <Text style={styles.skipPillText}>Skip</Text>
+          <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function AnimatedSplash({ onDone }: { onDone: () => void }) {
   const colors = useColors();
   const logo = useSharedValue(0);
   const beat = useSharedValue(1);
@@ -104,4 +159,7 @@ const styles = StyleSheet.create({
   subtitle: { color: "rgba(255,255,255,0.85)", fontSize: 15, fontFamily: "Inter_500Medium", marginTop: 6 },
   skip: { position: "absolute", bottom: 48, color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Inter_500Medium" },
   floating: { position: "absolute" },
+  videoRoot: { backgroundColor: "#000000" },
+  skipPill: { position: "absolute", right: 18, bottom: 48, flexDirection: "row", alignItems: "center", gap: 2, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: "rgba(0,0,0,0.45)" },
+  skipPillText: { color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });
