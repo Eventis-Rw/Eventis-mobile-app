@@ -11,21 +11,13 @@ const GENDERS: { value: GenderFilter; label: string }[] = [
   { value: "Man", label: "Men" },
 ];
 
-/** Gender and "Online Now" filters for the Home grid. */
+/** Gender filters for the Home grid. */
 export function DiscoveryFilters({ filters, onChange }: { filters: Filters; onChange: (next: Filters) => void }) {
-  const onlineOnly = filters.presence === "online";
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
       {GENDERS.map(({ value, label }) => (
         <Chip key={value} label={label} selected={filters.gender === value} onPress={() => onChange({ ...filters, gender: value })} />
       ))}
-      <Chip
-        label="Online Now"
-        icon="ellipse"
-        selected={onlineOnly}
-        // Tapping it again turns it off.
-        onPress={() => onChange({ ...filters, presence: onlineOnly ? "any" : "online" })}
-      />
     </ScrollView>
   );
 }

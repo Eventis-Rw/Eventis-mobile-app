@@ -216,11 +216,14 @@ test("usernames are lowercased and limited to safe characters", () => {
   assert.ok(rules.validateLoveUsername("am..ara"));
   assert.equal(rules.validateLoveGender("Woman"), undefined);
   assert.ok(rules.validateLoveGender("They"));
+  assert.equal(rules.validateLoveInterestedIn("All"), undefined);
+  assert.ok(rules.validateLoveInterestedIn(undefined));
 });
 
 const validInput = {
   username: "New.Member",
   gender: "Woman",
+  interestedIn: "Man",
   dateOfBirth: "1998-03-05",
   accountType: "public",
   photoUrls: ["file:///a.jpg"],
@@ -242,6 +245,7 @@ test("own-profile input breaking a rule is rejected with the field name", () => 
   assert.equal(field({ ...validInput, confirmedAdult: false }), "confirmedAdult");
   assert.equal(field({ ...validInput, confirmedAdult: false }, false), null, "edits don't re-ask");
   assert.equal(field({ ...validInput, gender: "They" }), "gender");
+  assert.equal(field({ ...validInput, interestedIn: undefined }), "interestedIn");
   assert.equal(field({ ...validInput, photoUrls: [] }), null, "photos are optional");
   assert.equal(field({ ...validInput, photoUrls: ["1", "2", "3"] }), "photoUrls");
   assert.equal(field({ ...validInput, username: "x" }), "username");
@@ -292,8 +296,10 @@ test("real mode creates with POST, updates with PUT and reads the reply", async 
   assert.equal(apiCalls[0][0], "POST");
   assert.equal(apiCalls[0][2].username, "new.member");
   assert.equal(apiCalls[0][2].gender, "woman");
+  assert.equal(apiCalls[0][2].interestedIn, "man");
   assert.equal(apiCalls[0][2].confirmedAdult, true);
   assert.equal(created.gender, "Woman");
+  assert.equal(created.interestedIn, "Man");
 
   await real.saveMyLoveProfile("u1", validInput, false);
   assert.equal(apiCalls[1][0], "PUT");
@@ -393,6 +399,10 @@ test("filters combine and results are ordered online, recent, away", () => {
   assert.deepEqual(names({ query: "jazz" }), ["online_w"]);
   assert.deepEqual(names({ query: "man" }), [], "gender is not text-searchable");
   assert.equal(discovery.activeFilterCount({ gender: "Man", presence: "online", neighborhood: "Remera", query: "" }), 3);
+  const forMen = discovery.defaultFiltersFor("Man");
+  assert.equal(forMen.gender, "Man");
+  assert.equal(discovery.activeFilterCount(forMen, forMen), 0, "the member's own preference is not an active filter");
+  assert.equal(discovery.defaultFiltersFor(undefined).gender, "All");
 });
 
 test("demo list gives every member a last-active time and includes a private member", async () => {

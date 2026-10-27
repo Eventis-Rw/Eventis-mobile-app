@@ -1,4 +1,4 @@
-import { Redirect, Stack } from "expo-router";
+import { Redirect, Stack, useSegments } from "expo-router";
 import React from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
@@ -10,6 +10,9 @@ export default function BusinessLayout() {
   const { user, isLoading } = useAuth();
   const palette = useOrganiserPalette();
   const step = getOrganiserStep(user);
+  const segments = useSegments() as string[];
+  // Someone who paid for a post can publish it without setting up an organisation.
+  const quickPost = step === "setup" && (user?.organiserSubscription?.postsRemaining ?? 0) > 0;
 
   // Don't render (or redirect away from) organiser screens until we know who's signed in.
   if (isLoading) {
@@ -22,6 +25,13 @@ export default function BusinessLayout() {
 
   // Organiser-only area: the portal and its create/manage screens. Everyone
   // else, including deep links, goes through the Become an Organiser flow.
+  if (quickPost && segments.includes("create-event")) {
+    return (
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="create-event" />
+      </Stack>
+    );
+  }
   if (step !== "ready") {
     return (
       <Redirect

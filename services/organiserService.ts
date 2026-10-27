@@ -17,13 +17,24 @@ export const USE_ORGANISER_API = process.env.EXPO_PUBLIC_USE_ORGANISER_API === "
 /** RWF has no minor unit (see @eventis/contracts money ADR), so amounts are whole francs. */
 export const SUBSCRIPTION_CURRENCY = "RWF";
 
-export type SubscriptionInterval = "day" | "week" | "month" | "year";
+/**
+ * "post" is a one-off pack of event posts that never expires; the rest are
+ * time-based subscriptions with unlimited posting while they run.
+ */
+export type SubscriptionInterval = "post" | "month" | "quarter" | "year";
+
+/** Singular/plural unit for a plan, e.g. "post", "posts", "quarters". */
+export function intervalUnit(interval: SubscriptionInterval, count: number = 1): string {
+  return count === 1 ? interval : `${interval}s`;
+}
 
 export interface SubscriptionPlan {
   id: string;
   name: string;
-  /** Whole Rwandan francs per single interval. */
+  /** Whole Rwandan francs per single interval (per post for the "post" plan). */
   price: number;
+  /** Fixed totals that replace price x duration, e.g. { 2: 4180 } for a two-post pack. */
+  bundlePrices?: Record<number, number>;
   interval: SubscriptionInterval;
   features: string[];
   recommended?: boolean;
@@ -39,7 +50,10 @@ export interface OrganiserSubscription {
   planId: string;
   duration?: number;
   status: "active";
-  renewsAt: string;
+  /** Time-based plans only; a post pack has no end date. */
+  renewsAt?: string;
+  /** Post packs only: how many event posts are still unused. */
+  postsRemaining?: number;
 }
 
 /** Terminal outcome of a payment attempt. `cancelled` = the payer declined, nothing was charged. */
@@ -75,50 +89,65 @@ export type DemoOutcome = "succeeded" | "failed" | "cancelled";
 
 const DEMO_PLANS: SubscriptionPlan[] = [
   {
-    id: "organiser_daily",
-    name: "Daily",
-    price: 1500,
-    interval: "day",
-    description: "Ideal for single-day club nights, workshops & pop-ups",
+    id: "organiser_post",
+    name: "Pay per post",
+    price: 2180,
+    bundlePrices: { 2: 4180 },
+    interval: "post",
+    description: "Want to post quickly? Post one or two events and you're done. No subscription and no organisation to set up.",
     features: [
+      "Pay only for the events you post",
       "Instant event activation",
       "Real-time attendee RSVP & tickets",
       "Live check-in & door QR scan",
-      "Basic attendance analytics",
     ],
-    durations: [1, 3, 7],
-    badge: "Flexible",
-  },
-  {
-    id: "organiser_weekly",
-    name: "Weekly",
-    price: 6000,
-    interval: "week",
-    description: "Best for weekend fests, tournaments & multi-day expos",
-    features: [
-      "Multiple event postings",
-      "Featured placement in Discover",
-      "Direct attendee announcements",
-      "Organiser stories & updates",
-    ],
-    durations: [1, 2, 4],
-    badge: "Popular",
+    durations: [1, 2],
+    badge: "No commitment",
   },
   {
     id: "organiser_monthly",
     name: "Monthly",
     price: 18000,
     interval: "month",
-    description: "Most loved by venues, clubs, promoters & active brands",
+    description: "Keep posting all month. Ideal for venues, clubs and promoters.",
+    features: [
+      "Unlimited event listings",
+      "Official Verified Organiser badge",
+      "Featured placement in Discover",
+      "Comprehensive revenue & analytics",
+    ],
+    durations: [1],
+  },
+  {
+    id: "organiser_quarterly",
+    name: "Quarterly",
+    price: 48000,
+    interval: "quarter",
+    description: "Three months of unlimited posting at a lower monthly cost.",
     features: [
       "Unlimited event listings",
       "Official Verified Organiser badge",
       "Top priority discovery & push alerts",
-      "Comprehensive revenue & analytics",
       "Export guest lists & CSV reports",
     ],
     recommended: true,
-    durations: [1, 3, 6, 12],
+    durations: [1],
+    badge: "Popular",
+  },
+  {
+    id: "organiser_yearly",
+    name: "Yearly",
+    price: 170000,
+    interval: "year",
+    description: "A full year of unlimited posting at the best price.",
+    features: [
+      "Unlimited event listings",
+      "Official Verified Organiser badge",
+      "Top priority discovery & push alerts",
+      "Export guest lists & CSV reports",
+      "Dedicated organiser support",
+    ],
+    durations: [1],
     badge: "Best Value",
   },
 ];
@@ -153,28 +182,23 @@ export async function startSubscription(
       return { status: "failed", message: "The payment was declined. Check your balance and try again." };
     }
     if (demoOutcome === "cancelled") return { status: "cancelled" };
-    const renewsAt = new Date();
     const plan = DEMO_PLANS.find((p) => p.id === input.planId);
     const duration = Math.max(1, input.duration ?? 1);
-    if (plan?.interval === "day") {
-      renewsAt.setDate(renewsAt.getDate() + duration);
-    } else if (plan?.interval === "week") {
-      renewsAt.setDate(renewsAt.getDate() + duration * 7);
-    } else if (plan?.interval === "year") {
-      renewsAt.setFullYear(renewsAt.getFullYear() + duration);
-    } else {
-      renewsAt.setMonth(renewsAt.getMonth() + duration);
-    }
-    return {
-      status: "succeeded",
-      subscription: {
-        id: "sub_" + Date.now().toString(36),
-        planId: input.planId,
-        duration,
-        status: "active",
-        renewsAt: renewsAt.toISOString(),
-      },
+    const subscription: OrganiserSubscription = {
+      id: "sub_" + Date.now().toString(36),
+      planId: input.planId,
+      duration,
+      status: "active",
     };
+    if (plan?.interval === "post") {
+      subscription.postsRemaining = duration;
+    } else {
+      const renewsAt = new Date();
+      if (plan?.interval === "year") renewsAt.setFullYear(renewsAt.getFullYear() + duration);
+      else renewsAt.setMonth(renewsAt.getMonth() + duration * (plan?.interval === "quarter" ? 3 : 1));
+      subscription.renewsAt = renewsAt.toISOString();
+    }
+    return { status: "succeeded", subscription };
   }
   try {
     return await api.post<SubscriptionResult>("/api/v1/organisers/subscriptions", input);
@@ -239,14 +263,19 @@ export function describeError(error: unknown, fallback: string): string {
   return fallback;
 }
 
+/** What a plan costs for `duration` intervals; a bundle price wins over price x duration. */
+export function planTotal(plan: Pick<SubscriptionPlan, "price" | "bundlePrices">, duration: number = 1): number {
+  const count = Math.max(1, duration);
+  return plan.bundlePrices?.[count] ?? plan.price * count;
+}
+
 export function formatPlanPrice(
-  plan: Pick<SubscriptionPlan, "price" | "interval">,
+  plan: Pick<SubscriptionPlan, "price" | "interval" | "bundlePrices">,
   duration: number = 1,
 ): string {
-  const total = plan.price * Math.max(1, duration);
+  const total = planTotal(plan, duration);
   if (duration <= 1) {
     return `FRw ${total.toLocaleString("en-US")} / ${plan.interval}`;
   }
-  const unit = duration > 1 ? `${plan.interval}s` : plan.interval;
-  return `FRw ${total.toLocaleString("en-US")} (${duration} ${unit})`;
+  return `FRw ${total.toLocaleString("en-US")} (${duration} ${intervalUnit(plan.interval, duration)})`;
 }

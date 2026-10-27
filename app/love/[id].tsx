@@ -9,7 +9,6 @@ import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useLoveConnect } from "@/components/love/UpgradePrompt";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { useColors } from "@/hooks/useColors";
-import { presenceLabel } from "@/utils/findLoveDiscovery";
 
 export default function LoveProfileDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -52,7 +51,6 @@ export default function LoveProfileDetailScreen() {
   const connectionStatus = getConnectionStatus(profileId);
   const pending = connectionStatus === "pending";
   const connected = connectionStatus === "connected";
-  const presence = presenceLabel(profile);
   const posts = profile.postImageUrls.slice(0, 3);
 
   function connect() {
@@ -102,9 +100,9 @@ export default function LoveProfileDetailScreen() {
               <Text style={[styles.factValue, { color: colors.foreground }]}>{profile.gender}</Text>
             </View>
             <View style={[styles.fact, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Ionicons name="time-outline" size={20} color={colors.primary} />
-              <Text style={[styles.factLabel, { color: colors.mutedForeground }]}>Last active</Text>
-              <Text numberOfLines={1} style={[styles.factValue, { color: colors.foreground }]}>{presence ?? "Not recently"}</Text>
+              <Ionicons name="location-outline" size={20} color={colors.primary} />
+              <Text style={[styles.factLabel, { color: colors.mutedForeground }]}>Location</Text>
+              <Text numberOfLines={1} style={[styles.factValue, { color: colors.foreground }]}>{profile.neighborhood ? `${profile.neighborhood}, ${profile.city}` : profile.city}</Text>
             </View>
           </View>
 

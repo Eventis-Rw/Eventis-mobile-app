@@ -29,6 +29,8 @@ import {
   describeError,
   fetchSubscriptionPlans,
   formatPlanPrice,
+  intervalUnit,
+  planTotal,
   USE_ORGANISER_API,
   type DemoOutcome,
   type PaymentMethod,
@@ -44,9 +46,10 @@ const METHODS: { id: PaymentMethod; label: string; badge: string; color: string;
 ];
 
 const INTERVAL_TABS: { id: SubscriptionInterval; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { id: "day", label: "Daily", icon: "sunny-outline" },
-  { id: "week", label: "Weekly", icon: "flash-outline" },
-  { id: "month", label: "Monthly", icon: "diamond-outline" },
+  { id: "post", label: "Per post", icon: "document-text-outline" },
+  { id: "month", label: "Monthly", icon: "calendar-outline" },
+  { id: "quarter", label: "Quarterly", icon: "layers-outline" },
+  { id: "year", label: "Yearly", icon: "diamond-outline" },
 ];
 
 const SHOW_DEMO_CONTROLS = __DEV__ && !USE_ORGANISER_API;
@@ -60,19 +63,17 @@ function splitPhone(phone?: string): { country: Country; local: string } {
     : { country: COUNTRIES[0], local: compact.replace(/^\+/, "") };
 }
 
-function computeExpiry(interval: SubscriptionInterval, duration: number): Date {
+/** End date of a time-based plan; a post pack never expires. */
+function computeExpiry(interval: SubscriptionInterval, duration: number): Date | null {
+  if (interval === "post") return null;
   const d = new Date();
-  if (interval === "day") {
-    d.setDate(d.getDate() + duration);
-  } else if (interval === "week") {
-    d.setDate(d.getDate() + duration * 7);
-  } else if (interval === "month") {
-    d.setMonth(d.getMonth() + duration);
-  } else {
-    d.setFullYear(d.getFullYear() + duration);
-  }
+  if (interval === "month") d.setMonth(d.getMonth() + duration);
+  else if (interval === "quarter") d.setMonth(d.getMonth() + duration * 3);
+  else d.setFullYear(d.getFullYear() + duration);
   return d;
 }
+
+const formatDate = (date: Date) => date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 export default function OrganiserSubscribeScreen() {
   const colors = useOrganiserColors();
@@ -86,7 +87,7 @@ export default function OrganiserSubscribeScreen() {
   const [plansLoading, setPlansLoading] = useState(true);
   const [plansError, setPlansError] = useState<string | null>(null);
 
-  const [selectedInterval, setSelectedInterval] = useState<SubscriptionInterval>("month");
+  const [selectedInterval, setSelectedInterval] = useState<SubscriptionInterval>("post");
   const [selectedDuration, setSelectedDuration] = useState<number>(1);
 
   const [method, setMethod] = useState<PaymentMethod>("mtn_momo");
@@ -116,6 +117,17 @@ export default function OrganiserSubscribeScreen() {
     void loadPlans();
   }, [loadPlans]);
 
+  const intervalTabs = useMemo(
+    () => INTERVAL_TABS.filter((tab) => plans.some((plan) => plan.interval === tab.id)),
+    [plans],
+  );
+
+  useEffect(() => {
+    if (intervalTabs.length && !intervalTabs.some((tab) => tab.id === selectedInterval)) {
+      setSelectedInterval(intervalTabs[0].id);
+    }
+  }, [intervalTabs, selectedInterval]);
+
   // Find plan matching active interval
   const activePlan = useMemo(() => {
     return (
@@ -130,9 +142,7 @@ export default function OrganiserSubscribeScreen() {
     if (activePlan?.durations && activePlan.durations.length > 0) {
       return activePlan.durations;
     }
-    if (selectedInterval === "day") return [1, 3, 7];
-    if (selectedInterval === "week") return [1, 2, 4];
-    return [1, 3, 6, 12];
+    return selectedInterval === "post" ? [1, 2] : [1];
   }, [activePlan, selectedInterval]);
 
   // Ensure selected duration is valid for active interval
@@ -150,7 +160,7 @@ export default function OrganiserSubscribeScreen() {
   }, [phase]);
 
   const payerPhone = `${country.code}${phone.replace(/\D/g, "")}`;
-  const totalAmount = (activePlan?.price ?? 0) * selectedDuration;
+  const totalAmount = activePlan ? planTotal(activePlan, selectedDuration) : 0;
   const expiryDate = useMemo(
     () => computeExpiry(selectedInterval, selectedDuration),
     [selectedInterval, selectedDuration],
@@ -250,12 +260,14 @@ export default function OrganiserSubscribeScreen() {
               phase={phase}
               planLabel={
                 activePlan
-                  ? `${activePlan.name} (${selectedDuration} ${selectedInterval}${selectedDuration > 1 ? "s" : ""}) · RWF ${totalAmount.toLocaleString()}`
+                  ? `${activePlan.name} (${selectedDuration} ${intervalUnit(selectedInterval, selectedDuration)}) · RWF ${totalAmount.toLocaleString()}`
                   : ""
               }
               renewsAt={user?.organiserSubscription?.renewsAt}
               failure={failure}
               onContinue={goToSetup}
+              postPack={activePlan?.interval === "post"}
+              onPostNow={() => router.replace("/business/create-event" as any)}
               onRetry={() => setPhase("form")}
               onLeave={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
             />
@@ -265,7 +277,7 @@ export default function OrganiserSubscribeScreen() {
     );
   }
 
-  const durationUnit = selectedDuration > 1 ? `${selectedInterval}s` : selectedInterval;
+  const durationUnit = intervalUnit(selectedInterval, selectedDuration);
 
   return (
     <KeyboardAvoidingView
@@ -289,14 +301,14 @@ export default function OrganiserSubscribeScreen() {
           </View>
           <Text style={[styles.title, { color: palette.text }]}>Choose your organiser access</Text>
           <Text style={[styles.subtitle, { color: palette.muted }]}>
-            Select how long you need the workspace, then complete payment with Mobile Money.
+            Pay once for a few posts, or subscribe to keep posting. Complete payment with Mobile Money.
           </Text>
         </Animated.View>
 
         {/* INTERVAL SELECTOR TABS (DAILY / WEEKLY / MONTHLY) */}
-        <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(90).springify() : undefined}>
+        {intervalTabs.length > 1 ? <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(90).springify() : undefined}>
           <View style={[styles.tabSegmentContainer, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-            {INTERVAL_TABS.map((tab) => {
+            {intervalTabs.map((tab) => {
               const active = selectedInterval === tab.id;
               return (
                 <Pressable
@@ -333,7 +345,7 @@ export default function OrganiserSubscribeScreen() {
               );
             })}
           </View>
-        </Animated.View>
+        </Animated.View> : null}
 
         {plansLoading ? (
           <View style={styles.inlineState}>
@@ -388,15 +400,17 @@ export default function OrganiserSubscribeScreen() {
                     </Text>
                   </View>
                   <Text style={[styles.priceSubtext, { color: palette.muted }]}>
-                    RWF {activePlan.price.toLocaleString()} per {activePlan.interval} · {selectedDuration} {durationUnit}
+                    {activePlan.bundlePrices?.[selectedDuration]
+                      ? `${selectedDuration} ${durationUnit}`
+                      : `RWF ${activePlan.price.toLocaleString()} per ${activePlan.interval} · ${selectedDuration} ${durationUnit}`}
                   </Text>
                 </View>
 
-                {/* DURATION SELECTOR CHIPS */}
-                <View style={styles.durationSection}>
+                {/* DURATION SELECTOR CHIPS (only when there is a choice) */}
+                {availableDurations.length > 1 ? <View style={styles.durationSection}>
                   <View style={styles.durationHeaderRow}>
                     <Text style={[styles.durationSectionLabel, { color: palette.text }]}>
-                      Access duration
+                      {selectedInterval === "post" ? "How many posts?" : "Access duration"}
                     </Text>
                     <Text style={[styles.durationHint, { color: palette.accent }]}>
                       {selectedDuration} {durationUnit} selected
@@ -406,8 +420,8 @@ export default function OrganiserSubscribeScreen() {
                   <View style={styles.durationChipsRow}>
                     {availableDurations.map((dur) => {
                       const isSelected = selectedDuration === dur;
-                      const unitLabel = dur === 1 ? activePlan.interval : `${activePlan.interval}s`;
-                      const durSavings = dur === 3 && selectedInterval === "month" ? "Popular" : undefined;
+                      const unitLabel = intervalUnit(activePlan.interval, dur);
+                      const durSavings = undefined;
 
                       return (
                         <Pressable
@@ -438,13 +452,13 @@ export default function OrganiserSubscribeScreen() {
                             {dur} {unitLabel}
                           </Text>
                           <Text style={[styles.durationChipPrice, { color: palette.muted }]}>
-                            RWF {(activePlan.price * dur).toLocaleString()}
+                            RWF {planTotal(activePlan, dur).toLocaleString()}
                           </Text>
                         </Pressable>
                       );
                     })}
                   </View>
-                </View>
+                </View> : null}
 
                 {/* DIVIDER */}
                 <View style={[styles.cardDivider, { backgroundColor: palette.line }]} />
@@ -583,14 +597,10 @@ export default function OrganiserSubscribeScreen() {
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={[styles.summaryItemLabel, { color: colors.mutedForeground }]}>
-                    Access valid until
+                    Valid until
                   </Text>
                   <Text style={[styles.summaryItemValue, { color: "#38BDF8" }]}>
-                    {expiryDate.toLocaleDateString("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
+                    {expiryDate ? formatDate(expiryDate) : "No expiry"}
                   </Text>
                 </View>
                 <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
@@ -673,11 +683,7 @@ export default function OrganiserSubscribeScreen() {
                 <SummaryRow label="Duration" value={`${selectedDuration} ${durationUnit}`} />
                 <SummaryRow
                   label="Expires On"
-                  value={expiryDate.toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
+                  value={expiryDate ? formatDate(expiryDate) : "No expiry"}
                 />
                 <SummaryRow label="Provider" value={METHODS.find((m) => m.id === method)?.label ?? ""} />
                 <SummaryRow label="Paying Number" value={payerPhone} />
@@ -750,6 +756,8 @@ function StatusResult({
   renewsAt,
   failure,
   onContinue,
+  postPack,
+  onPostNow,
   onRetry,
   onLeave,
 }: {
@@ -758,6 +766,9 @@ function StatusResult({
   renewsAt?: string;
   failure: string;
   onContinue: () => void;
+  /** A pay-per-post purchase: the buyer can post right away without an organisation. */
+  postPack: boolean;
+  onPostNow: () => void;
   onRetry: () => void;
   onLeave: () => void;
 }) {
@@ -766,8 +777,10 @@ function StatusResult({
     succeeded: {
       icon: "checkmark-circle" as const,
       tint: "#10B981",
-      title: "Organiser access activated",
-      text: `${planLabel}${renewsAt ? `\nActive through ${new Date(renewsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}\n\nYou now have full organiser capabilities. Set up your organisation details to start creating events.`,
+      title: postPack ? "Your post is ready" : "Organiser access activated",
+      text: postPack
+        ? `${planLabel}\n\nPost your event now. You can set up an organisation later if you want a public profile and more tools.`
+        : `${planLabel}${renewsAt ? `\nActive through ${new Date(renewsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}\n\nYou now have full organiser capabilities. Set up your organisation details to start creating events.`,
     },
     failed: {
       icon: "close-circle" as const,
@@ -792,10 +805,17 @@ function StatusResult({
       <Text style={[styles.statusText, { color: colors.mutedForeground }]}>{config.text}</Text>
       <View style={styles.statusActions}>
         {phase === "succeeded" ? (
-          <Pressable style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]} onPress={onContinue}>
-            <Text style={styles.primaryPayBtnText}>Set Up Organisation</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
-          </Pressable>
+          <>
+            <Pressable style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]} onPress={postPack ? onPostNow : onContinue}>
+              <Text style={styles.primaryPayBtnText}>{postPack ? "Post My Event Now" : "Set Up Organisation"}</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </Pressable>
+            {postPack ? (
+              <Pressable onPress={onContinue} style={styles.cancelSheetBtn} accessibilityRole="button">
+                <Text style={[styles.cancelSheetText, { color: colors.mutedForeground }]}>Set up an organisation instead</Text>
+              </Pressable>
+            ) : null}
+          </>
         ) : (
           <>
             <Pressable style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]} onPress={onRetry}>

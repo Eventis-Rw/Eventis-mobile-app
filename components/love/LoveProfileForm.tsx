@@ -13,13 +13,17 @@ import { formatMembershipPrice, PRIVATE_MEMBERSHIP_PLAN } from "@/utils/findLove
 import {
   FREE_LOVE_PHOTO_LIMIT,
   LOVE_GENDERS,
+  LOVE_INTERESTED_IN,
   LOVE_USERNAME_MAX,
   type LoveGender,
+  type LoveInterestedIn,
 } from "@/utils/findLoveProfile";
 
 export interface LoveProfileFormValues {
   username: string;
   gender?: LoveGender;
+  /** Who they want to meet; the Home grid starts on it. */
+  interestedIn?: LoveInterestedIn;
   /** ISO code from LOVE_COUNTRIES; decides who the member discovers. */
   country?: string;
   /** Create only. Membership changes after that go through the upgrade flow. */
@@ -27,7 +31,7 @@ export interface LoveProfileFormValues {
   photoUrls: string[];
 }
 
-export type LoveProfileFormErrors = Partial<Record<"username" | "gender" | "country" | "photoUrls", string>>;
+export type LoveProfileFormErrors = Partial<Record<"username" | "gender" | "interestedIn" | "country" | "photoUrls", string>>;
 
 interface Props {
   values: LoveProfileFormValues;
@@ -113,6 +117,42 @@ export function LoveProfileForm({ values, errors, onChange, onBlur, phone, disab
               })}
             </View>
             {errors.gender ? <InlineError message={errors.gender} /> : null}
+          </View>
+
+          <View style={styles.group}>
+            <Text style={[styles.label, { color: colors.foreground }]}>
+              Interested in <Text style={{ color: colors.destructive }}>*</Text>
+            </Text>
+            <View style={styles.row} accessibilityRole="radiogroup">
+              {LOVE_INTERESTED_IN.map(({ value, label }) => {
+                const selected = values.interestedIn === value;
+                return (
+                  <Pressable
+                    key={value}
+                    onPress={() => {
+                      set("interestedIn", value);
+                      onBlur("interestedIn");
+                    }}
+                    disabled={disabled}
+                    style={[
+                      styles.choice,
+                      {
+                        backgroundColor: selected ? colors.primary : colors.secondary,
+                        borderColor: selected ? colors.primary : errors.interestedIn ? colors.destructive : colors.border,
+                      },
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected, disabled }}
+                  >
+                    <Text style={[styles.choiceText, { color: selected ? "#FFFFFF" : colors.foreground }]}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {errors.interestedIn ? <InlineError message={errors.interestedIn} /> : null}
+            <Text style={[styles.hint, { color: colors.mutedForeground }]}>
+              We'll show you these people first. You can still change the filter on Home.
+            </Text>
           </View>
 
           <CountryPicker
@@ -322,9 +362,9 @@ const styles = StyleSheet.create({
   card: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 14 },
   group: { gap: 8 },
   label: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  row: { flexDirection: "row", gap: 10 },
-  choice: { flex: 1, minHeight: 46, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  choiceText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  choice: { flexGrow: 1, flexBasis: "30%", paddingHorizontal: 8, minHeight: 46, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  choiceText: { fontSize: 14, textAlign: "center", fontFamily: "Inter_600SemiBold" },
   readOnly: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, minHeight: 46 },
   readOnlyText: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   photoBlock: { gap: 8 },

@@ -33,7 +33,7 @@ export const PUBLIC_MEMBERSHIP: LoveMembership = { type: "public", status: "acti
  */
 export const PRIVATE_MEMBERSHIP_PLAN = {
   id: "findlove_private_monthly",
-  price: 2499,
+  price: 1180,
   periodDays: 30,
   periodLabel: "month",
   benefits: [

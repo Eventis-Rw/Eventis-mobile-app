@@ -177,7 +177,9 @@ export default function PortalOrganisationScreen() {
             <View style={styles.flex}>
               <Text style={[styles.subTitle, { color: palette.text }]}>Organiser access active</Text>
               <Text style={[styles.muted, { color: palette.muted }]}>
-                Renews {new Date(subscription.renewsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                {subscription.renewsAt
+                  ? `Renews ${new Date(subscription.renewsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
+                  : `${subscription.postsRemaining ?? 0} ${(subscription.postsRemaining ?? 0) === 1 ? "post" : "posts"} remaining`}
               </Text>
             </View>
           </View>

@@ -90,6 +90,8 @@ interface AuthContextType {
     input: { planId: string; paymentMethod: PaymentMethod; payerPhone: string; duration?: number },
     demoOutcome?: DemoOutcome,
   ) => Promise<SubscriptionResult>;
+  /** Spends one post from a pay-per-post pack; does nothing for unlimited plans. */
+  consumePost: () => Promise<void>;
   setupOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
   updateOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
   switchOrganisation: (organisationId: string) => Promise<void>;
@@ -364,12 +366,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ) => {
       const result = await startSubscription(input, demoOutcome);
       if (result.status === "succeeded" && user) {
-        await persistUser({ ...user, organiserSubscription: result.subscription });
+        // Buying another post pack tops up the posts left instead of replacing them.
+        const bought = result.subscription;
+        const left = user.organiserSubscription?.postsRemaining;
+        const organiserSubscription =
+          bought.postsRemaining !== undefined && left
+            ? { ...bought, postsRemaining: bought.postsRemaining + left }
+            : bought;
+        await persistUser({ ...user, organiserSubscription });
       }
       return result;
     },
     [user, persistUser]
   );
+
+  const consumePost = useCallback(async () => {
+    const subscription = user?.organiserSubscription;
+    if (!user || !subscription || subscription.postsRemaining === undefined) return;
+    await persistUser({
+      ...user,
+      organiserSubscription: { ...subscription, postsRemaining: Math.max(0, subscription.postsRemaining - 1) },
+    });
+  }, [user, persistUser]);
 
   // The active organisation alias keeps existing organiser screens compatible
   // while the collection supports owning and switching between organisations.
@@ -464,6 +482,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateProfile,
         markPhoneVerified,
         subscribeAsOrganiser,
+        consumePost,
         setupOrganisation,
         updateOrganisation,
         switchOrganisation,

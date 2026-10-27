@@ -239,6 +239,7 @@ function LiveTabIcon({
 function TabLayout() {
   const router = useRouter();
   const { user } = useAuth();
+  const postsLeft = user?.organiserSubscription?.postsRemaining ?? 0;
   const { conversations } = useChat();
   const [showOrganizerSheet, setShowOrganizerSheet] = useState(false);
   const unread = conversations.reduce(
@@ -456,6 +457,30 @@ function TabLayout() {
                 <Pressable onPress={() => setShowOrganizerSheet(false)} accessibilityRole="button" style={styles.modalDismissButton}><Text style={[styles.modalDismiss, { color: colors.foreground }]}>Cancel</Text></Pressable>
               </>
             ) : <>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Quick create</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={postsLeft > 0 ? "Post an event now" : "Pay for a quick post"}
+              onPress={() => {
+                setShowOrganizerSheet(false);
+                router.push((postsLeft > 0 ? "/business/create-event" : "/organiser/subscribe") as any);
+              }}
+              style={({ pressed }) => [styles.modalFeatureRow, { marginTop: 12, padding: 18, backgroundColor: colors.card, borderColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Ionicons name="flash-outline" size={24} color={colors.primary} />
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={[styles.modalFeatureText, { color: colors.foreground }]}>
+                  {postsLeft > 0 ? `Post an event (${postsLeft} ${postsLeft === 1 ? "post" : "posts"} left)` : "Post an event quickly"}
+                </Text>
+                <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>
+                  {postsLeft > 0
+                    ? "No organisation needed."
+                    : "Pay RWF 2,180 for one post or RWF 4,180 for two. No organisation needed."}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+            </Pressable>
+            <View style={[styles.modalOr, { borderColor: colors.border }]} />
             <View
               style={[
                 styles.modalIconWrap,
@@ -716,6 +741,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
   },
+  modalOr: { borderTopWidth: StyleSheet.hairlineWidth, marginVertical: 18 },
   modalDismissButton: {
     paddingVertical: 8,
   },
