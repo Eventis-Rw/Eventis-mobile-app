@@ -25,17 +25,15 @@ import {
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { VoiceNoteBubble } from "@/components/VoiceNoteBubble";
+import { useFindLoveChat } from "@/context/FindLoveChatContext";
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useColors } from "@/hooks/useColors";
+import { formatChatDay, formatMessageTime, startsNewDay, type LoveChatContent, type LoveChatMessage } from "@/utils/findLoveChat";
 import { presenceLabel } from "@/utils/findLoveDiscovery";
 
-type DemoMessage = { id: string; time: string; own: boolean } & (
-  | { kind: "text"; text: string }
-  | { kind: "voice"; uri: string; durationMs: number }
-  | { kind: "document"; name: string; size?: number }
-);
+const NO_MESSAGES: LoveChatMessage[] = [];
 
 /** Bigger files are refused until uploads go through the API. */
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
@@ -58,18 +56,17 @@ export default function LoveChatScreen() {
   const insets = useAppSafeAreaInsets();
   const { isLoading, getProfileById, getConnectionStatus } = useLoveProfiles();
   const { recordMessage } = useFindLoveDemo();
+  const { threads, sendMessage: saveMessage, markRead } = useFindLoveChat();
   const profile = getProfileById(id ?? "");
+  const connected = !!profile && getConnectionStatus(profile.id) === "connected";
+  const messages = (profile && threads[profile.id]?.messages) || NO_MESSAGES;
   const [composer, setComposer] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const recordingSession = useRef(false);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 200);
-  const [messages, setMessages] = useState<DemoMessage[]>(() => [
-    { id: "message-1", kind: "text", text: `Hey! Great to connect here. Are you going to any events this weekend?`, time: "10:24", own: false },
-    { id: "message-2", kind: "text", text: "I was thinking about the Kigali Jazz Night. It looks like a good one.", time: "10:27", own: true },
-    { id: "message-3", kind: "text", text: "Same! I have been meaning to check it out. We should say hi there.", time: "10:29", own: false },
-  ]);
+  const listRef = useRef<FlatList<LoveChatMessage>>(null);
 
   const canSend = composer.trim().length > 0;
   const subtitle = useMemo(() => profile ? presenceLabel(profile) ?? `${profile.city} · Connected` : "Connection", [profile]);
@@ -79,6 +76,11 @@ export default function LoveChatScreen() {
     const timer = setTimeout(() => setNotice(null), 3000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  // While the chat is open, anything that arrives counts as read.
+  useEffect(() => {
+    if (connected && id) markRead(id);
+  }, [connected, id, messages, markRead]);
 
   // expo-audio releases the recorder itself; only put the audio mode back.
   useEffect(() => () => {
@@ -104,7 +106,7 @@ export default function LoveChatScreen() {
   }
 
   // Only connected members can message each other.
-  if (getConnectionStatus(profile.id) !== "connected") {
+  if (!connected) {
     const profileId = profile.id;
     return (
       <View style={[styles.notFound, { backgroundColor: colors.background }]}>
@@ -122,8 +124,8 @@ export default function LoveChatScreen() {
 
   const chatProfile = profile;
 
-  function append(message: DemoMessage) {
-    setMessages((current) => [...current, message]);
+  function append(content: LoveChatContent) {
+    saveMessage(chatProfile.id, content);
     recordMessage(chatProfile);
     if (Platform.OS !== "web") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
@@ -131,7 +133,7 @@ export default function LoveChatScreen() {
   function sendMessage() {
     const text = composer.trim();
     if (!text) return;
-    append({ id: `message-${Date.now()}`, kind: "text", text, time: "Now", own: true });
+    append({ kind: "text", text });
     setComposer("");
   }
 
@@ -144,7 +146,7 @@ export default function LoveChatScreen() {
         setNotice(`Choose a file under ${formatBytes(MAX_DOCUMENT_BYTES)}.`);
         return;
       }
-      append({ id: `document-${Date.now()}`, kind: "document", name: file.name, size: file.size, time: "Now", own: true });
+      append({ kind: "document", name: file.name, size: file.size });
     } catch {
       setNotice("We couldn't open your files. Please try again.");
     }
@@ -180,7 +182,7 @@ export default function LoveChatScreen() {
         return;
       }
       if (!uri) throw new Error("missing recording");
-      append({ id: `voice-${Date.now()}`, kind: "voice", uri, durationMs, time: "Now", own: true });
+      append({ kind: "voice", uri, durationMs });
     } catch {
       setNotice("The voice note could not be saved.");
     } finally {
@@ -225,15 +227,30 @@ export default function LoveChatScreen() {
 
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={0}>
         <FlatList
+          ref={listRef}
           data={messages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messages}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => {
+          // Open on the latest message and follow new ones.
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          ListEmptyComponent={
+            <View style={styles.emptyChat}>
+              <Ionicons name="chatbubbles-outline" size={34} color={colors.primary} />
+              <Text style={[styles.emptyChatText, { color: colors.mutedForeground }]}>Say hello to {profile.username} 👋</Text>
+            </View>
+          }
+          renderItem={({ item, index }) => {
             // Voice and file bubbles stay light so the pink play button and icons show on both sides.
             const plain = item.kind !== "text";
             const textColor = item.own && !plain ? "#FFFFFF" : colors.foreground;
             return (
+              <>
+              {startsNewDay(item, messages[index - 1]) ? (
+                <View style={[styles.dayDivider, { backgroundColor: colors.secondary }]}>
+                  <Text style={[styles.dayText, { color: colors.mutedForeground }]}>{formatChatDay(item.sentAt)}</Text>
+                </View>
+              ) : null}
               <View style={[styles.messageRow, item.own ? styles.ownRow : styles.otherRow]}>
                 <View style={[
                   styles.bubble,
@@ -256,9 +273,10 @@ export default function LoveChatScreen() {
                       </View>
                     </View>
                   )}
-                  <Text style={[styles.messageTime, { color: item.own && !plain ? "rgba(255,255,255,0.7)" : colors.mutedForeground }]}>{item.time}</Text>
+                  <Text style={[styles.messageTime, { color: item.own && !plain ? "rgba(255,255,255,0.7)" : colors.mutedForeground }]}>{formatMessageTime(item.sentAt)}</Text>
                 </View>
               </View>
+              </>
             );
           }}
         />
@@ -327,11 +345,15 @@ const styles = StyleSheet.create({
   keyboardView: { flex: 1 },
   messages: { flexGrow: 1, justifyContent: "flex-end", padding: 16, gap: 10 },
   messageRow: { width: "100%", flexDirection: "row" },
+  dayDivider: { alignSelf: "center", borderRadius: 99, paddingHorizontal: 11, paddingVertical: 4, marginVertical: 4 },
+  dayText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  emptyChat: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 40 },
+  emptyChatText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   ownRow: { justifyContent: "flex-end" },
   otherRow: { justifyContent: "flex-start" },
   bubble: { maxWidth: "82%", borderRadius: 19, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 7 },
   messageText: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular" },
-  messageTime: { fontSize: 8, fontFamily: "Inter_500Medium", alignSelf: "flex-end", marginTop: 5 },
+  messageTime: { fontSize: 10, fontFamily: "Inter_500Medium", alignSelf: "flex-end", marginTop: 5 },
   documentRow: { flexDirection: "row", alignItems: "center", gap: 10, minWidth: 180 },
   documentIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   documentCopy: { flexShrink: 1 },

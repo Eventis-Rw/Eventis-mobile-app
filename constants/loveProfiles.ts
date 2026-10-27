@@ -1,7 +1,7 @@
-import type { LoveGender, LoveInterestedIn } from "@/utils/findLoveProfile";
+import type { LoveGender, LoveInterestedIn, LoveRelationshipGoal } from "@/utils/findLoveProfile";
 import type { LoveAccountType, LoveMembership } from "@/utils/findLoveMembership";
 
-export type { LoveAccountType, LoveGender, LoveInterestedIn, LoveMembership };
+export type { LoveAccountType, LoveGender, LoveInterestedIn, LoveMembership, LoveRelationshipGoal };
 export type LoveConnectionStatus = "none" | "pending" | "connected";
 
 /**
@@ -24,6 +24,10 @@ export interface MyLoveProfile {
   /** Optional extras, edited after creation. */
   bio?: string;
   interests: string[];
+  /** One of LOVE_RELATIONSHIP_GOALS. */
+  relationshipGoal?: LoveRelationshipGoal;
+  /** Short free text, up to LOVE_LOOKING_FOR_MAX characters. */
+  lookingFor?: string;
   /** One of LOVE_NEIGHBORHOODS. Never an exact location. */
   neighborhood?: string;
   createdAt: string;
@@ -46,6 +50,8 @@ export interface MyLoveProfileInput {
   country: string;
   bio?: string;
   interests?: string[];
+  relationshipGoal?: LoveRelationshipGoal;
+  lookingFor?: string;
   neighborhood?: string;
   /** Create only: the member ticked "I confirm I am 18 or older". */
   confirmedAdult?: boolean;
@@ -65,6 +71,10 @@ export interface LoveProfile {
   occupation: string;
   bio: string;
   interests: string[];
+  /** What they want from FindLove; missing when they haven't said. */
+  relationshipGoal?: LoveRelationshipGoal;
+  /** The kind of person they hope to meet, in their words. */
+  lookingFor?: string;
   imageUrl: string;
   /** Photos the member has posted, newest first. The profile page shows up to three. */
   postImageUrls: string[];
@@ -93,6 +103,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     country: "RW",
     occupation: "Creative strategist",
     bio: "Live music, quiet coffee shops, and spontaneous weekend plans. Looking for someone kind and curious.",
+    relationshipGoal: "Long-term relationship",
+    lookingFor: "Someone kind and curious who enjoys a good live show.",
     interests: ["Live music", "Coffee", "Travel"],
     imageUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=900&q=85",
     postImageUrls: [
@@ -119,6 +131,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     country: "RW",
     occupation: "Product designer",
     bio: "Designing by day, discovering new food spots by night. Always ready for a good concert.",
+    relationshipGoal: "Long-term relationship",
+    lookingFor: "A foodie who will try a new place with me every weekend.",
     interests: ["Design", "Food", "Concerts"],
     imageUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=900&q=85",
     postImageUrls: [
@@ -144,6 +158,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     country: "RW",
     occupation: "Travel photographer",
     bio: "Usually outdoors with a camera. I value honest conversations, laughter, and people who love adventure.",
+    relationshipGoal: "Marriage",
+    lookingFor: "An honest, adventurous person ready to build something real.",
     interests: ["Photography", "Hiking", "Art"],
     imageUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=85",
     postImageUrls: [
@@ -169,6 +185,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     country: "RW",
     occupation: "Software engineer",
     bio: "Tech enthusiast, runner, and amateur chef. Here for real connections and memorable experiences.",
+    relationshipGoal: "Long-term relationship",
+    lookingFor: "Someone who can keep up on a morning run and loves to cook.",
     interests: ["Technology", "Running", "Cooking"],
     imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=900&q=85",
     postImageUrls: [
@@ -193,6 +211,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     country: "RW",
     occupation: "Event producer",
     bio: "I create experiences for a living and collect great stories along the way. Dancing is always a yes.",
+    relationshipGoal: "Something casual",
+    lookingFor: "A good dancer, or someone happy to learn.",
     interests: ["Dance", "Festivals", "Books"],
     imageUrl: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=85",
     postImageUrls: [
@@ -217,6 +237,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     country: "RW",
     occupation: "Architect",
     bio: "Drawn to good architecture, lakeside sunsets, and conversations that run longer than expected.",
+    relationshipGoal: "Still figuring it out",
+    lookingFor: "Someone thoughtful who enjoys slow evenings by the lake.",
     interests: ["Architecture", "Jazz", "Travel"],
     imageUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=900&q=85",
     postImageUrls: [
@@ -244,6 +266,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     country: "RW",
     occupation: "Lawyer",
     bio: "Private profile. Weekend hikes and good books.",
+    relationshipGoal: "Marriage",
+    lookingFor: "A calm, faithful partner who loves the outdoors.",
     interests: ["Hiking", "Books"],
     imageUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=900&q=85",
     postImageUrls: [
@@ -269,6 +293,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     country: "KE",
     occupation: "Marketing lead",
     bio: "Weekend road trips, rooftop jazz and long brunches. Say hi if you love live shows.",
+    relationshipGoal: "New friends",
+    lookingFor: "People to go to concerts and brunches with.",
     interests: ["Live music", "Travel", "Food"],
     imageUrl: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=900&q=85",
     postImageUrls: [

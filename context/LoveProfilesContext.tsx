@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LoveConnectionStatus, LoveProfile } from "@/constants/loveProfiles";
@@ -21,15 +20,7 @@ interface LoveProfilesContextValue {
   getProfileById: (id: string) => LoveProfile | undefined;
   getConnectionStatus: (id: string) => LoveConnectionStatus;
   sendConnectionRequest: (id: string) => Promise<LoveConnectResult>;
-  /** People the member skipped on Home; they stay reachable by link and chat. */
-  skippedIds: ReadonlySet<string>;
-  skipProfile: (id: string) => void;
-  unskipProfile: (id: string) => void;
-  clearSkipped: () => void;
 }
-
-// Skips are kept on the device until the API records them.
-const skippedKey = (userId: string) => `@eventis_findlove_skipped_v1_${userId}`;
 
 const LoveProfilesContext = createContext<LoveProfilesContextValue | null>(null);
 
@@ -42,35 +33,6 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loadStarted = useRef(false);
-  const [skippedIds, setSkippedIds] = useState<ReadonlySet<string>>(new Set());
-
-  useEffect(() => {
-    setSkippedIds(new Set());
-    if (!user?.id) return;
-    let cancelled = false;
-    AsyncStorage.getItem(skippedKey(user.id))
-      .then((stored) => {
-        const ids = stored ? JSON.parse(stored) : [];
-        if (!cancelled && Array.isArray(ids)) setSkippedIds(new Set(ids.filter((id) => typeof id === "string")));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
-
-  const updateSkipped = useCallback((change: (current: Set<string>) => void) => {
-    setSkippedIds((current) => {
-      const next = new Set(current);
-      change(next);
-      if (user?.id) void AsyncStorage.setItem(skippedKey(user.id), JSON.stringify([...next])).catch(() => {});
-      return next;
-    });
-  }, [user?.id]);
-
-  const skipProfile = useCallback((id: string) => updateSkipped((ids) => ids.add(id)), [updateSkipped]);
-  const unskipProfile = useCallback((id: string) => updateSkipped((ids) => ids.delete(id)), [updateSkipped]);
-  const clearSkipped = useCallback(() => updateSkipped((ids) => ids.clear()), [updateSkipped]);
 
   const refreshProfiles = useCallback(async () => {
     loadStarted.current = true;
@@ -148,10 +110,6 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
       getProfileById,
       getConnectionStatus,
       sendConnectionRequest,
-      skippedIds,
-      skipProfile,
-      unskipProfile,
-      clearSkipped,
     }),
     [
       visibleProfiles,
@@ -162,10 +120,6 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
       getProfileById,
       getConnectionStatus,
       sendConnectionRequest,
-      skippedIds,
-      skipProfile,
-      unskipProfile,
-      clearSkipped,
     ],
   );
 

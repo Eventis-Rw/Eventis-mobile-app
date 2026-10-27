@@ -4,10 +4,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import type { LoveActivity, LoveActivityType } from "@/context/FindLoveDemoContext";
+import type { LoveProfile } from "@/constants/loveProfiles";
+import { useFindLoveChat } from "@/context/FindLoveChatContext";
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { LoveHeader } from "@/components/love/LoveHeader";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useColors } from "@/hooks/useColors";
+import { formatInboxTime, loveMessagePreview, summarizeConversations, type LoveChatMessage } from "@/utils/findLoveChat";
+import { presenceOf } from "@/utils/findLoveDiscovery";
 
 type ConnectionsTab = "connections" | "pending" | "notifications";
 
@@ -31,6 +35,16 @@ export default function LoveInboxScreen() {
   const colors = useColors();
   const [activeTab, setActiveTab] = useState<ConnectionsTab>(tabFromParam(tab));
   const { connections, pendingProfiles, activity } = useFindLoveDemo();
+  const { threads, totalUnread } = useFindLoveChat();
+
+  // Newest chat first; connections with no messages yet go last.
+  const conversations = useMemo(() => {
+    const byId = new Map(connections.map((profile) => [profile.id, profile]));
+    return summarizeConversations(connections.map((profile) => profile.id), threads).map((summary) => ({
+      ...summary,
+      profile: byId.get(summary.profileId) as LoveProfile,
+    }));
+  }, [connections, threads]);
 
   // The Home bell opens this tab with tab=notifications, even when it is already mounted.
   useEffect(() => {
@@ -38,10 +52,11 @@ export default function LoveInboxScreen() {
   }, [tab, at]);
 
   const tabs = useMemo(() => [
-    { id: "connections" as const, label: "Chats", count: connections.length },
+    // Chats counts unread messages, not people, so the badge means "something new".
+    { id: "connections" as const, label: "Chats", count: totalUnread },
     { id: "pending" as const, label: "Pending", count: pendingProfiles.length },
     { id: "notifications" as const, label: "Notifications", count: activity.length },
-  ], [connections.length, pendingProfiles.length, activity.length]);
+  ], [totalUnread, pendingProfiles.length, activity.length]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -50,12 +65,15 @@ export default function LoveInboxScreen() {
       <View style={[styles.tabs, { borderBottomColor: colors.border }]}>
         {tabs.map((item) => {
           const selected = activeTab === item.id;
+          const highlight = item.id === "connections" && item.count > 0;
           return (
             <Pressable key={item.id} onPress={() => setActiveTab(item.id)} accessibilityRole="tab" accessibilityState={{ selected }} style={[styles.tab, selected && { borderBottomColor: colors.primary }]}>
               <Text style={[styles.tabText, { color: selected ? colors.primary : colors.mutedForeground }]}>{item.label}</Text>
-              <View style={[styles.countBadge, { backgroundColor: selected ? colors.glass : colors.secondary }]}>
-                <Text style={[styles.countText, { color: selected ? colors.primary : colors.mutedForeground }]}>{item.count}</Text>
-              </View>
+              {item.id !== "connections" || highlight ? (
+                <View style={[styles.countBadge, { backgroundColor: highlight ? colors.primary : selected ? colors.glass : colors.secondary }]}>
+                  <Text style={[styles.countText, { color: highlight ? "#FFFFFF" : selected ? colors.primary : colors.mutedForeground }]}>{item.count}</Text>
+                </View>
+              ) : null}
             </Pressable>
           );
         })}
@@ -63,28 +81,21 @@ export default function LoveInboxScreen() {
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 30 }]} showsVerticalScrollIndicator={false}>
         {activeTab === "connections" ? (
-          connections.length ? connections.map((profile) => (
-            <View key={profile.id} style={[styles.connectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Image source={{ uri: profile.imageUrl }} style={styles.avatar} accessibilityLabel={`Profile photo of ${profile.username}`} />
-              <View style={styles.profileCopy}>
-                <View style={styles.nameRow}>
-                  <Text style={[styles.name, { color: colors.foreground }]}>{profile.username}</Text>
-                  {profile.verified ? <Ionicons name="checkmark-circle" size={16} color={colors.primary} /> : null}
-                  <MembershipBadge type={profile.accountType} size="sm" iconOnly />
-                </View>
-                <Text style={[styles.meta, { color: colors.mutedForeground }]}>{profile.city} · {profile.occupation}</Text>
-                <View style={styles.cardActions}>
-                  <Pressable onPress={() => router.push({ pathname: "/love/chat/[id]", params: { id: profile.id } } as any)} style={[styles.primaryAction, { backgroundColor: colors.primary }]} accessibilityRole="button" accessibilityLabel={`Message ${profile.username}`}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={16} color="#FFFFFF" />
-                    <Text style={styles.primaryActionText}>Message</Text>
-                  </Pressable>
-                  <Pressable onPress={() => router.push({ pathname: "/love/[id]", params: { id: profile.id } } as any)} style={[styles.iconAction, { backgroundColor: colors.secondary, borderColor: colors.border }]} accessibilityRole="button" accessibilityLabel={`View ${profile.username}'s profile`}>
-                    <Ionicons name="person-outline" size={18} color={colors.foreground} />
-                  </Pressable>
-                </View>
-              </View>
+          conversations.length ? (
+            <View style={[styles.chatList, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              {conversations.map(({ profile, lastMessage, unreadCount }, index) => (
+                <ConversationRow
+                  key={profile.id}
+                  profile={profile}
+                  lastMessage={lastMessage}
+                  unreadCount={unreadCount}
+                  last={index === conversations.length - 1}
+                  onOpen={() => router.push({ pathname: "/love/chat/[id]", params: { id: profile.id } } as any)}
+                  onOpenProfile={() => router.push({ pathname: "/love/[id]", params: { id: profile.id } } as any)}
+                />
+              ))}
             </View>
-          )) : <EmptyState icon="people-outline" title="No connections yet" body="Accepted connections will appear here." colors={colors} />
+          ) : <EmptyState icon="people-outline" title="No chats yet" body="When you connect with someone, your chat with them appears here." colors={colors} />
         ) : null}
 
         {activeTab === "pending" ? (
@@ -111,6 +122,78 @@ export default function LoveInboxScreen() {
         ) : null}
       </ScrollView>
     </View>
+  );
+}
+
+/** One chat in the Inbox: photo, name, last message, time and unread count. */
+function ConversationRow({
+  profile,
+  lastMessage,
+  unreadCount,
+  last,
+  onOpen,
+  onOpenProfile,
+}: {
+  profile: LoveProfile;
+  lastMessage?: LoveChatMessage;
+  unreadCount: number;
+  last: boolean;
+  onOpen: () => void;
+  onOpenProfile: () => void;
+}) {
+  const colors = useColors();
+  const [imageFailed, setImageFailed] = useState(false);
+  const unread = unreadCount > 0;
+  const preview = lastMessage ? loveMessagePreview(lastMessage) : "New connection · Say hello 👋";
+  return (
+    <Pressable
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={`Chat with ${profile.username}. ${unread ? `${unreadCount} unread. ` : ""}${preview}`}
+      style={({ pressed }) => [
+        styles.chatRow,
+        !last && { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
+        pressed && { backgroundColor: colors.secondary },
+      ]}
+    >
+      <Pressable onPress={onOpenProfile} hitSlop={4} accessibilityRole="imagebutton" accessibilityLabel={`View ${profile.username}'s profile`}>
+        {profile.imageUrl && !imageFailed ? (
+          <Image source={{ uri: profile.imageUrl }} style={styles.chatAvatar} onError={() => setImageFailed(true)} />
+        ) : (
+          <View style={[styles.chatAvatar, styles.avatarFallback, { backgroundColor: colors.secondary }]}>
+            <Text style={[styles.avatarInitials, { color: colors.primary }]}>{profile.username.slice(0, 2).toUpperCase()}</Text>
+          </View>
+        )}
+        {presenceOf(profile) === "online" ? <View style={[styles.onlineDot, { backgroundColor: colors.success, borderColor: colors.card }]} /> : null}
+      </Pressable>
+      <View style={styles.profileCopy}>
+        <View style={styles.chatTopRow}>
+          <View style={styles.chatName}>
+            <Text style={[styles.name, { color: colors.foreground }]} numberOfLines={1}>{profile.username}</Text>
+            {profile.verified ? <Ionicons name="checkmark-circle" size={15} color={colors.primary} /> : null}
+            <MembershipBadge type={profile.accountType} size="sm" iconOnly />
+          </View>
+          {lastMessage ? (
+            <Text style={[styles.chatTime, { color: unread ? colors.primary : colors.mutedForeground }, unread && styles.chatTimeUnread]}>
+              {formatInboxTime(lastMessage.sentAt)}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.chatBottomRow}>
+          <Text
+            numberOfLines={1}
+            style={[styles.chatPreview, { color: unread ? colors.foreground : colors.mutedForeground }, unread && styles.chatPreviewUnread]}
+          >
+            {preview}
+          </Text>
+          {unread ? (
+            <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.unreadText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -147,16 +230,25 @@ const styles = StyleSheet.create({
   countBadge: { minWidth: 21, height: 21, borderRadius: 11, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
   countText: { fontSize: 10, fontFamily: "Inter_700Bold" },
   content: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 16 },
-  connectionCard: { flexDirection: "row", gap: 13, borderWidth: 1, borderRadius: 21, padding: 12, marginBottom: 12 },
-  avatar: { width: 88, height: 112, borderRadius: 17, backgroundColor: "#E5E7EB" },
+  chatList: { borderWidth: 1, borderRadius: 20, overflow: "hidden" },
+  chatRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  chatAvatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: "#E5E7EB" },
+  avatarFallback: { alignItems: "center", justifyContent: "center" },
+  avatarInitials: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  onlineDot: { position: "absolute", right: 1, bottom: 1, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
+  chatTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  chatName: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5 },
+  chatTime: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  chatTimeUnread: { fontFamily: "Inter_700Bold" },
+  chatBottomRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  chatPreview: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular" },
+  chatPreviewUnread: { fontFamily: "Inter_600SemiBold" },
+  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
+  unreadText: { color: "#FFFFFF", fontSize: 11, fontFamily: "Inter_700Bold" },
   profileCopy: { flex: 1, minWidth: 0 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  name: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  name: { flexShrink: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
   meta: { fontSize: 11, lineHeight: 17, fontFamily: "Inter_400Regular", marginTop: 3 },
-  cardActions: { flexDirection: "row", gap: 7, marginTop: 15 },
-  primaryAction: { flex: 1, minHeight: 39, borderRadius: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  primaryActionText: { color: "#FFFFFF", fontSize: 12, fontFamily: "Inter_700Bold" },
-  iconAction: { width: 40, height: 40, borderWidth: 1, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   pendingCard: { minHeight: 82, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 18, padding: 11, marginBottom: 11 },
   pendingAvatar: { width: 58, height: 58, borderRadius: 16, backgroundColor: "#E5E7EB" },
   pendingBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 99 },

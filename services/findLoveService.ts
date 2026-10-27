@@ -35,13 +35,16 @@ import {
   FREE_LOVE_PHOTO_LIMIT,
   isAdult,
   MIN_LOVE_AGE,
+  normalizeLoveRelationshipGoal,
   normalizeLoveUsername,
   validateLoveBio,
   validateLoveCountry,
   validateLoveGender,
   validateLoveInterestedIn,
   validateLoveInterests,
+  validateLoveLookingFor,
   validateLoveNeighborhood,
+  validateLoveRelationshipGoal,
   validateLoveUsername,
 } from "@/utils/findLoveProfile";
 
@@ -147,6 +150,8 @@ export function normalizeLoveProfile(value: unknown): LoveProfile | null {
     occupation: String(source.occupation ?? source.jobTitle ?? "Eventis member"),
     bio: String(source.bio ?? source.about ?? ""),
     interests: Array.isArray(source.interests) ? source.interests.map(String) : [],
+    relationshipGoal: normalizeLoveRelationshipGoal(source.relationshipGoal ?? source.relationship_goal),
+    lookingFor: optionalString(source.lookingFor ?? source.looking_for),
     imageUrl: String(source.imageUrl ?? source.profileImage ?? source.avatarUrl ?? ""),
     postImageUrls: readPostImages(source.postImageUrls ?? source.posts),
     accountType: readAccountType(source),
@@ -266,6 +271,8 @@ export class LoveProfileInputError extends Error {
       | "confirmedAdult"
       | "bio"
       | "interests"
+      | "relationshipGoal"
+      | "lookingFor"
       | "neighborhood",
     message: string,
   ) {
@@ -298,15 +305,21 @@ export function checkMyLoveProfileInput(input: MyLoveProfileInput, isNew: boolea
   if (bioError) throw new LoveProfileInputError("bio", bioError);
   const interestsError = validateLoveInterests(input.interests ?? []);
   if (interestsError) throw new LoveProfileInputError("interests", interestsError);
+  const goalError = validateLoveRelationshipGoal(input.relationshipGoal);
+  if (goalError) throw new LoveProfileInputError("relationshipGoal", goalError);
+  const lookingForError = validateLoveLookingFor(input.lookingFor);
+  if (lookingForError) throw new LoveProfileInputError("lookingFor", lookingForError);
   const neighborhoodError = validateLoveNeighborhood(input.neighborhood, input.country);
   if (neighborhoodError) throw new LoveProfileInputError("neighborhood", neighborhoodError);
 }
 
 /** Trims the optional extras and drops empty ones so storage and the API see one shape. */
-function cleanExtras(input: Pick<MyLoveProfileInput, "bio" | "interests" | "neighborhood">) {
+function cleanExtras(input: Pick<MyLoveProfileInput, "bio" | "interests" | "relationshipGoal" | "lookingFor" | "neighborhood">) {
   return {
     bio: input.bio?.trim() || undefined,
     interests: [...new Set(input.interests ?? [])],
+    relationshipGoal: input.relationshipGoal || undefined,
+    lookingFor: input.lookingFor?.trim() || undefined,
     neighborhood: input.neighborhood || undefined,
   };
 }
@@ -338,6 +351,8 @@ export function normalizeMyLoveProfile(value: unknown): MyLoveProfile | null {
     country: optionalCountry(source.country ?? source.countryCode),
     bio: optionalString(source.bio),
     interests: Array.isArray(source.interests) ? source.interests.map(String).filter(Boolean) : [],
+    relationshipGoal: normalizeLoveRelationshipGoal(source.relationshipGoal ?? source.relationship_goal),
+    lookingFor: optionalString(source.lookingFor ?? source.looking_for),
     neighborhood: optionalString(source.neighborhood ?? source.neighbourhood),
     createdAt: optionalString(source.createdAt) ?? now,
     updatedAt: optionalString(source.updatedAt) ?? now,
