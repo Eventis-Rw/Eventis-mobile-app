@@ -53,9 +53,10 @@ export default function LoveProfileDetailScreen() {
   const connected = connectionStatus === "connected";
   const posts = profile.postImageUrls.slice(0, 3);
 
-  function connect() {
+  // One button that follows the connection: Connect, then Pending, then Send Message.
+  function primaryAction() {
     if (!profile || pending) return;
-    if (connected) router.push({ pathname: "/love/chat/[id]", params: { id: profile.id } } as any);
+    if (connected) router.push({ pathname: "/love/chat/[id]", params: { id: profileId } } as any);
     else void connectWith(profile);
   }
 
@@ -125,6 +126,23 @@ export default function LoveProfileDetailScreen() {
             ))}
           </View>
 
+          {profile.relationshipGoal || profile.lookingFor ? (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Looking for</Text>
+              <View style={[styles.goalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {profile.relationshipGoal ? (
+                  <View style={[styles.goalChip, { backgroundColor: colors.secondary }]}>
+                    <Ionicons name="heart-outline" size={14} color={colors.primary} />
+                    <Text style={[styles.goalChipText, { color: colors.primary }]}>{profile.relationshipGoal}</Text>
+                  </View>
+                ) : null}
+                {profile.lookingFor ? (
+                  <Text style={[styles.bio, styles.goalText, { color: colors.mutedForeground }]}>{profile.lookingFor}</Text>
+                ) : null}
+              </View>
+            </>
+          ) : null}
+
           {posts.length ? (
             <>
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Posts</Text>
@@ -143,24 +161,21 @@ export default function LoveProfileDetailScreen() {
               </View>
             </>
           ) : null}
-
-          <View style={[styles.safetyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Ionicons name="shield-checkmark-outline" size={22} color={colors.success} />
-            <View style={styles.safetyCopy}>
-              <Text style={[styles.safetyTitle, { color: colors.foreground }]}>Connect thoughtfully</Text>
-              <Text style={[styles.safetyText, { color: colors.mutedForeground }]}>Requests are private. Share personal details only when you feel comfortable.</Text>
-            </View>
-          </View>
         </View>
       </ScrollView>
 
       <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 14) }]}>
         <Pressable
-          onPress={connect}
+          onPress={primaryAction}
           disabled={pending}
           accessibilityRole="button"
-          accessibilityLabel={`${pending ? "Connection pending with" : connected ? "Message" : "Connect with"} ${profile.username}`}
-          style={[styles.connectButton, { backgroundColor: pending ? colors.secondary : colors.primary }]}
+          accessibilityLabel={pending ? `Connection pending with ${profile.username}` : connected ? `Send ${profile.username} a message` : `Connect with ${profile.username}`}
+          accessibilityState={{ disabled: pending }}
+          style={({ pressed }) => [
+            styles.actionButton,
+            pending ? { backgroundColor: colors.secondary, borderColor: colors.border } : { backgroundColor: colors.primary, borderColor: colors.primary },
+            { opacity: pressed ? 0.85 : 1 },
+          ]}
         >
           <Ionicons
             name={pending ? "time-outline" : connected ? "chatbubble-ellipses-outline" : "heart"}
@@ -168,7 +183,7 @@ export default function LoveProfileDetailScreen() {
             color={pending ? colors.mutedForeground : "#FFFFFF"}
           />
           <Text style={[styles.connectText, { color: pending ? colors.mutedForeground : "#FFFFFF" }]}>
-            {pending ? "Request Pending" : connected ? `Message ${profile.username}` : `Connect with ${profile.username}`}
+            {pending ? "Pending" : connected ? "Send Message" : "Connect"}
           </Text>
         </Pressable>
       </View>
@@ -208,18 +223,18 @@ const styles = StyleSheet.create({
   interests: { flexDirection: "row", flexWrap: "wrap", gap: 9, marginTop: 12 },
   interest: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 9 },
   interestText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  goalCard: { borderWidth: 1, borderRadius: 20, padding: 16, marginTop: 12, gap: 10 },
+  goalChip: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 7 },
+  goalChipText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  goalText: { marginTop: 0 },
   posts: { flexDirection: "row", gap: 8, marginTop: 12 },
   post: { flex: 1, aspectRatio: 1, borderRadius: 14, overflow: "hidden" },
   postImage: { width: "100%", height: "100%" },
   viewer: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center" },
   viewerImage: { width: "100%", height: "80%" },
   viewerClose: { position: "absolute", right: 18, width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)" },
-  safetyCard: { flexDirection: "row", gap: 12, borderWidth: 1, borderRadius: 20, padding: 16, marginTop: 30 },
-  safetyCopy: { flex: 1 },
-  safetyTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  safetyText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 4 },
   footer: { position: "absolute", left: 0, right: 0, bottom: 0, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 13 },
-  connectButton: { width: "100%", maxWidth: 680, alignSelf: "center", minHeight: 56, borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
+  actionButton: { width: "100%", maxWidth: 680, alignSelf: "center", minHeight: 56, borderRadius: 18, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
   connectText: { fontSize: 15, fontFamily: "Inter_700Bold" },
   loadingBody: { padding: 20 },
   loadingGap: { marginTop: 16 },

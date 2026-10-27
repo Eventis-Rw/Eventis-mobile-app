@@ -29,13 +29,12 @@ import {
 } from "@/utils/findLoveDiscovery";
 import { countryName } from "@/utils/findLoveProfile";
 
-/** FindLove's Home tab: the people grid with like/skip, filters and search. */
+/** FindLove's Home tab: the people grid with like, filters and search. */
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { profiles, isLoading, error, refreshProfiles, getConnectionStatus, skippedIds, skipProfile, unskipProfile, clearSkipped } =
-    useLoveProfiles();
+  const { profiles, isLoading, error, refreshProfiles, getConnectionStatus } = useLoveProfiles();
   const { connect, upgradePrompt } = useLoveConnect();
   const { myProfile } = useMyLoveProfile();
   const country = myProfile?.country;
@@ -46,33 +45,23 @@ export default function HomeScreen() {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
-  // The last person skipped, so the member can undo it for a few seconds.
-  const [lastSkipped, setLastSkipped] = useState<LoveProfile | null>(null);
   const deferredQuery = useDeferredValue(query);
-  // Always at least two people per row; wide screens get three.
-  const columns = width >= 960 ? 3 : 2;
+  // Compact cards: two per row on phones, more as the screen widens.
+  const columns = width >= 960 ? 4 : width >= 600 ? 3 : 2;
   const horizontalPadding = width < 360 ? 12 : 16;
   const gridWidth = Math.min(width - horizontalPadding * 2, MAX_GRID_WIDTH);
   const cellWidth = (gridWidth - GRID_GAP * (columns - 1)) / columns;
 
-  const unskippedProfiles = useMemo(() => profiles.filter((profile) => !skippedIds.has(profile.id)), [profiles, skippedIds]);
   const filteredProfiles = useMemo(
-    () => filterProfiles(unskippedProfiles, { ...filters, query: deferredQuery }),
-    [unskippedProfiles, filters, deferredQuery],
+    () => filterProfiles(profiles, { ...filters, query: deferredQuery }),
+    [profiles, filters, deferredQuery],
   );
   const filtering = activeFilterCount(filters, defaultFilters) > 0 || !!query.trim();
-  const seenEveryone = !filtering && profiles.length > 0 && unskippedProfiles.length === 0;
 
   // The profile can load (or the choice change) after the screen mounts.
   useEffect(() => {
     setFilters((current) => ({ ...current, gender: defaultFilters.gender }));
   }, [defaultFilters]);
-
-  useEffect(() => {
-    if (!lastSkipped) return;
-    const timer = setTimeout(() => setLastSkipped(null), 4000);
-    return () => clearTimeout(timer);
-  }, [lastSkipped]);
 
   const clearFilters = () => {
     setQuery("");
@@ -83,11 +72,6 @@ export default function HomeScreen() {
     if (searchOpen) setQuery("");
     setSearchOpen((open) => !open);
   };
-
-  const skip = useCallback((profile: LoveProfile) => {
-    skipProfile(profile.id);
-    setLastSkipped(profile);
-  }, [skipProfile]);
 
   const openNotifications = () => {
     router.navigate({ pathname: "/love/messages", params: { tab: "notifications", at: String(Date.now()) } } as any);
@@ -108,11 +92,10 @@ export default function HomeScreen() {
         connectionStatus={getConnectionStatus(item.id)}
         onOpen={() => openProfile(item)}
         onConnect={() => void connect(item)}
-        onSkip={() => skip(item)}
         onMessage={() => openChat(item)}
       />
     </View>
-  ), [cellWidth, connect, getConnectionStatus, openChat, openProfile, skip]);
+  ), [cellWidth, connect, getConnectionStatus, openChat, openProfile]);
 
   const topBar = <HomeTopBar searchOpen={searchOpen} onSearch={toggleSearch} onNotifications={openNotifications} />;
 
@@ -124,8 +107,8 @@ export default function HomeScreen() {
           <Skeleton height={38} borderRadius={19} />
           {[0, 1].map((row) => (
             <View key={row} style={[styles.columnRow, styles.loadingGap]}>
-              <Skeleton width={cellWidth} height={300} borderRadius={20} />
-              <Skeleton width={cellWidth} height={300} borderRadius={20} />
+              <Skeleton width={cellWidth} height={cellWidth + 110} borderRadius={16} />
+              <Skeleton width={cellWidth} height={cellWidth + 110} borderRadius={16} />
             </View>
           ))}
         </View>
@@ -194,41 +177,20 @@ export default function HomeScreen() {
             <View style={[styles.emptyIcon, { backgroundColor: colors.secondary }]}>
               <Ionicons name="heart-dislike-outline" size={32} color={colors.primary} />
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{seenEveryone ? "You've seen everyone" : "No profiles found"}</Text>
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No profiles found</Text>
             <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
               {filtering
                 ? "Try another username, interest, or filter."
-                : seenEveryone
-                  ? "New people will show up here. You can also look again at the people you skipped."
-                  : `No one${place ? ` in ${place}` : ""} is on FindLove yet. Check back soon.`}
+                : `No one${place ? ` in ${place}` : ""} is on FindLove yet. Check back soon.`}
             </Text>
             {filtering ? (
               <Pressable onPress={clearFilters}>
                 <Text style={[styles.resetText, { color: colors.primary }]}>Clear filters</Text>
               </Pressable>
-            ) : seenEveryone ? (
-              <Pressable onPress={clearSkipped}>
-                <Text style={[styles.resetText, { color: colors.primary }]}>Show skipped people</Text>
-              </Pressable>
             ) : null}
           </View>
         }
       />
-      {lastSkipped ? (
-        <View style={[styles.toast, { backgroundColor: colors.foreground }]} accessibilityLiveRegion="polite">
-          <Text style={[styles.toastText, { color: colors.background }]} numberOfLines={1}>Skipped {lastSkipped.username}</Text>
-          <Pressable
-            onPress={() => {
-              unskipProfile(lastSkipped.id);
-              setLastSkipped(null);
-            }}
-            hitSlop={8}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.toastAction, { color: colors.primary }]}>Undo</Text>
-          </Pressable>
-        </View>
-      ) : null}
       {upgradePrompt}
     </View>
   );
@@ -276,9 +238,6 @@ const styles = StyleSheet.create({
   brand: { flex: 1, flexDirection: "row", alignItems: "center", gap: 7 },
   brandText: { fontSize: 22, letterSpacing: -0.6, fontFamily: "Inter_700Bold" },
   topIcon: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  toast: { position: "absolute", left: 16, right: 16, bottom: 16, maxWidth: 520, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13 },
-  toastText: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
-  toastAction: { fontSize: 14, fontFamily: "Inter_700Bold" },
   listContent: { flexGrow: 1, paddingTop: 4, paddingBottom: 24 },
   loadingContent: { width: "100%", maxWidth: MAX_GRID_WIDTH, alignSelf: "center", paddingTop: 4 },
   loadingGap: { marginTop: 18 },
