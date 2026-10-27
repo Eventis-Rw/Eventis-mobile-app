@@ -69,6 +69,7 @@ export default function OrganiserDashboard() {
         <Animated.View entering={enter(110)} style={styles.actions}>
           <QuickAction icon="calendar-outline" title="Event" text="A dated, discoverable page with venue and ticket details." onPress={() => router.push("/business/create-event" as any)} palette={palette} />
           <QuickAction icon="aperture-outline" title="Story" text="A short visual update shown at the top of the feed." onPress={() => router.push("/business/create-story" as any)} palette={palette} />
+          <QuickAction icon="radio-outline" title="Live" text="Host a conversation and invite your audience on stage." onPress={() => router.push("/(tabs)/live")} palette={palette} />
         </Animated.View>
 
       </ScrollView>
