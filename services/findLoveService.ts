@@ -6,6 +6,7 @@ import {
   MOCK_LOVE_PROFILES,
   type LoveConnectionStatus,
   type LoveGender,
+  type LoveInterestedIn,
   type LoveProfile,
   type MyLoveProfile,
   type MyLoveProfileInput,
@@ -38,6 +39,7 @@ import {
   validateLoveBio,
   validateLoveCountry,
   validateLoveGender,
+  validateLoveInterestedIn,
   validateLoveInterests,
   validateLoveNeighborhood,
   validateLoveUsername,
@@ -88,6 +90,7 @@ function normalizeGender(value: unknown): LoveGender | null {
   const gender = String(value ?? "").toLowerCase();
   if (["man", "men", "male", "m", "he"].includes(gender)) return "Man";
   if (["woman", "women", "female", "f", "she"].includes(gender)) return "Woman";
+  if (["prefer not to say", "prefer_not_to_say", "prefer-not-to-say", "undisclosed", "other"].includes(gender)) return "Prefer not to say";
   return null;
 }
 
@@ -256,6 +259,7 @@ export class LoveProfileInputError extends Error {
     public readonly field:
       | "username"
       | "gender"
+      | "interestedIn"
       | "dateOfBirth"
       | "photoUrls"
       | "country"
@@ -276,6 +280,8 @@ export function checkMyLoveProfileInput(input: MyLoveProfileInput, isNew: boolea
   if (usernameError) throw new LoveProfileInputError("username", usernameError);
   const genderError = validateLoveGender(input.gender);
   if (genderError) throw new LoveProfileInputError("gender", genderError);
+  const interestedInError = validateLoveInterestedIn(input.interestedIn);
+  if (interestedInError) throw new LoveProfileInputError("interestedIn", interestedInError);
   if (!isAdult(input.dateOfBirth, today)) {
     throw new LoveProfileInputError("dateOfBirth", `FindLove is only for people aged ${MIN_LOVE_AGE} and over.`);
   }
@@ -305,6 +311,13 @@ function cleanExtras(input: Pick<MyLoveProfileInput, "bio" | "interests" | "neig
   };
 }
 
+/** "woman"/"female", "man"/"male", or "all"/"everyone"; anything else is unknown. */
+function normalizeInterestedIn(value: unknown): LoveInterestedIn | undefined {
+  const gender = normalizeGender(value);
+  if (gender === "Man" || gender === "Woman") return gender;
+  return ["all", "everyone", "both", "any"].includes(String(value ?? "").toLowerCase()) ? "All" : undefined;
+}
+
 /** Maps the API's own-profile response; returns null when it is unusable. */
 export function normalizeMyLoveProfile(value: unknown): MyLoveProfile | null {
   if (!value || typeof value !== "object") return null;
@@ -318,6 +331,7 @@ export function normalizeMyLoveProfile(value: unknown): MyLoveProfile | null {
   return {
     username,
     gender,
+    interestedIn: normalizeInterestedIn(source.interestedIn ?? source.interested_in),
     dateOfBirth,
     membership: normalizeMembership(source.membership),
     photoUrls: photos.map(String).filter(Boolean).slice(0, FREE_LOVE_PHOTO_LIMIT),
@@ -381,6 +395,7 @@ export async function saveMyLoveProfile(
     const saved: MyLoveProfile = {
       username,
       gender: input.gender,
+      interestedIn: input.interestedIn,
       dateOfBirth: input.dateOfBirth,
       membership,
       photoUrls: input.photoUrls,
@@ -395,7 +410,8 @@ export async function saveMyLoveProfile(
 
   const body = {
     username,
-    gender: input.gender.toLowerCase(),
+    gender: input.gender.toLowerCase().replace(/ /g, "_"),
+    interestedIn: input.interestedIn.toLowerCase(),
     dateOfBirth: input.dateOfBirth,
     photoUrls: input.photoUrls,
     country: input.country,

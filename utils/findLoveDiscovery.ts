@@ -67,8 +67,14 @@ export interface DiscoveryFilters {
 
 export const DEFAULT_DISCOVERY_FILTERS: DiscoveryFilters = { gender: "All", presence: "any", query: "" };
 
-export function activeFilterCount(filters: DiscoveryFilters): number {
-  return (filters.gender !== "All" ? 1 : 0) + (filters.presence !== "any" ? 1 : 0) + (filters.neighborhood ? 1 : 0);
+/** The member's starting filters: their "Interested in" choice, everything else open. */
+export function defaultFiltersFor(interestedIn: GenderFilter | undefined): DiscoveryFilters {
+  return { ...DEFAULT_DISCOVERY_FILTERS, gender: interestedIn ?? "All" };
+}
+
+/** Filters changed from `defaults`; the member's own "Interested in" doesn't count. */
+export function activeFilterCount(filters: DiscoveryFilters, defaults: DiscoveryFilters = DEFAULT_DISCOVERY_FILTERS): number {
+  return (filters.gender !== defaults.gender ? 1 : 0) + (filters.presence !== "any" ? 1 : 0) + (filters.neighborhood ? 1 : 0);
 }
 
 /**

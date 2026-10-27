@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
+import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
@@ -44,6 +45,11 @@ export default function BecomeOrganiserScreen() {
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const { step } = useOrganiserAccess();
+
+  const { user } = useAuth();
+  const postsLeft = user?.organiserSubscription?.postsRemaining ?? 0;
+  const quickPost = () =>
+    router.push((postsLeft > 0 ? "/business/create-event" : "/organiser/subscribe") as any);
 
   const continueFlow = () => {
     if (step === "ready") {
@@ -161,6 +167,27 @@ export default function BecomeOrganiserScreen() {
             ))}
           </View>
         </Animated.View>
+
+        {step === "intro" || (step === "setup" && postsLeft > 0) ? (
+          <Pressable
+            onPress={quickPost}
+            style={({ pressed }) => [styles.note, { backgroundColor: palette.surfaceRaised, borderColor: palette.blue }, pressed && styles.pressed]}
+            accessibilityRole="button"
+          >
+            <Ionicons name="flash-outline" size={20} color={palette.accent} />
+            <View style={styles.flex}>
+              <Text style={[styles.noteText, { color: palette.text, fontFamily: "Inter_700Bold" }]}>
+                {postsLeft > 0 ? "Post an event now" : "Just want to post? Skip the organisation"}
+              </Text>
+              <Text style={[styles.noteText, { color: palette.muted }]}>
+                {postsLeft > 0
+                  ? `You have ${postsLeft} ${postsLeft === 1 ? "post" : "posts"} left. No organisation needed.`
+                  : "Pay RWF 2,180 for one event or RWF 4,180 for two, then post straight away."}
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward" size={18} color={palette.accent} />
+          </Pressable>
+        ) : null}
 
         <View style={[styles.note, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
           <Ionicons name="swap-horizontal-outline" size={20} color={palette.accent} />

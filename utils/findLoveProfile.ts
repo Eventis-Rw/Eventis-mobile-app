@@ -11,9 +11,17 @@ export const MIN_LOVE_AGE = 18;
 export const LOVE_USERNAME_MIN = 3;
 export const LOVE_USERNAME_MAX = 20;
 
-/** Gender is required and limited to the two options the spec filters by. */
-export const LOVE_GENDERS = ["Woman", "Man"] as const;
+/** Gender is required; discovery filters only by Woman and Man. */
+export const LOVE_GENDERS = ["Man", "Woman", "Prefer not to say"] as const;
 export type LoveGender = (typeof LOVE_GENDERS)[number];
+
+/** Who a member wants to meet. The Home grid starts filtered to this. */
+export const LOVE_INTERESTED_IN = [
+  { value: "Woman", label: "Women" },
+  { value: "Man", label: "Men" },
+  { value: "All", label: "Everyone" },
+] as const;
+export type LoveInterestedIn = (typeof LOVE_INTERESTED_IN)[number]["value"];
 
 /** Free members get one profile photo and one extra photo. */
 export const FREE_LOVE_PHOTO_LIMIT = 2;
@@ -198,7 +206,11 @@ export function validateLoveUsername(value: string): string | undefined {
 }
 
 export function validateLoveGender(value: string | undefined): string | undefined {
-  return LOVE_GENDERS.includes(value as LoveGender) ? undefined : "Select Woman or Man.";
+  return LOVE_GENDERS.includes(value as LoveGender) ? undefined : "Select how you identify.";
+}
+
+export function validateLoveInterestedIn(value: string | undefined): string | undefined {
+  return LOVE_INTERESTED_IN.some((option) => option.value === value) ? undefined : "Select who you're interested in.";
 }
 
 const pad = (value: number) => String(value).padStart(2, "0");

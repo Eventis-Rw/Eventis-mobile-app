@@ -1,7 +1,7 @@
-import type { LoveGender } from "@/utils/findLoveProfile";
+import type { LoveGender, LoveInterestedIn } from "@/utils/findLoveProfile";
 import type { LoveAccountType, LoveMembership } from "@/utils/findLoveMembership";
 
-export type { LoveAccountType, LoveGender, LoveMembership };
+export type { LoveAccountType, LoveGender, LoveInterestedIn, LoveMembership };
 export type LoveConnectionStatus = "none" | "pending" | "connected";
 
 /**
@@ -11,6 +11,8 @@ export type LoveConnectionStatus = "none" | "pending" | "connected";
 export interface MyLoveProfile {
   username: string;
   gender: LoveGender;
+  /** Who they want to meet. Missing on profiles made before it was asked (treated as everyone). */
+  interestedIn?: LoveInterestedIn;
   /** ISO date, "YYYY-MM-DD". Age is worked out from it, never stored. */
   dateOfBirth: string;
   /** Set by the server. Private only after confirmed payment; see utils/findLoveMembership.ts. */
@@ -32,6 +34,7 @@ export interface MyLoveProfile {
 export interface MyLoveProfileInput {
   username: string;
   gender: LoveGender;
+  interestedIn: LoveInterestedIn;
   dateOfBirth: string;
   /**
    * Create only: the account type the member picked. Private starts as

@@ -25,6 +25,7 @@ import {
   neighborhoodsFor,
   validateLoveCountry,
   validateLoveGender,
+  validateLoveInterestedIn,
   validateLoveUsername,
 } from "@/utils/findLoveProfile";
 
@@ -45,6 +46,7 @@ export default function EditLoveProfileScreen() {
         ? {
             username: myProfile.username,
             gender: myProfile.gender,
+            interestedIn: myProfile.interestedIn,
             country: myProfile.country,
             photoUrls: myProfile.photoUrls,
             bio: myProfile.bio ?? "",
@@ -84,6 +86,7 @@ export default function EditLoveProfileScreen() {
     return {
       username: serverErrors.username ?? (shown("username") ? validateLoveUsername(values.username) : undefined),
       gender: shown("gender") ? validateLoveGender(values.gender) : undefined,
+      interestedIn: shown("interestedIn") ? validateLoveInterestedIn(values.interestedIn) : undefined,
       // Profiles made before country was asked show this straight away.
       country: serverErrors.country ?? validateLoveCountry(values.country),
       photoUrls: serverErrors.photoUrls,
@@ -128,8 +131,10 @@ export default function EditLoveProfileScreen() {
     if (
       validateLoveUsername(values.username) ||
       validateLoveGender(values.gender) ||
+      validateLoveInterestedIn(values.interestedIn) ||
       validateLoveCountry(values.country) ||
       !values.gender ||
+      !values.interestedIn ||
       !values.country
     ) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -144,6 +149,7 @@ export default function EditLoveProfileScreen() {
       await save({
         username: values.username,
         gender: values.gender,
+        interestedIn: values.interestedIn,
         country: values.country,
         dateOfBirth: myProfile.dateOfBirth,
         photoUrls: values.photoUrls,

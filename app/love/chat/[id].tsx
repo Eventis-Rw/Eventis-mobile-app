@@ -29,6 +29,7 @@ import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useColors } from "@/hooks/useColors";
+import { presenceLabel } from "@/utils/findLoveDiscovery";
 
 type DemoMessage = { id: string; time: string; own: boolean } & (
   | { kind: "text"; text: string }
@@ -71,7 +72,7 @@ export default function LoveChatScreen() {
   ]);
 
   const canSend = composer.trim().length > 0;
-  const subtitle = useMemo(() => profile ? `${profile.city} · Connected` : "Connection", [profile]);
+  const subtitle = useMemo(() => profile ? presenceLabel(profile) ?? `${profile.city} · Connected` : "Connection", [profile]);
 
   useEffect(() => {
     if (!notice) return;

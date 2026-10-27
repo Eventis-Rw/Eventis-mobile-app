@@ -23,7 +23,7 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import {
   activeFilterCount,
-  DEFAULT_DISCOVERY_FILTERS,
+  defaultFiltersFor,
   filterProfiles,
   type DiscoveryFilters as Filters,
 } from "@/utils/findLoveDiscovery";
@@ -37,11 +37,15 @@ export default function HomeScreen() {
   const { profiles, isLoading, error, refreshProfiles, getConnectionStatus, skippedIds, skipProfile, unskipProfile, clearSkipped } =
     useLoveProfiles();
   const { connect, upgradePrompt } = useLoveConnect();
-  const country = useMyLoveProfile().myProfile?.country;
+  const { myProfile } = useMyLoveProfile();
+  const country = myProfile?.country;
+  const interestedIn = myProfile?.interestedIn;
+  // The grid starts on the member's "Interested in" choice.
+  const defaultFilters = useMemo(() => defaultFiltersFor(interestedIn), [interestedIn]);
   const place = countryName(country);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [filters, setFilters] = useState<Filters>(DEFAULT_DISCOVERY_FILTERS);
+  const [filters, setFilters] = useState<Filters>(defaultFilters);
   // The last person skipped, so the member can undo it for a few seconds.
   const [lastSkipped, setLastSkipped] = useState<LoveProfile | null>(null);
   const deferredQuery = useDeferredValue(query);
@@ -56,8 +60,13 @@ export default function HomeScreen() {
     () => filterProfiles(unskippedProfiles, { ...filters, query: deferredQuery }),
     [unskippedProfiles, filters, deferredQuery],
   );
-  const filtering = activeFilterCount(filters) > 0 || !!query.trim();
+  const filtering = activeFilterCount(filters, defaultFilters) > 0 || !!query.trim();
   const seenEveryone = !filtering && profiles.length > 0 && unskippedProfiles.length === 0;
+
+  // The profile can load (or the choice change) after the screen mounts.
+  useEffect(() => {
+    setFilters((current) => ({ ...current, gender: defaultFilters.gender }));
+  }, [defaultFilters]);
 
   useEffect(() => {
     if (!lastSkipped) return;
@@ -67,7 +76,7 @@ export default function HomeScreen() {
 
   const clearFilters = () => {
     setQuery("");
-    setFilters(DEFAULT_DISCOVERY_FILTERS);
+    setFilters(defaultFilters);
   };
 
   const toggleSearch = () => {

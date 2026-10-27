@@ -131,7 +131,7 @@ export default function CreateEventScreen() {
   const router = useRouter();
   // `id` switches the screen to editing one of the publisher's own events.
   const { id: editId } = useLocalSearchParams<{ id?: string }>();
-  const { user } = useAuth();
+  const { user, consumePost } = useAuth();
   const { refreshEvents } = useEvents();
   // Journey rule: only verified businesses can charge for tickets.
   const { canPublishPaidEvents, paidEventsBlockedReason, accountType } = useAccountCapabilities();
@@ -229,15 +229,24 @@ export default function CreateEventScreen() {
       setError(problem);
       return;
     }
+    if (!editId && user.organiserSubscription?.postsRemaining === 0) {
+      setError("You've used all your posts. Buy more posts to publish another event.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       if (editId) await updatePublisherEvent(user.id, editId, input);
-      else await createPublisherEvent(user.id, user.organisation?.name ?? user.username, input);
+      else {
+        await createPublisherEvent(user.id, user.organisation?.name ?? user.username, input);
+        await consumePost();
+      }
       void refreshEvents();
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Back to wherever it was opened from (profile or organiser Overview).
-      if (router.canGoBack()) router.back();
+      // Someone posting without an organisation has no dashboard to return to.
+      if (!user.isBusinessAccount) router.replace("/(tabs)" as any);
+      else if (router.canGoBack()) router.back();
       else router.replace("/business/dashboard" as any);
     } catch (err) {
       setError(describeProfileError(err, editId ? "We couldn't save your changes." : "We couldn't publish your event."));

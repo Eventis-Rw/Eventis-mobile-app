@@ -14,7 +14,7 @@ import { useColors } from "@/hooks/useColors";
 import { describeError } from "@/services/organiserService";
 import { LoveProfileInputError } from "@/services/findLoveService";
 import { isAgeVerified } from "@/utils/findLoveAgeVerification";
-import { isAdult, MIN_LOVE_AGE, validateLoveCountry, validateLoveGender, validateLoveUsername } from "@/utils/findLoveProfile";
+import { isAdult, MIN_LOVE_AGE, validateLoveCountry, validateLoveGender, validateLoveInterestedIn, validateLoveUsername } from "@/utils/findLoveProfile";
 
 /**
  * Create a FindLove profile. The ID age check (app/love/verify.tsx) comes
@@ -39,6 +39,7 @@ export default function CreateLoveProfileScreen() {
     return {
       username: serverErrors.username ?? (shown("username") ? validateLoveUsername(values.username) : undefined),
       gender: shown("gender") ? validateLoveGender(values.gender) : undefined,
+      interestedIn: shown("interestedIn") ? validateLoveInterestedIn(values.interestedIn) : undefined,
       country: serverErrors.country ?? (shown("country") ? validateLoveCountry(values.country) : undefined),
       photoUrls: serverErrors.photoUrls,
     };
@@ -111,8 +112,11 @@ export default function CreateLoveProfileScreen() {
     setSubmitAttempted(true);
     setSaveError(null);
     const hasErrors =
-      !!validateLoveUsername(values.username) || !!validateLoveGender(values.gender) || !!validateLoveCountry(values.country);
-    if (hasErrors || !values.gender || !values.country) {
+      !!validateLoveUsername(values.username) ||
+      !!validateLoveGender(values.gender) ||
+      !!validateLoveInterestedIn(values.interestedIn) ||
+      !!validateLoveCountry(values.country);
+    if (hasErrors || !values.gender || !values.interestedIn || !values.country) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
@@ -121,6 +125,7 @@ export default function CreateLoveProfileScreen() {
       await save({
         username: values.username,
         gender: values.gender,
+        interestedIn: values.interestedIn,
         country: values.country,
         dateOfBirth,
         accountType: values.accountType,

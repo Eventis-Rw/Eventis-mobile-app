@@ -382,6 +382,16 @@ export default function HomeScreen() {
               <Ionicons name="arrow-forward" size={19} color="#fff" />
             </Pressable>
             <Pressable
+              onPress={() => {
+                setShowOrganizerModal(false);
+                router.push("/organiser/subscribe" as any);
+              }}
+              accessibilityRole="button"
+              style={styles.modalDismissButton}
+            >
+              <Text style={[styles.modalDismiss, { color: colors.primary }]}>Just post an event (from RWF 2,180)</Text>
+            </Pressable>
+            <Pressable
               onPress={() => setShowOrganizerModal(false)}
               accessibilityRole="button"
               style={styles.modalDismissButton}
