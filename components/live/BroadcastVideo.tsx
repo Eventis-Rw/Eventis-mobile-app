@@ -1,10 +1,14 @@
-import React from "react";
+import React, { useMemo } from "react";
 import type { Participant } from "livekit-client";
+import { StyleSheet } from "react-native";
 
-export function BroadcastVideo({ participant }: { participant: Participant }) {
+export function BroadcastVideo({ participant, revision }: { participant: Participant; revision: number }) {
   // This component only mounts after prepareLiveMedia succeeds; Expo Go never loads native WebRTC.
   const { VideoTrack } = require("@livekit/react-native") as typeof import("@livekit/react-native");
-  const publication = participant.getTrackPublication("camera" as import("livekit-client").Track.Source);
-  if (!publication?.track || publication.isMuted) return null;
-  return <VideoTrack trackRef={{ participant, publication, source: publication.source }} style={{ width: "100%", height: 240 }} objectFit="contain" mirror={participant.isLocal} />;
+  const camera = useMemo(() => {
+    const publication = participant.getTrackPublication("camera" as import("livekit-client").Track.Source);
+    return { publication, available: !!publication?.track && !publication.isMuted, mirror: participant.isLocal && publication?.track?.mediaStreamTrack.getSettings().facingMode === "user" };
+  }, [participant, revision]);
+  if (!camera.publication || !camera.available) return null;
+  return <VideoTrack trackRef={{ participant, publication: camera.publication, source: camera.publication.source }} style={StyleSheet.absoluteFill} objectFit="cover" mirror={camera.mirror} />;
 }

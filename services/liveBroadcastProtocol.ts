@@ -5,7 +5,7 @@ export const liveProject = {
   tokenServerId: process.env.EXPO_PUBLIC_LIVEKIT_TOKEN_SERVER_ID?.trim() ?? "",
   serverUrl: process.env.EXPO_PUBLIC_LIVEKIT_URL?.trim() ?? "",
 };
-export type BroadcastSession = { code: string; identity: string; hostId: string; title: string; mode: "video" | "voice"; hosting: boolean };
+export type BroadcastSession = { code: string; identity: string; hostId: string; title: string; mode: "video" | "voice"; hosting: boolean; facingMode?: "user" | "environment" };
 export function createBroadcastSession(title: string, mode: "video" | "voice", nonce: string): BroadcastSession {
   if (!title.trim() || title.trim().length > 80) throw new Error("Add a title of up to 80 characters.");
   if (!/^[a-z0-9]{12,40}$/.test(nonce)) throw new Error("Could not create a room code.");

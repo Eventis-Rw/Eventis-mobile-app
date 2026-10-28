@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 import { ConnectionState, Room, RoomEvent, TokenSource, Track, type Participant, type RemoteParticipant } from "livekit-client";
 import { attachRoomAudio, prepareLiveMedia, stopLiveMedia } from "@/services/liveMedia";
@@ -28,7 +28,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
   const modelRef = useRef(model);
   const channel = useRef<{ act: (a: LiveAction) => Promise<LiveState>; disconnect: () => Promise<void> } | null>(null);
   const mediaLock = useRef(Promise.resolve());
-  const facing = useRef<"user" | "environment">("user");
+  const facing = useRef<"user" | "environment">(session.facingMode ?? "user");
   const isHost = session.hosting;
 
   useEffect(() => {
@@ -163,10 +163,13 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
           setReady(true);
           await broadcast();
           // Starting a broadcast is the explicit consent action. Viewers never publish automatically.
-          try {
-            if (!backgrounded) await rtc.localParticipant.setMicrophoneEnabled(true);
-            if (!disposed && !backgrounded && session.mode === "video") await rtc.localParticipant.setCameraEnabled(true);
-          } catch (e) { fail(new Error(`Connected, but media access failed: ${messageOf(e)}. Use the mic/camera controls to try again.`)); }
+          const mediaErrors: string[] = [];
+          try { if (!backgrounded) await rtc.localParticipant.setMicrophoneEnabled(true); }
+          catch (e) { mediaErrors.push(`Microphone: ${messageOf(e)}`); }
+          // Camera permission is independent: a denied microphone must not prevent video.
+          try { if (!disposed && !backgrounded && session.mode === "video") await rtc.localParticipant.setCameraEnabled(true, { facingMode: facing.current }); }
+          catch (e) { mediaErrors.push(`Camera: ${messageOf(e)}`); }
+          if (mediaErrors.length) fail(new Error(`${mediaErrors.join(". ")}. Use the media controls to try again.`));
           if (disposed) { await disconnect(); return; }
         } else await send({ type: "hello" }, session.hostId);
         if (disposed) return;
@@ -200,6 +203,10 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     };
   }, [session, name, isHost, attempt]);
 
+  // LiveKit mutates its participant map in place. Snapshot it on SDK events so
+  // React Compiler cannot reuse the roster from the initial connection.
+  const participants = useMemo(() => room ? [room.localParticipant, ...room.remoteParticipants.values()] : [], [room, revision]);
+  const localMedia = useMemo(() => ({ microphone: room?.localParticipant.isMicrophoneEnabled ?? false, camera: room?.localParticipant.isCameraEnabled ?? false }), [room, revision]);
   const canPublish = isHost || model.guests.some(p => p.id === session.identity);
   useEffect(() => {
     if (!room) return;
@@ -224,16 +231,17 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
       if (kind === "audio") { await room.startAudio(); return; }
       if (!canPublish || modelRef.current.endedAt || modelRef.current.blockedIds.includes(session.identity)) throw new Error("Ask the host to join the stage before enabling your microphone or camera.");
       if (kind === "mic") await room.localParticipant.setMicrophoneEnabled(!room.localParticipant.isMicrophoneEnabled);
-      if (kind === "camera") await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled);
+      if (kind === "camera") await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled, { facingMode: facing.current });
       if (kind === "flip") {
         const track = room.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
         if (!track) throw new Error("Turn on your camera first.");
         facing.current = facing.current === "user" ? "environment" : "user";
         await (track as import("livekit-client").LocalVideoTrack).restartTrack({ facingMode: facing.current });
       }
+      setError("");
       setRevision(r => r + 1);
     }).catch(e => setError(messageOf(e)));
   };
   const act = (_actor: LivePerson, action: LiveAction) => channel.current?.act(action) ?? Promise.reject(new Error("The room is still connecting."));
-  return { room, model, connection, error, ready, now, revision, canPublish, media, act, retry: () => { setRoom(null); setAttempt(n => n + 1); } };
+  return { room, model, connection, error, ready, now, revision, participants, localMedia, canPublish, media, act, clearError: () => setError(""), retry: () => { setRoom(null); setAttempt(n => n + 1); } };
 }

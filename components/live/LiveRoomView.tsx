@@ -1,15 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, ImageBackground, KeyboardAvoidingView, Platform, ScrollView, Share, Text, TextInput, View } from "react-native";
+import { Animated, ImageBackground, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { LIVE_GIFTS, type LiveAction, type LivePerson, type LiveRoom, type LiveState } from "@/services/liveState";
-import { LiveAvatar, LiveButton, LiveIcon, LiveSheet, liveColors as c, liveStyles as s } from "./LivePrimitives";
+import { LiveAvatar, LiveButton, LiveOverlayAction, LiveSheet, liveColors as c, liveStyles as s } from "./LivePrimitives";
 import { useEvents } from "@/context/EventsContext";
 import { getEventImage } from "@/constants/eventImages";
 
 type Props = { room: LiveRoom; person: LivePerson; state: LiveState; now: number; closeSignal: number; act: (actor: LivePerson, action: LiveAction) => Promise<LiveState>; onClose: () => void;
-  broadcast?: { stage: React.ReactNode; controls: React.ReactNode; status: string; onShare: () => void } };
+  broadcast?: { stage: React.ReactNode; controls: React.ReactNode; status: string; onShare: () => void; notice?: string; onDismissNotice?: () => void; onCopyCode: () => void } };
 type Panel = "people" | "gifts" | "settings" | "leave" | "simulate" | "event" | null;
 const samplePeople: LivePerson[] = [
   { id: "preview_aline", name: "Aline", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100" },
@@ -18,6 +19,14 @@ const samplePeople: LivePerson[] = [
 export function LiveRoomView({ room, person, state, now, closeSignal, act, onClose, broadcast }: Props) {
   const insets = useAppSafeAreaInsets();
   const { events } = useEvents();
+  const { height } = useWindowDimensions();
+  const [chatVisible, setChatVisible] = useState(true);
+  const [typing, setTyping] = useState(false);
+  const followChat = useRef(true);
+  useEffect(() => {
+    const subscription = Keyboard.addListener("keyboardDidHide", () => setTyping(false));
+    return () => subscription.remove();
+  }, []);
   const featuredEvent = events.find(e => e.id === room.eventId);
   const host = person.id === room.host.id;
   const ended = !!room.endedAt || room.endsAt <= now;
@@ -64,41 +73,64 @@ export function LiveRoomView({ room, person, state, now, closeSignal, act, onClo
     {!blocked ? <View style={s.card}><Text style={s.label}>{room.reactions} reactions{broadcast ? "" : ` · ${received} demo gift coins`}</Text><Text style={s.body}>{broadcast ? "This testing session has ended." : "Demo sessions do not create withdrawable earnings."}</Text></View> : null}
     <LiveButton label="Back to Live" onPress={onClose} />
   </View>;
-  return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: c.bg }}>
-    <View style={{ flex: 1, paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 12) }}>
-      {!broadcast && room.mode === "video" && room.cover ? <ImageBackground source={getEventImage(room.cover)} style={{ position: "absolute", inset: 0 }} resizeMode="cover"><LinearGradient colors={["#080C1299", "#080C1244", "#080C12"]} style={{ flex: 1 }} /></ImageBackground> : null}
-      <View style={[s.row, { paddingHorizontal: 16 }]}>
-        <LiveAvatar person={room.host} /><View style={{ flex: 1, gap: 3 }}><Text numberOfLines={1} style={s.label}>{room.host.name}</Text><Text style={s.body}>{room.audience.length} viewers · {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</Text></View>
-        <LiveIcon name="people-outline" label={`Participants, ${room.requests.length} requests`} onPress={() => setPanel("people")} /><LiveIcon name="close" label={host ? "End Live" : "Leave Live"} onPress={close} />
-      </View>
-      <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 7 }}><Text style={s.label}>{room.title}</Text><View style={s.wrap}><Text style={[s.pill, (!broadcast || broadcast.status === "LIVE · TEST SESSION") && s.livePill]}>{broadcast ? broadcast.status : "LOCAL DEMO · NO BROADCAST"}</Text>{guest ? <Text style={s.pill}>ON STAGE</Text> : null}</View></View>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16, flexGrow: 1, justifyContent: "center" }}>
-        {broadcast ? broadcast.stage : room.mode === "voice" || room.guests.length > 0 ? <View style={[s.wrap, { justifyContent: "center" }]}>
-          {[room.host, ...room.guests].map((p, index) => <View key={p.id} style={{ width: "29%", alignItems: "center", paddingVertical: 12, gap: 8 }}><View style={{ padding: 4, borderWidth: 1, borderColor: c.blue, borderRadius: 60 }}><LiveAvatar person={p} size={64} /></View><Text numberOfLines={1} style={s.label}>{p.name}</Text><Text style={s.eyebrow}>{index === 0 ? "HOST" : "GUEST"}</Text></View>)}
-          {Array.from({ length: 4 - room.guests.length }, (_, i) => <View key={`empty_${i}`} style={{ width: "29%", alignItems: "center", paddingVertical: 12, gap: 8 }}><View style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 1, borderStyle: "dashed", borderColor: c.line, alignItems: "center", justifyContent: "center" }}><Ionicons name="mic-outline" size={24} color={c.muted} /></View><Text style={s.body}>Open seat</Text></View>)}
-        </View> : <View style={{ alignItems: "center", gap: 10, paddingVertical: 30 }}><Ionicons name="videocam-outline" size={42} color={c.text} /><Text style={s.label}>Video preview</Text><Text style={[s.body, { textAlign: "center" }]}>This cover stands in for the live camera.{"\n"}Audio and video are not being transmitted.</Text></View>}
-      </ScrollView>
-      {reaction ? <Animated.Text pointerEvents="none" style={{ position: "absolute", top: "35%", alignSelf: "center", fontSize: 80, opacity: animation.interpolate({ inputRange: [0, .2, .75, 1], outputRange: [0, 1, 1, 0] }), transform: [{ translateY: animation.interpolate({ inputRange: [0, 1], outputRange: [50, -70] }) }] }}>{reaction}</Animated.Text> : null}
-      <View style={{ paddingHorizontal: 16, gap: 10 }}>
-        {broadcast?.controls}
-        {room.eventId ? <LiveButton secondary compact icon="calendar-outline" label={featuredEvent ? "Featured event" : "Event unavailable"} onPress={() => setPanel("event")} /> : null}
-        {invited ? <View style={s.card}><Text style={s.label}>The host invited you on stage</Text><View style={s.wrap}><LiveButton compact label="Accept invite" disabled={busy} onPress={() => void run({ type: "acceptInvite", roomId: room.id })} /><LiveButton compact secondary label="Decline" disabled={busy} onPress={() => void run({ type: "declineInvite", roomId: room.id })} /></View></View> : null}
-        <ScrollView ref={chat} style={{ maxHeight: 150 }} onContentSizeChange={() => chat.current?.scrollToEnd({ animated: true })} contentContainerStyle={{ gap: 10 }} keyboardShouldPersistTaps="handled">
-          {room.messages.length === 0 ? <Text style={s.body}>Welcome in. Say hello and keep it kind.</Text> : room.messages.map(m => <View key={m.id} style={[s.row, { alignItems: "flex-start" }]}><LiveAvatar person={m.person} size={26} /><Text style={{ flex: 1, color: m.kind === "gift" ? c.blue : c.text, fontSize: 14, lineHeight: 21 }}><Text style={{ fontWeight: "700" }}>{m.person.name} </Text>{m.text}</Text></View>)}
-        </ScrollView>
-        {notice}
-        <View style={s.row}><TextInput accessibilityLabel="Live message" value={message} onChangeText={setMessage} maxLength={240} placeholder={room.chatEnabled || host ? "Say something…" : "Chat is paused"} placeholderTextColor={c.muted} editable={(room.chatEnabled || host) && !room.mutedIds.includes(person.id)} style={[s.input, { flex: 1, minHeight: 46, paddingVertical: 10 }]} returnKeyType="send" onSubmitEditing={() => void run({ type: "message", roomId: room.id, text: message }, person, () => setMessage(""))} />
-          <LiveIcon name="send-outline" label="Send message" onPress={() => void run({ type: "message", roomId: room.id, text: message }, person, () => setMessage(""))} />
-          {!broadcast && !host && !guest ? <LiveIcon name="gift-outline" label="Send a gift" onPress={() => { setSelectedGift(null); setPanel("gifts"); }} /> : null}
-        </View>
-        <View style={[s.wrap, { justifyContent: "space-between" }]}>
-          {host ? <LiveButton secondary compact icon="options-outline" label="Controls" onPress={() => setPanel("settings")} /> : <LiveButton secondary compact icon="mic-outline" label={guest ? "Leave stage" : requested ? "Cancel request" : "Join stage"} disabled={busy} onPress={() => void run({ type: guest ? "leaveSeat" : requested ? "cancelRequest" : "request", roomId: room.id })} />}
-          <LiveButton secondary compact icon="heart-outline" label={String(room.reactions)} disabled={busy} onPress={() => void run({ type: "react", roomId: room.id }, person, () => setReaction("💙"))} />
-          <LiveButton secondary compact icon="share-outline" label="Share" onPress={() => { if (broadcast) broadcast.onShare(); else void Share.share({ message: `Try Eventis Live: ${room.title}. This is a local preview, so this room cannot be joined from another device yet.` }).catch(() => setError("Sharing is unavailable right now.")); }} />
-        </View>
-      </View>
+  const share = () => {
+    if (broadcast) broadcast.onShare();
+    else void Share.share({ message: `Try Eventis Live: ${room.title}. This is a local preview, so this room cannot be joined from another device yet.` }).catch(() => setError("Sharing is unavailable right now."));
+  };
+  const sendMessage = () => {
+    if (!message.trim() || busy || !(room.chatEnabled || host) || room.mutedIds.includes(person.id)) return;
+    void run({ type: "message", roomId: room.id, text: message }, person, () => { setMessage(""); followChat.current = true; });
+  };
+  const commentsHeight = typing ? 96 : room.guests.length > 0 ? 120 : Math.min(190, height * .23);
+  return <View style={ui.screen}>
+    <StatusBar style="light" />
+    <View testID="live-media-canvas" style={StyleSheet.absoluteFill}>
+      {broadcast ? broadcast.stage : room.mode === "video" && room.cover && room.guests.length === 0 ? <ImageBackground source={getEventImage(room.cover)} style={{ flex: 1 }} resizeMode="cover" /> : <LinearGradient colors={["#14273D", "#090D19", "#111C30"]} style={ui.voiceStage}>
+        <Text style={ui.voiceLabel}>LIVE CONVERSATION</Text>
+        <View style={ui.voiceGrid}>{[room.host, ...room.guests].map((p, index) => <View key={p.id} style={ui.voiceSeat}><View style={ui.voiceRing}><LiveAvatar person={p} size={room.guests.length > 1 ? 62 : 88} /></View><Text numberOfLines={1} style={ui.voiceName}>{p.name}</Text><Text style={ui.voiceRole}>{index === 0 ? "Host" : "Guest"}</Text></View>)}</View>
+      </LinearGradient>}
     </View>
-    {panel ? <LiveSheet title={{ people: "People in the room", gifts: "Send a little love", settings: "Host controls", leave: host ? "End your Live?" : "Leave this Live?", simulate: "Test the room", event: "Featured event" }[panel]} onClose={() => { setPanel(null); setError(""); }}>
+    <LinearGradient pointerEvents="none" colors={["#0009", "#0000"]} style={ui.topShade} />
+    <View pointerEvents="box-none" style={[ui.header, { paddingTop: insets.top + 10 }]}>
+      <View style={ui.headerRow}>
+        <View style={ui.hostChip}><LiveAvatar person={room.host} size={34} /><View style={{ flex: 1, gap: 3 }}><Text numberOfLines={1} style={ui.hostName}>{room.host.name}</Text><View style={ui.hostMeta}><View style={ui.liveBadge}><View style={ui.liveDot} /><Text style={ui.liveText}>{broadcast ? broadcast.status === "LIVE · TEST SESSION" ? "LIVE" : broadcast.status : "DEMO"}</Text></View><Text style={ui.timer}>{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</Text></View></View></View>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Participants, ${room.requests.length} requests`} onPress={() => setPanel("people")} style={ui.audience}><Ionicons name="eye-outline" size={15} color="#FFF" /><Text style={ui.audienceCount}>{room.audience.length}</Text>{host && room.requests.length > 0 ? <View style={ui.requestDot} /> : null}</Pressable>
+        <LiveOverlayAction name="close" label={host ? "End Live" : "Leave Live"} onPress={close} />
+      </View>
+      <Text numberOfLines={1} style={ui.roomTitle}>{room.title}</Text>
+      {guest ? <Text style={ui.stagePill}>ON STAGE</Text> : null}
+    </View>
+    {!typing ? <View style={[ui.rail, { top: Math.max(insets.top + 132, height * .29) }]}>
+      {broadcast?.controls}
+      {!host ? <LiveOverlayAction name="people-outline" label={guest ? "Leave stage" : requested ? "Cancel request" : "Join stage"} caption={guest ? "Leave" : requested ? "Requested" : "Join"} active={requested} disabled={busy} onPress={() => void run({ type: guest ? "leaveSeat" : requested ? "cancelRequest" : "request", roomId: room.id })} /> : null}
+      <LiveOverlayAction name="heart" label="Send a reaction" caption={String(room.reactions)} disabled={busy} onPress={() => void run({ type: "react", roomId: room.id }, person, () => setReaction("💙"))} />
+    </View> : null}
+    {reaction ? <Animated.Text pointerEvents="none" style={[ui.reaction, { opacity: animation.interpolate({ inputRange: [0, .2, .75, 1], outputRange: [0, 1, 1, 0] }), transform: [{ translateY: animation.interpolate({ inputRange: [0, 1], outputRange: [30, -160] }) }] }]}>{reaction}</Animated.Text> : null}
+    <KeyboardAvoidingView pointerEvents="box-none" behavior={Platform.OS === "ios" ? "padding" : "height"} style={StyleSheet.absoluteFill}>
+      <View pointerEvents="box-none" style={ui.bottomAnchor}>
+        <LinearGradient pointerEvents="none" colors={["#0000", "#0008", "#000D"]} locations={[0, .4, 1]} style={StyleSheet.absoluteFill} />
+        <View pointerEvents="box-none" style={[ui.bottomContent, { paddingRight: typing ? 14 : 70 }]}>
+          {room.eventId && !typing ? <Pressable accessibilityRole="button" accessibilityLabel="Featured event" onPress={() => setPanel("event")} style={ui.eventChip}><Ionicons name="calendar-outline" size={15} color={c.blue} /><Text numberOfLines={1} style={ui.eventText}>{featuredEvent?.title || "Featured event"}</Text><Ionicons name="chevron-forward" size={13} color="#FFF" /></Pressable> : null}
+          {invited ? <View style={ui.invite}><Text style={ui.commentText}>You’re invited to join the stage</Text><View style={s.wrap}><LiveButton compact label="Accept invite" disabled={busy} onPress={() => void run({ type: "acceptInvite", roomId: room.id })} /><LiveButton compact secondary label="Decline" disabled={busy} onPress={() => void run({ type: "declineInvite", roomId: room.id })} /></View></View> : null}
+          {chatVisible ? <ScrollView ref={chat} testID="live-floating-chat" style={{ height: commentsHeight, flexGrow: 0 }} showsVerticalScrollIndicator={false} onScroll={event => { const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent; followChat.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 48; }} scrollEventThrottle={100} onContentSizeChange={() => { if (followChat.current) chat.current?.scrollToEnd({ animated: true }); }} contentContainerStyle={ui.comments} keyboardShouldPersistTaps="handled">
+            <Text style={ui.welcome}>{broadcast ? host ? "You’re live. Say hello to the room." : "Welcome in. Say hello and keep it kind." : "Demo room · Camera and microphone are not broadcasting."}</Text>
+            {room.messages.slice(-40).map(m => <View key={m.id} style={ui.comment}><LiveAvatar person={m.person} size={25} /><View style={ui.commentBubble}><Text style={ui.commentName}>{m.person.name}</Text><Text style={[ui.commentText, m.kind === "gift" ? { color: c.blue } : null]}>{m.text}</Text></View></View>)}
+          </ScrollView> : null}
+          {error || broadcast?.notice ? <View style={ui.notice}><Text accessibilityRole="alert" numberOfLines={3} style={ui.noticeText}>{error || broadcast?.notice}</Text><Pressable accessibilityRole="button" accessibilityLabel="Dismiss Live notice" hitSlop={8} onPress={() => { setError(""); broadcast?.onDismissNotice?.(); }}><Ionicons name="close" size={16} color="#FFF" /></Pressable></View> : null}
+        </View>
+        <View style={[ui.composerRow, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <View style={ui.composer}><TextInput accessibilityLabel="Live message" value={message} onChangeText={setMessage} maxLength={240} placeholder={room.mutedIds.includes(person.id) ? "You’re muted" : room.chatEnabled || host ? "Say something…" : "Chat is paused"} placeholderTextColor="#E2E5ED" editable={(room.chatEnabled || host) && !room.mutedIds.includes(person.id)} style={ui.messageInput} returnKeyType="send" onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} onSubmitEditing={sendMessage} />
+            {message.trim() ? <Pressable accessibilityRole="button" accessibilityLabel="Send message" accessibilityState={{ disabled: busy }} disabled={busy} hitSlop={6} onPress={sendMessage} style={ui.send}><Ionicons name="arrow-up" size={20} color="#FFF" /></Pressable> : null}
+          </View>
+          {!typing ? <>
+            <LiveOverlayAction name="ellipsis-horizontal" label={host ? "Host controls" : "Live options"} onPress={() => setPanel("settings")} />
+            {!broadcast && !host && !guest ? <LiveOverlayAction name="gift-outline" label="Send a gift" onPress={() => { setSelectedGift(null); setPanel("gifts"); }} /> : null}
+            <LiveOverlayAction name="arrow-redo-outline" label="Share Live" onPress={share} />
+          </> : <LiveOverlayAction name="checkmark" label="Done typing" onPress={() => { Keyboard.dismiss(); setTyping(false); }} />}
+        </View>
+      </View>
+    </KeyboardAvoidingView>
+    {panel ? <LiveSheet title={{ people: "People in the room", gifts: "Send a little love", settings: host ? "Host controls" : "Live options", leave: host ? "End your Live?" : "Leave this Live?", simulate: "Test the room", event: "Featured event" }[panel]} onClose={() => { setPanel(null); setError(""); }}>
       {notice}
       {panel === "event" ? featuredEvent ? <><Text style={s.heading}>{featuredEvent.title}</Text><Text style={s.body}>{featuredEvent.date} · {featuredEvent.time}</Text><Text style={s.label}>{featuredEvent.location}</Text><Text style={s.body}>{featuredEvent.description}</Text><Text style={s.body}>{featuredEvent.isPaid ? `${featuredEvent.currency} ${featuredEvent.price.toLocaleString()}` : "Free entry"}</Text></> : <Text style={s.body}>This event is no longer available. You can keep enjoying the Live.</Text> : null}
       {panel === "leave" ? <><Text style={s.body}>{host ? broadcast ? "End the broadcast and disconnect your camera and microphone for everyone." : "Everyone will leave the room. This session counts toward your daily limit." : "You can return while this room is still live. Your guest seat will be released."}</Text><LiveButton danger disabled={busy} label={host ? "End Live for everyone" : "Leave room"} onPress={() => void run({ type: host ? "end" : "leave", roomId: room.id }, person, () => { setPanel(null); if (!host) onClose(); })} />{broadcast ? <LiveButton secondary label="Disconnect this device" onPress={onClose} /> : null}<LiveButton secondary label="Keep watching" onPress={() => setPanel(null)} /></> : null}
@@ -115,10 +147,55 @@ export function LiveRoomView({ room, person, state, now, closeSignal, act, onClo
       </> : null}
       {panel === "gifts" ? <><Text style={s.body}>Balance: {state.wallets[person.id] ?? 500} demo coins · no cash value</Text><View style={s.wrap}>{LIVE_GIFTS.map(g => <View key={g.id} style={{ width: "47%", gap: 6, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: selectedGift === g.id ? c.blue : c.line }}><Text style={{ fontSize: 34 }}>{g.emoji}</Text><Text style={s.label}>{g.name}</Text><LiveButton compact secondary label={`${g.coins} coins`} onPress={() => { giftTransaction.current = `gift_${person.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`; setSelectedGift(g.id); }} /></View>)}</View>
         {selectedGift ? <><Text style={s.body}>Send {LIVE_GIFTS.find(g => g.id === selectedGift)?.name} to {room.host.name}? The coins will be deducted from your demo balance.</Text><LiveButton label="Confirm gift" disabled={busy || !room.giftsEnabled} onPress={() => void run({ type: "gift", roomId: room.id, giftId: selectedGift, transactionId: giftTransaction.current }, person, () => { setSelectedGift(null); setPanel(null); })} /></> : null}<Text style={s.body}>Daily limit: 1,000 coins. Purchases and cash withdrawals are not enabled.</Text></> : null}
-      {panel === "settings" ? <><LiveButton secondary label={room.chatEnabled ? "Pause chat" : "Enable chat"} disabled={busy} onPress={() => void run({ type: "settings", roomId: room.id, chatEnabled: !room.chatEnabled, giftsEnabled: room.giftsEnabled })} />{!broadcast ? <LiveButton secondary label={room.giftsEnabled ? "Pause gifts" : "Enable gifts"} disabled={busy} onPress={() => void run({ type: "settings", roomId: room.id, chatEnabled: room.chatEnabled, giftsEnabled: !room.giftsEnabled })} /> : null}<LiveButton secondary label={`Guest requests (${room.requests.length})`} onPress={() => setPanel("people")} />{!broadcast ? <LiveButton secondary label="Simulate demo participants" onPress={() => setPanel("simulate")} /> : null}<LiveButton danger label="End Live" onPress={() => setPanel("leave")} /></> : null}
+      {panel === "settings" ? <><LiveButton secondary icon={chatVisible ? "chatbubble-outline" : "chatbubble"} label={chatVisible ? "Hide comments" : "Show comments"} onPress={() => { setChatVisible(v => !v); setPanel(null); }} />{broadcast ? <><LiveButton secondary icon="copy-outline" label="Copy code" onPress={() => { broadcast.onCopyCode(); setPanel(null); }} /><LiveButton secondary icon="share-outline" label="Share Live" onPress={share} /><Text style={s.body}>Test broadcast · Invite people you trust using your room code.</Text></> : null}{host ? <><LiveButton secondary label={room.chatEnabled ? "Pause chat" : "Enable chat"} disabled={busy} onPress={() => void run({ type: "settings", roomId: room.id, chatEnabled: !room.chatEnabled, giftsEnabled: room.giftsEnabled })} />{!broadcast ? <LiveButton secondary label={room.giftsEnabled ? "Pause gifts" : "Enable gifts"} disabled={busy} onPress={() => void run({ type: "settings", roomId: room.id, chatEnabled: room.chatEnabled, giftsEnabled: !room.giftsEnabled })} /> : null}<LiveButton secondary label={`Guest requests (${room.requests.length})`} onPress={() => setPanel("people")} />{!broadcast ? <LiveButton secondary label="Simulate demo participants" onPress={() => setPanel("simulate")} /> : null}<LiveButton danger label="End Live" onPress={() => setPanel("leave")} /></> : null}</> : null}
       {panel === "simulate" ? <><Text style={s.body}>These controls simulate another participant on this device. They do not connect real viewers.</Text>
         {!host ? <View style={s.card}><Text style={s.label}>Act as the sample host</Text><LiveButton secondary label="Approve my request" disabled={busy || !requested} onPress={() => void run({ type: "accept", roomId: room.id, person }, room.host, () => setPanel(null))} /><LiveButton secondary label="Decline my request" disabled={busy || !requested} onPress={() => void run({ type: "reject", roomId: room.id, person }, room.host)} /><LiveButton secondary label="Invite me on stage" disabled={busy || guest} onPress={() => void run({ type: "invite", roomId: room.id, person }, room.host, () => setPanel(null))} /></View> : null}
         {samplePeople.map(p => <View key={p.id} style={s.card}><Text style={s.label}>{p.name}</Text><View style={s.wrap}><LiveButton compact secondary label="Join room" disabled={busy} onPress={() => void run({ type: "join", roomId: room.id }, p)} /><LiveButton compact secondary label="Request seat" disabled={busy} onPress={() => void run({ type: "request", roomId: room.id }, p)} />{room.invitations.some(i => i.id === p.id) ? <LiveButton compact label="Accept invite" disabled={busy} onPress={() => void run({ type: "acceptInvite", roomId: room.id }, p)} /> : null}<LiveButton compact secondary label="Say hello" disabled={busy} onPress={() => void run({ type: "message", roomId: room.id, text: "Hello everyone! Happy to be here." }, p)} /><LiveButton compact secondary label="Send Spark gift" disabled={busy} onPress={() => void run({ type: "gift", roomId: room.id, giftId: "spark", transactionId: `sample_${p.id}_${Date.now()}` }, p)} /></View></View>)}<LiveButton label="Manage requests" onPress={() => setPanel("people")} /></> : null}
     </LiveSheet> : null}
-  </KeyboardAvoidingView>;
+  </View>;
 }
+
+const ui = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#000" },
+  topShade: { position: "absolute", top: 0, left: 0, right: 0, height: 200 },
+  header: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: 14, gap: 9 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  hostChip: { flex: 1, maxWidth: 260, flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: "#050A1466", padding: 5, paddingRight: 12, borderRadius: 28 },
+  hostName: { color: "#FFF", fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  hostMeta: { flexDirection: "row", alignItems: "center", gap: 6 },
+  liveBadge: { backgroundColor: c.red, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 4 },
+  liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: "#FFF" },
+  liveText: { color: "#FFF", fontSize: 8, fontFamily: "Inter_700Bold", letterSpacing: .5 },
+  timer: { color: "#FFF", fontSize: 10, fontFamily: "Inter_500Medium", fontVariant: ["tabular-nums"] },
+  audience: { height: 34, minWidth: 48, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, backgroundColor: "#050A1466", borderRadius: 18 },
+  audienceCount: { color: "#FFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  requestDot: { position: "absolute", top: 0, right: 0, width: 8, height: 8, borderRadius: 4, backgroundColor: c.red },
+  roomTitle: { color: "#FFF", fontSize: 12, fontFamily: "Inter_500Medium", paddingLeft: 4, textShadowColor: "#000", textShadowRadius: 5 },
+  stagePill: { color: "#FFF", fontSize: 9, fontFamily: "Inter_700Bold", alignSelf: "flex-start", backgroundColor: "#0284C7B3", borderRadius: 6, padding: 5 },
+  rail: { position: "absolute", right: 14, alignItems: "center", gap: 15 },
+  reaction: { position: "absolute", bottom: 180, right: 22, fontSize: 56 },
+  bottomAnchor: { marginTop: "auto", paddingTop: 36 },
+  bottomContent: { paddingLeft: 14, gap: 10, marginBottom: 4 },
+  comments: { flexGrow: 1, justifyContent: "flex-end", gap: 10, paddingTop: 12, paddingBottom: 4 },
+  welcome: { color: "#E2E5ED", fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginBottom: 2, textShadowColor: "#000", textShadowRadius: 5 },
+  comment: { flexDirection: "row", alignItems: "flex-start", gap: 7 },
+  commentBubble: { flexShrink: 1, gap: 2, paddingRight: 4 },
+  commentName: { color: "#FFFFFFB3", fontSize: 11, fontFamily: "Inter_600SemiBold", textShadowColor: "#000", textShadowRadius: 4 },
+  commentText: { color: "#FFF", fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular", textShadowColor: "#000", textShadowRadius: 4 },
+  composerRow: { paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 9 },
+  composer: { flex: 1, minHeight: 44, borderRadius: 24, backgroundColor: "#11182780", borderWidth: 1, borderColor: "#FFFFFF30", flexDirection: "row", alignItems: "center", paddingRight: 4 },
+  messageInput: { flex: 1, minWidth: 0, height: 44, paddingHorizontal: 15, paddingVertical: 10, fontSize: 13, fontFamily: "Inter_400Regular", color: "#FFF" },
+  send: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#0284C7", alignItems: "center", justifyContent: "center" },
+  notice: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#111827E6", borderRadius: 12, padding: 11 },
+  noticeText: { flex: 1, color: "#FFF", fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular" },
+  eventChip: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", maxWidth: "100%", backgroundColor: "#080D19B3", gap: 7, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
+  eventText: { color: "#FFF", fontSize: 11, fontFamily: "Inter_600SemiBold", flexShrink: 1 },
+  invite: { backgroundColor: "#111827E6", borderRadius: 15, padding: 12, gap: 10 },
+  voiceStage: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 120, paddingHorizontal: 20, gap: 32 },
+  voiceLabel: { color: "#FFFFFF70", fontSize: 10, letterSpacing: 2, fontFamily: "Inter_600SemiBold" },
+  voiceGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 24 },
+  voiceSeat: { width: "38%", alignItems: "center", gap: 9 },
+  voiceRing: { padding: 8, borderRadius: 80, borderWidth: 1, borderColor: "#38BDF850" },
+  voiceName: { color: "#FFF", fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  voiceRole: { color: "#BCC6D7", fontSize: 10, fontFamily: "Inter_400Regular" },
+});

@@ -1,7 +1,6 @@
 import React, { useRef, useState } from "react";
-import { ActivityIndicator, ImageBackground, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useAuth, type User } from "@/context/AuthContext";
 import { useAnalytics } from "@/context/AnalyticsContext";
 import { useOrganiserEvents } from "@/hooks/useOrganiserEvents";
@@ -11,8 +10,8 @@ import { activeRooms, liveEligibility, LIVE_GIFTS, LIVE_LIMITS, type LiveDraft, 
 import { LiveAvatar, LiveButton, LiveIcon, LiveSheet, liveColors as c, liveStyles as s } from "./LivePrimitives";
 import { LiveRoomView } from "./LiveRoomView";
 import type { PublisherEvent } from "@/services/publisherService";
-import { getEventImage } from "@/constants/eventImages";
 import { LiveBroadcastEntry } from "./LiveBroadcastEntry";
+import { LiveDiscovery } from "./LiveDiscovery";
 
 export default function LiveScreen() {
   const { user } = useAuth();
@@ -20,14 +19,13 @@ export default function LiveScreen() {
 }
 
 function LiveExperience({ user }: { user: User }) {
-  const insets = useAppSafeAreaInsets();
   const { state, now, loading, error: loadError, act, reset, retry } = useLiveDemo(user.id);
   const { events: ownedEvents, isLoading: eventsLoading, error: eventsError } = useOrganiserEvents();
   const { records } = useAnalytics();
   const person: LivePerson = { id: user.id, name: user.organisation?.name ?? user.username, avatar: user.organisation?.logoUrl ?? user.avatarUrl };
   const [panel, setPanel] = useState<"access" | "wallet" | "setup" | "test" | null>(null);
   const [resetConfirmed, setResetConfirmed] = useState(false);
-  const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [broadcastTab, setBroadcastTab] = useState<"host" | "join" | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [closeSignal, setCloseSignal] = useState(0);
   const [error, setError] = useState("");
@@ -55,30 +53,22 @@ function LiveExperience({ user }: { user: User }) {
     setPanel(null);
     if (room) { setCloseSignal(0); setActiveId(room.id); }
   });
-  if (loading) return <View style={{ flex: 1, backgroundColor: c.bg, justifyContent: "center", alignItems: "center", gap: 16 }}><ActivityIndicator color={c.blue} /><Text style={s.body}>Opening Live…</Text></View>;
-  if (!state) return <View style={{ flex: 1, backgroundColor: c.bg, padding: 24, justifyContent: "center", gap: 20 }}><Text style={s.heading}>Live couldn’t load</Text><Text style={s.body}>{loadError}</Text>{error ? <Text style={s.error}>{error}</Text> : null}<LiveButton label="Try again" onPress={retry} />{resetConfirmed ? <><Text style={s.body}>This clears only local Live rooms, demo coins and gift history.</Text><LiveButton danger label="Confirm demo reset" disabled={busy} onPress={() => void execute(reset)} /></> : <LiveButton secondary label="Reset local Live demo…" onPress={() => setResetConfirmed(true)} />}</View>;
+  if (!state) return <View style={{ flex: 1 }}>
+    <LiveDiscovery rooms={[]} busy onHost={() => setBroadcastTab("host")} onJoin={() => setBroadcastTab("join")} onRoom={() => {}}>
+      {loading ? <ActivityIndicator color={c.blue} /> : <View style={s.card}><Text style={s.label}>Demo previews couldn’t load</Text><Text style={s.body}>{loadError}</Text><LiveButton label="Retry previews" onPress={retry} />{resetConfirmed ? <LiveButton danger label="Confirm demo reset" disabled={busy} onPress={() => void execute(reset)} /> : <LiveButton secondary label="Reset local Live demo…" onPress={() => setResetConfirmed(true)} />}</View>}
+    </LiveDiscovery>
+    {broadcastTab ? <LiveBroadcastEntry person={person} initialTab={broadcastTab} onClose={() => setBroadcastTab(null)} /> : null}
+  </View>;
   const myTransactions = state.transactions.filter(t => t.senderId === user.id || t.hostId === user.id || t.guestIds.includes(user.id));
   const pendingCoins = state.transactions.filter(t => t.hostId === user.id || t.guestIds.includes(user.id)).reduce((n, t) => n + t.coins, 0);
-  return <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
-    <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 36, gap: 24 }}>
-      <View style={[s.row, { justifyContent: "space-between" }]}><View style={{ gap: 6 }}><Text style={s.eyebrow}>THE MOMENT IS NOW</Text><Text style={s.title}>Eventis Live</Text></View><LiveIcon name="wallet-outline" label="Open Live wallet" onPress={() => setPanel("wallet")} /></View>
-      <View style={[s.card, { borderWidth: 1, borderColor: "#21455F" }]}>
-        <View style={s.row}><View style={{ flex: 1, gap: 8 }}><Text style={s.heading}>Bring your people together.</Text><Text style={s.body}>A backstage moment. An open conversation. Your room, your energy.</Text></View><Ionicons name="radio-outline" size={42} color={c.red} /></View>
-        <LiveButton tone="live" icon="videocam-outline" label={ownRoom ? "Return to your room" : "Go Live"} disabled={busy} onPress={() => ownRoom ? openRoom(ownRoom) : setPanel("access")} />
-        <Text style={s.body}>Interactive demo · no live audio, video or real payments.</Text>
-        <LiveButton secondary icon="radio-outline" label="Stream between phones" onPress={() => setBroadcastOpen(true)} />
-      </View>
+  return <View style={{ flex: 1 }}>
+    <LiveDiscovery rooms={rooms} busy={busy} onHost={() => setBroadcastTab("host")} onJoin={() => setBroadcastTab("join")} onRoom={openRoom} onWallet={() => setPanel("wallet")} onDemo={() => { setResetConfirmed(false); setPanel("test"); }}>
       {error ? <Text accessibilityRole="alert" style={s.error}>{error}</Text> : null}
-      {queued ? <View style={s.card}><Text style={s.heading}>You’re in the queue</Text><Text style={s.body}>{queueIndex === 0 && rooms.length < LIVE_LIMITS.rooms ? "A slot is ready. Start when you’re ready." : `Position ${queueIndex + 1} · ${rooms.length} of 5 rooms running. You will never go Live automatically.`}</Text><View style={s.wrap}><LiveButton tone="live" compact label="Start my room" disabled={busy || queueIndex !== 0 || rooms.length >= LIVE_LIMITS.rooms} onPress={() => start(queued.draft)} /><LiveButton compact secondary label="Leave queue" disabled={busy} onPress={() => void execute(async () => { await act(person, { type: "cancelQueue" }); })} /></View></View> : null}
-      <View style={[s.row, { justifyContent: "space-between" }]}><Text style={s.heading}>Rooms to explore</Text><Text style={s.pill}>{rooms.length} / 5 ROOMS</Text></View>
-      {rooms.length === 0 ? <View style={s.card}><Text style={s.label}>A little quiet right now</Text><Text style={s.body}>All demo rooms have ended. You can start your own preview if you haven’t used today’s session.</Text></View> : rooms.map(room => <Pressable accessibilityRole="button" accessibilityLabel={`Join ${room.title}`} key={room.id} disabled={busy} onPress={() => openRoom(room)} style={({ pressed }) => ({ borderRadius: 24, backgroundColor: c.panel, overflow: "hidden", opacity: pressed ? .8 : 1 })}>
-        <ImageBackground source={room.cover ? getEventImage(room.cover) : undefined} style={{ height: 200 }}><LinearGradient colors={["#080C1222", "#080C12EE"]} style={{ flex: 1, padding: 18, justifyContent: "space-between" }}><View style={[s.row, { justifyContent: "space-between" }]}><Text style={s.pill}>{room.mode === "voice" ? "VOICE ROOM" : "VIDEO ROOM"}</Text><Text style={[s.pill, s.livePill]}>DEMO</Text></View><Text style={[s.heading, { maxWidth: "90%" }]}>{room.title}</Text></LinearGradient></ImageBackground>
-        <View style={[s.row, { padding: 16 }]}><LiveAvatar person={room.host} size={38} /><View style={{ flex: 1 }}><Text style={s.label}>{room.host.name}</Text><Text style={s.body}>{room.audience.length} viewers · {room.guests.length} guests</Text></View><Ionicons name="arrow-forward" size={22} color={c.blue} /></View>
-      </Pressable>)}
-      <LiveButton secondary icon="flask-outline" label="Demo controls" onPress={() => { setResetConfirmed(false); setPanel("test"); }} />
-    </ScrollView>
-    {broadcastOpen ? <LiveBroadcastEntry person={person} onClose={() => setBroadcastOpen(false)} /> : null}
+      {queued ? <View style={s.card}><Text style={s.heading}>You’re in the queue</Text><Text style={s.body}>{queueIndex === 0 && rooms.length < LIVE_LIMITS.rooms ? "A slot is ready. Start when you’re ready." : `Position ${queueIndex + 1} · ${rooms.length} of 5 rooms running. You will never go Live automatically.`}</Text><View style={s.wrap}><LiveButton tone="live" compact label="Start my demo room" disabled={busy || queueIndex !== 0 || rooms.length >= LIVE_LIMITS.rooms} onPress={() => start(queued.draft)} /><LiveButton compact secondary label="Leave queue" disabled={busy} onPress={() => void execute(async () => { await act(person, { type: "cancelQueue" }); })} /></View></View> : null}
+    </LiveDiscovery>
+    {broadcastTab ? <LiveBroadcastEntry person={person} initialTab={broadcastTab} onClose={() => setBroadcastTab(null)} /> : null}
     {panel === "test" ? <LiveSheet title="Try different scenarios" onClose={() => setPanel(null)}>
+      <LiveButton label={ownRoom ? "Return to demo room" : "Host a demo room"} onPress={() => { setPanel(null); if (ownRoom) openRoom(ownRoom); else setPanel("access"); }} />
       <Text style={s.body}>These controls affect only your local Live demo. They let you test capacity, queueing and repeat sessions.</Text>
       {error ? <Text style={s.error}>{error}</Text> : null}
       <LiveButton secondary label="Fill available room slots" disabled={busy || rooms.length >= 5 || state.queue.length > 0} onPress={() => void execute(async () => {

@@ -47,6 +47,19 @@ export function createLiveState(now = Date.now()): LiveState {
   })) };
 }
 export function activeRooms(state: LiveState, now = Date.now()) { return state.rooms.filter(r => !r.endedAt && r.endsAt > now); }
+/** Renew the built-in previews on app reopen without resetting the member's saved activity. */
+export function refreshLiveSamples(state: LiveState, now = Date.now()): LiveState {
+  const settled = tickLiveState(state, now);
+  const templates = createLiveState(now).rooms;
+  const sampleIds = new Set(templates.map(room => room.id));
+  const otherRooms = settled.rooms.filter(room => !sampleIds.has(room.id));
+  const available = Math.max(0, LIVE_LIMITS.rooms - otherRooms.filter(room => !room.endedAt && room.endsAt > now).length);
+  const samples = templates.slice(0, available).map(template => {
+    const existing = settled.rooms.find(room => room.id === template.id && !room.endedAt && room.endsAt > now);
+    return existing ? { ...existing, startedAt: now, endsAt: now + LIVE_LIMITS.durationMs } : template;
+  });
+  return { ...settled, rooms: [...otherRooms, ...samples] };
+}
 /** Validate persisted demo data before it reaches the UI. A bad cache is recoverable via Reset demo. */
 export function readLiveState(raw: string | null, now = Date.now()): LiveState {
   if (!raw) return createLiveState(now);

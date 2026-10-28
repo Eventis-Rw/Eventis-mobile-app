@@ -4,7 +4,7 @@ import type { Room } from "livekit-client";
 let registered = false;
 export function mediaUnavailableReason(): string | null {
   return Constants.executionEnvironment === ExecutionEnvironment.StoreClient
-    ? "Real streaming needs an Eventis development build. Expo Go can still run the local Live demo."
+    ? "Expo Go can show your camera preview, but it cannot send or receive LiveKit streams. Install the Eventis development build to broadcast and watch in real time."
     : null;
 }
 export async function prepareLiveMedia() {
