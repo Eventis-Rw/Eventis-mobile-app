@@ -49,3 +49,12 @@ test('wire snapshots bound chat history and omit audience/photos from payloads',
   assert.equal(model.messages.length, 100); assert.equal(model.audience.length, 1);
   assert.ok(Buffer.byteLength(JSON.stringify(wire)) < 15000);
 });
+test('directory reservations preserve server timing, event context and host identity for tap-to-watch', () => {
+  const listing = { id: 'public-room', host: { id: 'account-host', name: 'Venue', avatar: 'https://example.com/logo.jpg' }, title: 'Friday soundcheck', mode: 'video', event: { id: 'event-1', title: 'Friday Fiesta', date: '2026-10-30', time: '19:00', location: 'Kigali', description: 'Live music', currency: 'RWF', isPaid: false, price: 0 }, startedAt: 1000, endsAt: 9000, availableUntil: 7000, viewers: 2, chatEnabled: false };
+  const host = protocol.reservationSession({ kind: 'room', listing, roomName: session.code, hostIdentity: session.hostId, controlToken: 'private' }, { id: 'account-host', name: 'Venue' }, 'environment');
+  const viewer = protocol.watchSession({ listing, roomName: session.code, hostIdentity: session.hostId }, { id: 'account-viewer', name: 'Viewer' }, 'viewernonce');
+  assert.equal(host.hosting, true); assert.equal(viewer.hosting, false); assert.notEqual(viewer.identity, session.hostId); assert.equal(viewer.controlToken, undefined);
+  const model = protocol.initialBroadcastRoom(viewer, { id: viewer.identity, name: 'Viewer' }, 2000);
+  assert.equal(model.host.name, 'Venue'); assert.equal(model.host.id, session.hostId); assert.equal(model.eventId, 'event-1'); assert.equal(model.endsAt, 9000); assert.equal(model.chatEnabled, false);
+  const wire = protocol.serializeBroadcastRoom(model); assert.equal(wire.host.avatar, 'https://example.com/logo.jpg');
+});
