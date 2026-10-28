@@ -18,7 +18,15 @@ import {
   type LoveDemoOutcome,
   type LovePaymentMethod,
 } from "@/services/findLoveService";
-import { formatMembershipPrice, PRIVATE_MEMBERSHIP_PLAN } from "@/utils/findLoveMembership";
+import {
+  cheapestPlan,
+  formatMembershipPrice,
+  MEMBERSHIP_BENEFITS,
+  MEMBERSHIP_INTERVALS,
+  membershipPlan,
+  type LoveAccountType,
+  type MembershipInterval,
+} from "@/utils/findLoveMembership";
 import { formatDateOfBirth } from "@/utils/findLoveProfile";
 
 type Phase = "form" | "processing" | "succeeded" | "pending" | "failed" | "cancelled";
@@ -30,6 +38,13 @@ const METHODS: { id: LovePaymentMethod; label: string; badge: string; color: str
 
 const SHOW_DEMO_CONTROLS = __DEV__ && !USE_FINDLOVE_API;
 
+const TYPE_LABEL: Record<LoveAccountType, string> = { public: "Public", private: "Private" };
+
+const TYPE_DESCRIPTION: Record<LoveAccountType, string> = {
+  public: "Discover everyone and connect with Public members.",
+  private: "Connect with anyone, including Private members.",
+};
+
 /** Splits a stored number like "+250 788 587 420" into a known country and the local digits. */
 function splitPhone(phone?: string): { country: Country; local: string } {
   const compact = (phone ?? "").replace(/\s/g, "");
@@ -40,17 +55,18 @@ function splitPhone(phone?: string): { country: Country; local: string } {
 }
 
 /**
- * Private membership: price and benefits, then mobile money payment.
- * Private turns on only when the server confirms the payment; until then the
- * member stays Public. Opened after choosing Private at sign-up
- * (from=create) or from an upgrade prompt (from=upgrade).
+ * FindLove membership: pick Public or Private and a weekly, monthly or yearly
+ * period (same periods for both, only the price differs), then pay with mobile
+ * money. The plan turns on only when the server confirms the payment. Opened
+ * after creating a profile (from=create), from the membership gate, or from an
+ * upgrade prompt (from=upgrade, which preselects Private).
  */
 export default function LoveMembershipScreen() {
   const colors = useColors();
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const { user } = useAuth();
-  const { myProfile, status, accountType, buyPrivate, reload } = useMyLoveProfile();
+  const { myProfile, status, accountType, hasMembership, buyMembership, reload } = useMyLoveProfile();
 
   const initialPhone = splitPhone(user?.phone);
   const [method, setMethod] = useState<LovePaymentMethod>("mtn_momo");
@@ -61,6 +77,8 @@ export default function LoveMembershipScreen() {
   const [failure, setFailure] = useState("");
   const [checking, setChecking] = useState(false);
   const [demoOutcome, setDemoOutcome] = useState<LoveDemoOutcome>("succeeded");
+  const [chosenType, setChosenType] = useState<LoveAccountType | null>(null);
+  const [period, setPeriod] = useState<MembershipInterval>("month");
 
   // Leaving mid-payment would hide the result, so the back button waits.
   useEffect(() => {
@@ -76,7 +94,7 @@ export default function LoveMembershipScreen() {
 
   if (!user || status !== "ready" || !myProfile) {
     return (
-      <LoveScreenShell title="Private membership" onBack={leave}>
+      <LoveScreenShell title="Membership" onBack={leave}>
         {status === "loading" || status === "idle" ? (
           <SectionState kind="loading" message="Loading your membership…" />
         ) : (
@@ -84,7 +102,7 @@ export default function LoveMembershipScreen() {
             kind="empty"
             icon="heart-outline"
             title="Create your FindLove profile first"
-            message="Private membership is added to your FindLove profile."
+            message="Your membership is added to your FindLove profile."
             actionLabel="Create profile"
             onAction={() => router.replace("/love/create" as any)}
           />
@@ -92,6 +110,11 @@ export default function LoveMembershipScreen() {
       </LoveScreenShell>
     );
   }
+
+  // Paid Public members are here to upgrade; everyone else starts on the type they chose.
+  const type: LoveAccountType = chosenType ?? (from === "upgrade" || hasMembership ? "private" : myProfile.membership.type);
+  const plan = membershipPlan(type, period);
+  const price = formatMembershipPrice(plan.price);
 
   const pay = async () => {
     const digits = phone.replace(/\D/g, "");
@@ -101,7 +124,10 @@ export default function LoveMembershipScreen() {
     }
     setPhoneError(undefined);
     setPhase("processing");
-    const result = await buyPrivate({ paymentMethod: method, payerPhone: `${country.code}${digits}` }, demoOutcome).catch(
+    const result = await buyMembership(
+      { type, interval: period, paymentMethod: method, payerPhone: `${country.code}${digits}` },
+      demoOutcome,
+    ).catch(
       (err: unknown) => ({ status: "failed" as const, message: describeError(err, "We couldn't reach the payment service.") }),
     );
     if (Platform.OS !== "web") {
@@ -119,15 +145,17 @@ export default function LoveMembershipScreen() {
     setChecking(false);
   };
 
-  // The badge follows the server: "paid" without an active membership still waits.
+  // The result follows the server: "paid" without the plan being active still waits.
+  const activeNow = hasMembership && myProfile.membership.type === type;
   const isPrivate = accountType === "private";
-  const shownPhase: Phase = phase === "succeeded" && !isPrivate ? "pending" : phase === "pending" && isPrivate ? "succeeded" : phase;
+  const shownPhase: Phase = phase === "succeeded" && !activeNow ? "pending" : phase === "pending" && activeNow ? "succeeded" : phase;
   const expires = myProfile.membership.expiresAt ? formatDateOfBirth(myProfile.membership.expiresAt.slice(0, 10)) : null;
 
+  // Private already includes everything, so a Private member sees their plan, not a checkout.
   if (shownPhase !== "form" || (isPrivate && phase === "form")) {
-    const done = isPrivate;
+    const done = phase === "form" ? isPrivate : activeNow;
     return (
-      <LoveScreenShell title="Private membership" onBack={phase === "processing" ? () => undefined : leave}>
+      <LoveScreenShell title="Membership" onBack={phase === "processing" ? () => undefined : leave}>
         <Stack.Screen options={{ gestureEnabled: phase !== "processing" }} />
         <View style={styles.status}>
           {shownPhase === "processing" ? (
@@ -135,7 +163,7 @@ export default function LoveMembershipScreen() {
               <ActivityIndicator size="large" color={colors.primary} />
               <Text style={[styles.statusTitle, { color: colors.foreground }]}>Waiting for your payment</Text>
               <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-                Approve the {formatMembershipPrice()} prompt on your phone. Keep this screen open.
+                Approve the {price} prompt on your phone. Keep this screen open.
               </Text>
             </>
           ) : done ? (
@@ -144,11 +172,12 @@ export default function LoveMembershipScreen() {
                 <Ionicons name="diamond" size={30} color="#D4A017" />
               </View>
               <Text style={[styles.statusTitle, { color: colors.foreground }]}>
-                {phase === "form" ? "You're a Private member" : "Welcome to Private"}
+                {phase === "form" ? "You're a Private member" : `Welcome to ${TYPE_LABEL[type]}`}
               </Text>
-              <MembershipBadge type="private" />
+              <MembershipBadge type={accountType} />
               <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-                You can now connect with Private and Public members.{expires ? ` Your membership runs until ${expires}.` : ""}
+                {isPrivate ? "You can now connect with Private and Public members." : "You can now connect and chat with Public members."}
+                {expires ? ` Your membership runs until ${expires}.` : ""}
               </Text>
               <PrimaryButton label="Continue to FindLove" onPress={leave} />
             </>
@@ -159,11 +188,11 @@ export default function LoveMembershipScreen() {
               </View>
               <Text style={[styles.statusTitle, { color: colors.foreground }]}>Waiting for confirmation</Text>
               <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-                We haven't had confirmation of your payment yet. Private turns on as soon as it arrives. Until then
-                your account stays Public.
+                We haven't had confirmation of your payment yet. Your {TYPE_LABEL[type]} plan starts as soon as it
+                arrives.
               </Text>
               <PrimaryButton label={checking ? "Checking…" : "Check again"} onPress={() => void checkAgain()} busy={checking} />
-              <TextButton label="Continue as Public for now" onPress={leave} />
+              <TextButton label="Close" onPress={leave} />
             </>
           ) : (
             <>
@@ -178,12 +207,10 @@ export default function LoveMembershipScreen() {
                 {shownPhase === "cancelled" ? "Payment cancelled" : "Payment didn't go through"}
               </Text>
               <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-                {shownPhase === "cancelled"
-                  ? "You haven't been charged. Your account stays Public."
-                  : `${failure} You haven't been upgraded; your account stays Public.`}
+                {shownPhase === "cancelled" ? "You haven't been charged. Your plan hasn't changed." : `${failure} Your plan hasn't changed.`}
               </Text>
               <PrimaryButton label="Try again" onPress={() => setPhase("form")} />
-              <TextButton label="Continue as Public" onPress={leave} />
+              <TextButton label="Close" onPress={leave} />
             </>
           )}
         </View>
@@ -192,29 +219,67 @@ export default function LoveMembershipScreen() {
   }
 
   return (
-    <LoveScreenShell title="Private membership" onBack={leave} stepLabel={from === "create" ? "Last step" : undefined}>
-      <View style={[styles.plan, { backgroundColor: colors.card, borderColor: "#D4A017" }]}>
-        <MembershipBadge type="private" />
+    <LoveScreenShell title="Membership" onBack={leave} stepLabel={from === "create" ? "Last step" : undefined}>
+      <Section title="Account type">
+        <View style={styles.types} accessibilityRole="radiogroup">
+          {(["public", "private"] as LoveAccountType[]).map((option) => {
+            const selected = type === option;
+            const cheapest = cheapestPlan(option);
+            return (
+              <Pressable
+                key={option}
+                onPress={() => setChosenType(option)}
+                style={[styles.typeOption, { backgroundColor: colors.card, borderColor: selected ? colors.primary : colors.border }]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+              >
+                <View style={styles.typeHead}>
+                  <MembershipBadge type={option} size="sm" />
+                  <Ionicons name={selected ? "radio-button-on" : "radio-button-off"} size={20} color={selected ? colors.primary : colors.mutedForeground} />
+                </View>
+                <Text style={[styles.typeText, { color: colors.mutedForeground }]}>{TYPE_DESCRIPTION[option]}</Text>
+                <Text style={[styles.typeFrom, { color: colors.foreground }]}>
+                  From {formatMembershipPrice(cheapest.price)} / {cheapest.periodLabel}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Section>
+
+      <Section title="Billing period">
+        <View style={[styles.periods, { backgroundColor: colors.secondary }]} accessibilityRole="radiogroup">
+          {MEMBERSHIP_INTERVALS.map((option) => {
+            const selected = period === option.id;
+            return (
+              <Pressable
+                key={option.id}
+                onPress={() => setPeriod(option.id)}
+                style={[styles.periodTab, selected && { backgroundColor: colors.card }]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+              >
+                <Text style={[styles.periodTabText, { color: selected ? colors.foreground : colors.mutedForeground }]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Section>
+
+      <View style={[styles.plan, { backgroundColor: colors.card, borderColor: type === "private" ? "#D4A017" : colors.border }]}>
+        <MembershipBadge type={type} />
         <Text style={[styles.price, { color: colors.foreground }]}>
-          {formatMembershipPrice()}
-          <Text style={[styles.period, { color: colors.mutedForeground }]}> / {PRIVATE_MEMBERSHIP_PLAN.periodLabel}</Text>
+          {price}
+          <Text style={[styles.period, { color: colors.mutedForeground }]}> / {plan.periodLabel}</Text>
         </Text>
-        <Text style={[styles.planText, { color: colors.mutedForeground }]}>Paid membership with enhanced connection privileges.</Text>
         <View style={styles.benefits}>
-          {PRIVATE_MEMBERSHIP_PLAN.benefits.map((benefit) => (
+          {MEMBERSHIP_BENEFITS[type].map((benefit) => (
             <View key={benefit} style={styles.benefit}>
               <Ionicons name="checkmark-circle" size={18} color={colors.success} />
               <Text style={[styles.benefitText, { color: colors.foreground }]}>{benefit}</Text>
             </View>
           ))}
         </View>
-      </View>
-
-      <View style={[styles.compare, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-        <MembershipBadge type="public" size="sm" />
-        <Text style={[styles.compareText, { color: colors.mutedForeground }]}>
-          Free. You can discover everyone and connect with Public members, but not with Private members.
-        </Text>
       </View>
 
       <Section title="Pay with">
@@ -268,11 +333,10 @@ export default function LoveMembershipScreen() {
         </View>
       ) : null}
 
-      <PrimaryButton label={`Pay ${formatMembershipPrice()}`} onPress={() => void pay()} />
+      <PrimaryButton label={`Pay ${price}`} onPress={() => void pay()} />
       <Text style={[styles.note, { color: colors.mutedForeground }]}>
-        Your PRIVATE badge and privileges start only after the payment is confirmed.
+        Your {TYPE_LABEL[type].toUpperCase()} membership starts only after the payment is confirmed.
       </Text>
-      {from === "create" ? <TextButton label="Skip, stay Public for now" onPress={leave} /> : null}
     </LoveScreenShell>
   );
 }
@@ -305,12 +369,17 @@ const styles = StyleSheet.create({
   plan: { borderRadius: 22, borderWidth: 1.5, padding: 18, gap: 10 },
   price: { fontSize: 30, letterSpacing: -0.8, fontFamily: "Inter_700Bold" },
   period: { fontSize: 15, fontFamily: "Inter_500Medium" },
-  planText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
   benefits: { gap: 9, marginTop: 4 },
   benefit: { flexDirection: "row", alignItems: "center", gap: 9 },
   benefitText: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
-  compare: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, padding: 12 },
-  compareText: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
+  types: { flexDirection: "row", gap: 10 },
+  typeOption: { flex: 1, borderRadius: 16, borderWidth: 1.5, padding: 12, gap: 8 },
+  typeHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  typeText: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
+  typeFrom: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  periods: { flexDirection: "row", borderRadius: 14, padding: 4, gap: 4 },
+  periodTab: { flex: 1, minHeight: 40, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  periodTabText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   methods: { flexDirection: "row", gap: 10 },
   method: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 14, borderWidth: 1.5, padding: 12, minHeight: 52 },
   methodLabel: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },

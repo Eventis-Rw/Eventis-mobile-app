@@ -8,6 +8,7 @@ import { LoveHeader, useExitFindLove } from "@/components/love/LoveHeader";
 import { SectionState } from "@/components/profile/ProfileSection";
 import { useAuth } from "@/context/AuthContext";
 import { useFindLoveChat } from "@/context/FindLoveChatContext";
+import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
@@ -16,12 +17,13 @@ import { describeAgeVerification, isAgeVerified } from "@/utils/findLoveAgeVerif
 type IconName = keyof typeof Ionicons.glyphMap;
 
 // Members see the intro until they have a FindLove profile of their own, then
-// the ID age check until the server says they're verified. Only then the tabs.
+// the ID age check until the server says they're verified, then a plan to pay
+// for (Public or Private). Only then the tabs.
 export default function FindLoveTabsLayout() {
   const colors = useColors();
   const { user } = useAuth();
-  const { myProfile, status, error, reload, verification } = useMyLoveProfile();
-  if (myProfile && isAgeVerified(verification)) return <LoveTabs />;
+  const { myProfile, status, error, reload, verification, hasMembership } = useMyLoveProfile();
+  if (myProfile && isAgeVerified(verification)) return hasMembership ? <LoveTabs /> : <MembershipGate />;
   if (myProfile) return <AgeCheckGate />;
   // Signed-out visitors also get the intro; "Get started" asks them to sign in.
   if (status === "ready" || !user) {
@@ -72,6 +74,33 @@ function AgeCheckGate() {
   );
 }
 
+/** Shown instead of FindLove until the member has a paid, unexpired Public or Private plan. */
+function MembershipGate() {
+  const colors = useColors();
+  const router = useRouter();
+  const { myProfile } = useMyLoveProfile();
+  const expired = myProfile?.membership.status === "expired" || !!myProfile?.membership.expiresAt;
+  return (
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <LoveHeader title="FindLove" />
+      <View style={styles.gateState}>
+        <SectionState
+          kind="empty"
+          icon="diamond-outline"
+          title={expired ? "Your membership has ended" : "Choose your plan"}
+          message={
+            expired
+              ? "Renew your Public or Private plan to keep using FindLove."
+              : "FindLove is for members with a Public or Private plan. Pay weekly, monthly or yearly."
+          }
+          actionLabel={expired ? "Renew membership" : "See plans"}
+          onAction={() => router.push("/love/membership" as any)}
+        />
+      </View>
+    </View>
+  );
+}
+
 const TABS: { name: string; title: string; icon: IconName; activeIcon: IconName }[] = [
   { name: "index", title: "Home", icon: "home-outline", activeIcon: "home" },
   { name: "messages", title: "Inbox", icon: "chatbubbles-outline", activeIcon: "chatbubbles" },
@@ -83,6 +112,8 @@ function LoveTabs() {
   const colors = useColors();
   const exit = useExitFindLove();
   const { totalUnread } = useFindLoveChat();
+  // Unread messages plus requests waiting for an answer.
+  const inboxCount = totalUnread + useFindLoveDemo().receivedRequests.length;
   const insets = useAppSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   return (
@@ -121,7 +152,7 @@ function LoveTabs() {
           }
           options={{
             title: tab.title,
-            tabBarBadge: tab.name === "messages" && totalUnread > 0 ? (totalUnread > 99 ? "99+" : totalUnread) : undefined,
+            tabBarBadge: tab.name === "messages" && inboxCount > 0 ? (inboxCount > 99 ? "99+" : inboxCount) : undefined,
             tabBarBadgeStyle: { backgroundColor: colors.primary, color: "#FFFFFF", fontSize: 10 },
             tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? tab.activeIcon : tab.icon} size={23} color={color} />,
           }}

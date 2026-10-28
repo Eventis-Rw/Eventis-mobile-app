@@ -218,7 +218,7 @@ export default function EditLoveProfileScreen() {
 
         <MembershipSection
           isPrivate={accountType === "private"}
-          awaitingPayment={myProfile.membership.type === "private" && myProfile.membership.status === "pending_payment"}
+          awaitingPayment={myProfile.membership.type === "private" && myProfile.membership.status !== "active"}
           expiresAt={myProfile.membership.expiresAt}
           onUpgrade={() => router.push({ pathname: "/love/membership", params: { from: "upgrade" } } as any)}
         />
@@ -275,11 +275,12 @@ function MembershipSection({
   onUpgrade: () => void;
 }) {
   const colors = useColors();
+  const runsUntil = expiresAt ? ` Runs until ${formatDateOfBirth(expiresAt.slice(0, 10))}.` : "";
   const message = isPrivate
-    ? `Paid membership with enhanced connection privileges.${expiresAt ? ` Runs until ${formatDateOfBirth(expiresAt.slice(0, 10))}.` : ""}`
+    ? `Paid membership with enhanced connection privileges.${runsUntil}`
     : awaitingPayment
       ? "You chose Private, but the payment hasn't been confirmed, so your account is Public for now."
-      : "Basic account. You can connect with Public members; connecting with Private members needs Private.";
+      : `Paid Public membership. You can connect with Public members; connecting with Private members needs Private.${runsUntil}`;
   return (
     <Section title="Account type">
       <View style={[styles.membership, { backgroundColor: colors.card, borderColor: colors.border }]}>
