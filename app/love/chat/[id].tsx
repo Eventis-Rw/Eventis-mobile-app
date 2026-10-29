@@ -28,8 +28,11 @@ import { VoiceNoteBubble } from "@/components/VoiceNoteBubble";
 import { useFindLoveChat } from "@/context/FindLoveChatContext";
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
+import { useConnectionActions } from "@/components/love/ConnectionRequests";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
+import { useLoveConnect } from "@/components/love/UpgradePrompt";
 import { useColors } from "@/hooks/useColors";
+import { LOVE_REQUEST_MESSAGE_MAX, messagesLeft } from "@/utils/findLoveConnections";
 import { formatChatDay, formatMessageTime, startsNewDay, type LoveChatContent, type LoveChatMessage } from "@/utils/findLoveChat";
 import { presenceLabel } from "@/utils/findLoveDiscovery";
 
@@ -55,11 +58,17 @@ export default function LoveChatScreen() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const { isLoading, getProfileById, getConnectionStatus } = useLoveProfiles();
-  const { recordMessage } = useFindLoveDemo();
+  const { recordMessage, recordConnection } = useFindLoveDemo();
   const { threads, sendMessage: saveMessage, markRead } = useFindLoveChat();
+  const { connect, upgradePrompt } = useLoveConnect();
+  const { accept } = useConnectionActions();
   const profile = getProfileById(id ?? "");
-  const connected = !!profile && getConnectionStatus(profile.id) === "connected";
+  const status = profile ? getConnectionStatus(profile.id) : "none";
+  const connected = status === "connected";
   const messages = (profile && threads[profile.id]?.messages) || NO_MESSAGES;
+  // Before connecting, each side gets one message: with the request, or as a reply.
+  const left = messagesLeft(status, profile ? threads[profile.id] : undefined);
+  const [sending, setSending] = useState(false);
   const [composer, setComposer] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -69,7 +78,13 @@ export default function LoveChatScreen() {
   const listRef = useRef<FlatList<LoveChatMessage>>(null);
 
   const canSend = composer.trim().length > 0;
-  const subtitle = useMemo(() => profile ? presenceLabel(profile) ?? `${profile.city} · Connected` : "Connection", [profile]);
+  const subtitle = useMemo(() => {
+    if (!profile) return "Connection";
+    if (status === "pending") return "Request sent · waiting for an answer";
+    if (status === "received") return "Wants to connect with you";
+    if (status === "none") return "Not connected yet";
+    return presenceLabel(profile) ?? `${profile.city} · Connected`;
+  }, [profile, status]);
 
   useEffect(() => {
     if (!notice) return;
@@ -79,8 +94,8 @@ export default function LoveChatScreen() {
 
   // While the chat is open, anything that arrives counts as read.
   useEffect(() => {
-    if (connected && id) markRead(id);
-  }, [connected, id, messages, markRead]);
+    if (id) markRead(id);
+  }, [id, messages, markRead]);
 
   // expo-audio releases the recorder itself; only put the audio mode back.
   useEffect(() => () => {
@@ -105,23 +120,6 @@ export default function LoveChatScreen() {
     );
   }
 
-  // Only connected members can message each other.
-  if (!connected) {
-    const profileId = profile.id;
-    return (
-      <View style={[styles.notFound, { backgroundColor: colors.background }]}>
-        <Ionicons name="lock-closed-outline" size={40} color={colors.mutedForeground} />
-        <Text style={[styles.notFoundTitle, { color: colors.foreground }]}>Not connected yet</Text>
-        <Text style={[styles.notFoundText, { color: colors.mutedForeground }]}>
-          You can message {profile.username} once you are connected.
-        </Text>
-        <Pressable onPress={() => router.replace({ pathname: "/love/[id]", params: { id: profileId } } as any)}>
-          <Text style={[styles.goBack, { color: colors.primary }]}>View profile</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   const chatProfile = profile;
 
   function append(content: LoveChatContent) {
@@ -130,10 +128,21 @@ export default function LoveChatScreen() {
     if (Platform.OS !== "web") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     const text = composer.trim();
-    if (!text) return;
+    if (!text || sending) return;
+    if (connected || status !== "none") {
+      append({ kind: "text", text });
+      setComposer("");
+      return;
+    }
+    // No request yet: the message goes with a new connection request.
+    setSending(true);
+    const sent = await connect(chatProfile, text);
+    setSending(false);
+    if (!sent) return;
     append({ kind: "text", text });
+    recordConnection("request", `Request sent to ${chatProfile.username}`, "Your message went with it. You'll be told when they answer.");
     setComposer("");
   }
 
@@ -210,18 +219,22 @@ export default function LoveChatScreen() {
           </View>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
         </View>
+        {connected ? (
+        <>
         <Pressable onPress={() => startCall("Voice")} style={[styles.headerAction, { backgroundColor: colors.glass }]} accessibilityRole="button" accessibilityLabel={`Voice call ${profile.username}`}>
           <Ionicons name="call-outline" size={20} color={colors.primary} />
         </Pressable>
         <Pressable onPress={() => startCall("Video")} style={[styles.headerAction, { backgroundColor: colors.glass }]} accessibilityRole="button" accessibilityLabel={`Video call ${profile.username}`}>
           <Ionicons name="videocam-outline" size={21} color={colors.primary} />
         </Pressable>
+        </>
+        ) : null}
       </View>
 
       <View style={[styles.verificationNote, { backgroundColor: colors.secondary }]}>
         <Ionicons name={notice ? "information-circle-outline" : "shield-checkmark-outline"} size={15} color={notice ? colors.primary : colors.success} />
         <Text style={[styles.verificationText, { color: notice ? colors.foreground : colors.mutedForeground }]} accessibilityLiveRegion="polite">
-          {notice ?? "Demo chat · Phone verification will be required in production"}
+          {notice ?? (connected ? "Demo chat · Phone verification will be required in production" : "You can send one message before you connect")}
         </Text>
       </View>
 
@@ -237,7 +250,9 @@ export default function LoveChatScreen() {
           ListEmptyComponent={
             <View style={styles.emptyChat}>
               <Ionicons name="chatbubbles-outline" size={34} color={colors.primary} />
-              <Text style={[styles.emptyChatText, { color: colors.mutedForeground }]}>Say hello to {profile.username} 👋</Text>
+              <Text style={[styles.emptyChatText, { color: colors.mutedForeground }]}>
+                {connected ? `Say hello to ${profile.username} 👋` : `Introduce yourself to ${profile.username}. Your message goes with your connection request.`}
+              </Text>
             </View>
           }
           renderItem={({ item, index }) => {
@@ -281,7 +296,54 @@ export default function LoveChatScreen() {
           }}
         />
 
-        {recording ? (
+        {!connected ? (
+          <View style={[styles.composer, styles.requestComposer, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom, 10) }]}>
+            {left > 0 ? (
+              <View style={styles.requestRow}>
+                <TextInput
+                  value={composer}
+                  onChangeText={setComposer}
+                  placeholder={status === "received" ? `Reply to ${profile.username}` : `Write a message to ${profile.username}`}
+                  placeholderTextColor={colors.mutedForeground}
+                  style={[styles.input, { backgroundColor: colors.input, color: colors.foreground, borderColor: colors.border }]}
+                  multiline
+                  maxLength={LOVE_REQUEST_MESSAGE_MAX}
+                  accessibilityLabel={`Message ${profile.username}`}
+                />
+                <Pressable
+                  onPress={() => void sendMessage()}
+                  disabled={!canSend || sending}
+                  style={[styles.sendButton, { backgroundColor: colors.primary, opacity: canSend && !sending ? 1 : 0.5 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={status === "none" ? "Send message and connection request" : "Send message"}
+                >
+                  {sending ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="arrow-up" size={21} color="#FFFFFF" />}
+                </Pressable>
+              </View>
+            ) : (
+              <Text style={[styles.requestText, { color: colors.mutedForeground }]}>
+                {status === "received"
+                  ? `Accept ${profile.username}'s request to keep chatting.`
+                  : `Message sent. You can keep chatting once ${profile.username} accepts.`}
+              </Text>
+            )}
+            {status === "received" ? (
+              <Pressable
+                onPress={() => void accept(chatProfile)}
+                style={({ pressed }) => [styles.acceptButton, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+                accessibilityRole="button"
+              >
+                <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                <Text style={styles.acceptText}>Accept request</Text>
+              </Pressable>
+            ) : null}
+            {left > 0 ? (
+              <Text style={[styles.requestHint, { color: colors.mutedForeground }]}>
+                {composer.length}/{LOVE_REQUEST_MESSAGE_MAX} · one message until you're connected
+              </Text>
+            ) : null}
+          </View>
+        ) : recording ? (
           <View style={[styles.composer, { borderTopColor: colors.border, backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom, 10) }]}>
             <Pressable onPress={() => void finishRecording(false)} style={[styles.composerSide, { backgroundColor: colors.secondary }]} accessibilityRole="button" accessibilityLabel="Cancel voice note">
               <Ionicons name="trash-outline" size={20} color={colors.destructive} />
@@ -313,7 +375,7 @@ export default function LoveChatScreen() {
               accessibilityLabel={`Message ${profile.username}`}
             />
             {canSend ? (
-              <Pressable onPress={sendMessage} style={[styles.sendButton, { backgroundColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Send message">
+              <Pressable onPress={() => void sendMessage()} style={[styles.sendButton, { backgroundColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Send message">
                 <Ionicons name="arrow-up" size={21} color="#FFFFFF" />
               </Pressable>
             ) : (
@@ -324,6 +386,7 @@ export default function LoveChatScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
+      {upgradePrompt}
     </View>
   );
 }
@@ -366,6 +429,12 @@ const styles = StyleSheet.create({
   recordingDot: { width: 9, height: 9, borderRadius: 5 },
   recordingTime: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   recordingHint: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  requestComposer: { flexDirection: "column", alignItems: "stretch", gap: 8 },
+  requestRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  requestText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_500Medium", textAlign: "center", paddingVertical: 6 },
+  requestHint: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "right" },
+  acceptButton: { minHeight: 46, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  acceptText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_600SemiBold" },
   sendButton: { width: 43, height: 43, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   notFound: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   notFoundTitle: { fontSize: 19, fontFamily: "Inter_700Bold", marginTop: 14 },

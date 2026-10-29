@@ -37,6 +37,10 @@ const api = {
     apiCalls.push(["PUT", p, body]);
     return apiHandler("PUT", p, body);
   },
+  delete: (p) => {
+    apiCalls.push(["DELETE", p]);
+    return apiHandler("DELETE", p);
+  },
 };
 
 function load(relPath, env, resolve) {
@@ -61,6 +65,7 @@ const rules = load("utils/findLoveProfile.ts", {}, () => undefined);
 const profiles = load("constants/loveProfiles.ts", {}, () => undefined);
 const membership = load("utils/findLoveMembership.ts", {}, () => undefined);
 const ageCheck = load("utils/findLoveAgeVerification.ts", {}, () => undefined);
+const connections = load("utils/findLoveConnections.ts", {}, () => undefined);
 function loadService(env) {
   return load("services/findLoveService.ts", env, (name) => {
     if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
@@ -162,8 +167,90 @@ test("demo mode never calls the API and remembers connection requests", async ()
   const list = await demo.fetchLoveProfiles();
   assert.equal(list.find((p) => p.id === target.id).connectionStatus, "pending");
   assert.equal(list.find((p) => p.connectionStatus === "connected")?.connectionStatus, "connected");
-  assert.equal(JSON.parse([...stored.values()][0]).length, 1);
+  assert.equal(Object.keys(JSON.parse(stored.get("@eventis_love_demo_connections_v2"))).length, 1);
   assert.deepEqual(apiCalls, []);
+});
+
+test("demo: requests saved by the old version are still pending", async () => {
+  const target = profiles.MOCK_LOVE_PROFILES.find((p) => (p.connectionStatus ?? "none") === "none");
+  stored.set("@eventis_love_demo_requests_v1", JSON.stringify([target.id]));
+  assert.equal((await demo.fetchLoveProfiles()).find((p) => p.id === target.id).connectionStatus, "pending");
+});
+
+test("demo: received requests can be accepted or declined", async () => {
+  const [first, second] = profiles.MOCK_LOVE_PROFILES.filter((p) => p.connectionStatus === "received");
+  assert.ok(first && second, "the demo has two received requests");
+  assert.ok(first.requestMessage, "a received request carries its message");
+
+  assert.equal(await demo.respondToLoveConnection(first.id, true), "connected");
+  assert.equal(await demo.respondToLoveConnection(second.id, false), "none");
+  const list = await demo.fetchLoveProfiles();
+  assert.equal(list.find((p) => p.id === first.id).connectionStatus, "connected");
+  assert.equal(list.find((p) => p.id === second.id).connectionStatus, "none");
+  assert.deepEqual(apiCalls, []);
+});
+
+test("demo: connecting with someone who asked first accepts, whatever the membership", async () => {
+  const asker = profiles.MOCK_LOVE_PROFILES.find((p) => p.connectionStatus === "received");
+  await demo.saveMyLoveProfile("u1", validInput, true);
+  assert.equal(await demo.requestLoveConnection(asker.id, "u1"), "connected");
+});
+
+test("demo: a sent request can be cancelled, including a seeded one", async () => {
+  const seeded = profiles.MOCK_LOVE_PROFILES.find((p) => p.connectionStatus === "pending");
+  await demo.cancelLoveConnection(seeded.id);
+  assert.equal((await demo.fetchLoveProfiles()).find((p) => p.id === seeded.id).connectionStatus, "none");
+});
+
+test("demo: the auto-accept member accepts a request after a while", async () => {
+  await demo.requestLoveConnection("love-ineza");
+  assert.equal((await demo.fetchLoveProfiles()).find((p) => p.id === "love-ineza").connectionStatus, "pending");
+  const saved = JSON.parse(stored.get("@eventis_love_demo_connections_v2"));
+  saved["love-ineza"].at = Date.now() - 60_000;
+  stored.set("@eventis_love_demo_connections_v2", JSON.stringify(saved));
+  assert.equal((await demo.fetchLoveProfiles()).find((p) => p.id === "love-ineza").connectionStatus, "connected");
+});
+
+test("real mode: request message, accept, decline and cancel use the API", async () => {
+  apiHandler = async () => ({ connectionStatus: "pending" });
+  assert.equal(await real.requestLoveConnection("p1", "u1", "Hi there"), "pending");
+  assert.deepEqual(apiCalls[0], ["POST", "/api/v1/love-profiles/p1/connections", { message: "Hi there" }]);
+
+  apiHandler = async () => undefined;
+  assert.equal(await real.respondToLoveConnection("p2", true), "connected", "an empty reply to accept means connected");
+  assert.equal(apiCalls[1][1], "/api/v1/love-profiles/p2/connections/accept");
+  assert.equal(await real.respondToLoveConnection("p3", false), "none");
+  assert.equal(apiCalls[2][1], "/api/v1/love-profiles/p3/connections/decline");
+
+  await real.cancelLoveConnection("a/b");
+  assert.deepEqual(apiCalls[3], ["DELETE", "/api/v1/love-profiles/a%2Fb/connections"]);
+
+  apiHandler = async () => {
+    throw new ApiError(409, "Already accepted");
+  };
+  await assert.rejects(real.cancelLoveConnection("p4"), /Already accepted/);
+  assert.equal(stored.size, 0, "real mode never writes demo storage");
+});
+
+test("received requests and their message come from the API", () => {
+  const row = { id: "x", age: 25, gender: "F" };
+  assert.equal(demo.normalizeLoveProfile({ ...row, connectionStatus: "received", requestMessage: " Hello " }).requestMessage, "Hello");
+  assert.equal(demo.normalizeLoveProfile({ ...row, connectionStatus: "received" }).connectionStatus, "received");
+  assert.equal(demo.normalizeLoveProfile({ ...row, connectionStatus: "incoming" }).connectionStatus, "received");
+  assert.equal(demo.normalizeLoveProfile({ ...row, connectionStatus: "sent" }).connectionStatus, "pending");
+});
+
+test("one message each before connecting; connected members chat freely", () => {
+  const own = (id) => ({ id, own: true, kind: "text", text: "hi", sentAt: "2026-10-28T10:00:00Z" });
+  const theirs = { id: "t", own: false, kind: "text", text: "hey", sentAt: "2026-10-28T09:00:00Z" };
+  assert.equal(connections.messagesLeft("none", undefined), 1);
+  assert.equal(connections.messagesLeft("pending", { messages: [theirs] }), 1, "their messages don't count");
+  assert.equal(connections.messagesLeft("pending", { messages: [own("a")] }), 0);
+  assert.equal(connections.messagesLeft("received", { messages: [theirs, own("a")] }), 0);
+  assert.equal(connections.messagesLeft("connected", { messages: [own("a"), own("b")] }), Infinity);
+  assert.equal(connections.validateLoveRequestMessage("  "), "Write a message first.");
+  assert.match(connections.validateLoveRequestMessage("x".repeat(connections.LOVE_REQUEST_MESSAGE_MAX + 1)), /under/);
+  assert.equal(connections.validateLoveRequestMessage("Hello!"), undefined);
 });
 
 test("real mode uses the server's status and surfaces errors", async () => {
@@ -438,9 +525,52 @@ test("only an active, unexpired Private membership counts as Private", () => {
   assert.equal(membership.activeAccountType({ type: "private", status: "active", expiresAt: "garbage" }, now), "public");
 });
 
+test("FindLove needs a paid, unexpired plan of either type", () => {
+  const now = Date.UTC(2026, 9, 16);
+  assert.equal(membership.hasActiveMembership(undefined, now), false);
+  assert.equal(membership.hasActiveMembership({ type: "public", status: "pending_payment" }, now), false);
+  assert.equal(membership.hasActiveMembership({ type: "public", status: "expired" }, now), false);
+  assert.equal(membership.hasActiveMembership({ type: "public", status: "active", expiresAt: new Date(now + DAY).toISOString() }, now), true);
+  assert.equal(membership.hasActiveMembership({ type: "public", status: "active", expiresAt: new Date(now).toISOString() }, now), false);
+  assert.equal(membership.hasActiveMembership({ type: "private", status: "active", expiresAt: new Date(now + DAY).toISOString() }, now), true);
+});
+
+test("both types offer weekly, monthly and yearly plans; only the price differs", () => {
+  assert.deepEqual(
+    membership.MEMBERSHIP_INTERVALS.map((i) => i.id),
+    ["week", "month", "year"],
+  );
+  for (const type of ["public", "private"]) {
+    for (const { id, periodDays } of membership.MEMBERSHIP_INTERVALS) {
+      const plan = membership.membershipPlan(type, id);
+      assert.equal(plan.id, `findlove_${type}_${id}`);
+      assert.equal(plan.periodDays, periodDays);
+      assert.ok(plan.price > 0);
+    }
+    assert.equal(membership.cheapestPlan(type).interval, "week");
+  }
+  for (const { id } of membership.MEMBERSHIP_INTERVALS) {
+    assert.ok(membership.membershipPlan("private", id).price > membership.membershipPlan("public", id).price, `Private costs more (${id})`);
+  }
+  assert.equal(membership.membershipPlan("public", "bogus").interval, "month", "unknown period falls back to monthly");
+  assert.equal(membership.formatMembershipPrice(24999), "RWF 24,999");
+});
+
+test("demo: paying for Public opens FindLove without Private privileges", async () => {
+  await demo.saveMyLoveProfile("u1", validInput, true);
+  const result = await demo.buyMembership("u1", { type: "public", interval: "week", paymentMethod: "mtn_momo", payerPhone: "+250788000000" });
+  assert.equal(result.status, "succeeded");
+  const mine = await demo.fetchMyLoveProfile("u1");
+  assert.equal(membership.hasActiveMembership(mine.membership), true);
+  assert.equal(membership.activeAccountType(mine.membership), "public");
+  const days = (Date.parse(mine.membership.expiresAt) - Date.now()) / DAY;
+  assert.ok(days > 6.9 && days <= 7, "a weekly plan runs 7 days");
+});
+
 test("membership from the API never defaults to Private", () => {
-  assert.deepEqual(membership.normalizeMembership(undefined), { type: "public", status: "active" });
-  assert.deepEqual(membership.normalizeMembership({ type: "gold" }), { type: "public", status: "active" });
+  assert.deepEqual(membership.normalizeMembership(undefined), { type: "public", status: "pending_payment" });
+  assert.deepEqual(membership.normalizeMembership({ type: "gold" }), { type: "public", status: "pending_payment" });
+  assert.deepEqual(membership.normalizeMembership({ type: "public" }), { type: "public", status: "pending_payment" }, "never paid by default");
   assert.deepEqual(membership.normalizeMembership({ type: "private" }), { type: "private", status: "pending_payment" });
   assert.deepEqual(membership.normalizeMembership({ type: "private", status: "active", expiresAt: "2027-01-01T00:00:00Z" }), {
     type: "private",
@@ -462,10 +592,11 @@ test("demo: choosing Private starts unpaid, and the profile form can't grant it"
   assert.equal(membership.activeAccountType(created.membership), "public");
 
   const publicOne = await demo.saveMyLoveProfile("u2", { ...validInput, username: "other.one" }, true);
-  assert.deepEqual(publicOne.membership, { type: "public", status: "active" });
+  assert.deepEqual(publicOne.membership, { type: "public", status: "pending_payment" }, "Public is paid too");
+  assert.equal(membership.hasActiveMembership(publicOne.membership), false);
   // Editing with accountType "private" must not change the membership.
   const edited = await demo.saveMyLoveProfile("u2", { ...validInput, username: "other.one", accountType: "private" }, false);
-  assert.deepEqual(edited.membership, { type: "public", status: "active" });
+  assert.deepEqual(edited.membership, { type: "public", status: "pending_payment" });
 });
 
 test("demo: a Public member is refused a Private member until payment succeeds", async () => {
@@ -476,12 +607,12 @@ test("demo: a Public member is refused a Private member until payment succeeds",
   await assert.rejects(demo.requestLoveConnection(privateMember.id, "u1"), (err) => err instanceof demo.MembershipRequiredError);
   assert.equal(await demo.requestLoveConnection(publicMember.id, "u1"), "pending");
 
-  assert.equal((await demo.buyPrivateMembership("u1", { paymentMethod: "mtn_momo", payerPhone: "+250788000000" }, "failed")).status, "failed");
-  assert.equal((await demo.buyPrivateMembership("u1", { paymentMethod: "mtn_momo", payerPhone: "+250788000000" }, "cancelled")).status, "cancelled");
+  assert.equal((await demo.buyMembership("u1", { type: "private", interval: "month", paymentMethod: "mtn_momo", payerPhone: "+250788000000" }, "failed")).status, "failed");
+  assert.equal((await demo.buyMembership("u1", { type: "private", interval: "month", paymentMethod: "mtn_momo", payerPhone: "+250788000000" }, "cancelled")).status, "cancelled");
   assert.equal(membership.activeAccountType((await demo.fetchMyLoveProfile("u1")).membership), "public", "failed/cancelled grant nothing");
   await assert.rejects(demo.requestLoveConnection(privateMember.id, "u1"), (err) => err instanceof demo.MembershipRequiredError);
 
-  assert.equal((await demo.buyPrivateMembership("u1", { paymentMethod: "mtn_momo", payerPhone: "+250788000000" })).status, "succeeded");
+  assert.equal((await demo.buyMembership("u1", { type: "private", interval: "month", paymentMethod: "mtn_momo", payerPhone: "+250788000000" })).status, "succeeded");
   const mine = await demo.fetchMyLoveProfile("u1");
   assert.equal(membership.activeAccountType(mine.membership), "private");
   assert.ok(Date.parse(mine.membership.expiresAt) > Date.now());
@@ -513,15 +644,18 @@ test("real mode: create sends the chosen account type; membership is read from t
 
 test("real mode: checkout returns the payment's final status", async () => {
   apiHandler = async (method, p) => (method === "POST" ? { paymentId: "pay/1", status: "succeeded" } : undefined);
-  assert.deepEqual(await real.buyPrivateMembership("u1", { paymentMethod: "airtel_money", payerPhone: "+250730000000" }), { status: "succeeded" });
+  assert.deepEqual(
+    await real.buyMembership("u1", { type: "private", interval: "year", paymentMethod: "airtel_money", payerPhone: "+250730000000" }),
+    { status: "succeeded" },
+  );
   assert.deepEqual(apiCalls[0], [
     "POST",
     "/api/v1/love-profiles/me/membership/checkout",
-    { planId: membership.PRIVATE_MEMBERSHIP_PLAN.id, paymentMethod: "airtel_money", payerPhone: "+250730000000" },
+    { planId: "findlove_private_year", paymentMethod: "airtel_money", payerPhone: "+250730000000" },
   ]);
 
   apiHandler = async () => ({ paymentId: "p2", status: "failed", message: "Insufficient balance." });
-  assert.deepEqual(await real.buyPrivateMembership("u1", { paymentMethod: "mtn_momo", payerPhone: "+250788000000" }), {
+  assert.deepEqual(await real.buyMembership("u1", { type: "public", interval: "week", paymentMethod: "mtn_momo", payerPhone: "+250788000000" }), {
     status: "failed",
     message: "Insufficient balance.",
   });
@@ -529,7 +663,7 @@ test("real mode: checkout returns the payment's final status", async () => {
   apiHandler = async () => {
     throw new ApiError(502, "Payment provider down");
   };
-  await assert.rejects(real.buyPrivateMembership("u1", { paymentMethod: "mtn_momo", payerPhone: "+250788000000" }), /provider down/);
+  await assert.rejects(real.buyMembership("u1", { type: "public", interval: "week", paymentMethod: "mtn_momo", payerPhone: "+250788000000" }), /provider down/);
   assert.equal(stored.size, 0, "real mode never writes demo storage");
 });
 

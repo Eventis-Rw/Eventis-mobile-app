@@ -133,12 +133,8 @@ export default function CreateLoveProfileScreen() {
         confirmedAdult: true,
       });
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Private is a paid membership: the profile starts Public until payment is confirmed.
-      if (values.accountType === "private") {
-        router.replace({ pathname: "/love/membership", params: { from: "create" } } as any);
-      } else {
-        router.replace("/love" as any);
-      }
+      // Public and Private are both paid plans: FindLove opens once the payment is confirmed.
+      router.replace({ pathname: "/love/membership", params: { from: "create" } } as any);
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (err instanceof LoveProfileInputError) {
@@ -209,7 +205,7 @@ export default function CreateLoveProfileScreen() {
           {saving ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.primaryText}>{values.accountType === "private" ? "Create profile and continue to payment" : "Create my profile"}</Text>
+            <Text style={styles.primaryText}>Create profile and continue to payment</Text>
           )}
         </Pressable>
       </LoveScreenShell>

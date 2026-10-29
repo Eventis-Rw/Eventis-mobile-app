@@ -10,6 +10,11 @@ interface FindLoveChatContextValue {
   /** Unread messages across every FindLove chat, for the Inbox badge. */
   totalUnread: number;
   sendMessage: (profileId: string, content: LoveChatContent) => void;
+  /**
+   * Keeps the message another member sent with their request in the chat, at
+   * the start, once. Safe to call again.
+   */
+  keepRequestMessage: (profileId: string, text: string) => void;
   /** Called while a chat is open so its messages stop counting as unread. */
   markRead: (profileId: string) => void;
 }
@@ -67,6 +72,22 @@ export function FindLoveChatProvider({ children }: { children: React.ReactNode }
     [update],
   );
 
+  const keepRequestMessage = useCallback(
+    (profileId: string, text: string) => {
+      const id = `love-request-${profileId}`;
+      update((current) => {
+        const messages = current[profileId]?.messages ?? [];
+        if (messages.some((message) => message.id === id)) return current;
+        // Dated just before anything already in the chat so it stays first.
+        const first = messages[0] ? Date.parse(messages[0].sentAt) - 1000 : Date.now();
+        const message: LoveChatMessage = { id, kind: "text", text, own: false, sentAt: new Date(first).toISOString() };
+        // Reading it in Pending counts as read.
+        return { ...current, [profileId]: { messages: [message, ...messages], readAt: current[profileId]?.readAt ?? new Date().toISOString() } };
+      });
+    },
+    [update],
+  );
+
   const markRead = useCallback(
     (profileId: string) => {
       update((current) => {
@@ -84,8 +105,8 @@ export function FindLoveChatProvider({ children }: { children: React.ReactNode }
   );
 
   const value = useMemo(
-    () => ({ threads, isLoading, totalUnread, sendMessage, markRead }),
-    [threads, isLoading, totalUnread, sendMessage, markRead],
+    () => ({ threads, isLoading, totalUnread, sendMessage, keepRequestMessage, markRead }),
+    [threads, isLoading, totalUnread, sendMessage, keepRequestMessage, markRead],
   );
 
   return <FindLoveChatContext.Provider value={value}>{children}</FindLoveChatContext.Provider>;

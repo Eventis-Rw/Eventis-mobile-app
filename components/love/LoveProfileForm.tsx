@@ -9,7 +9,7 @@ import { InlineError } from "@/components/profile/ProfileSection";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import type { LoveAccountType } from "@/constants/loveProfiles";
 import { useColors } from "@/hooks/useColors";
-import { formatMembershipPrice, PRIVATE_MEMBERSHIP_PLAN } from "@/utils/findLoveMembership";
+import { cheapestPlan, formatMembershipPrice } from "@/utils/findLoveMembership";
 import {
   FREE_LOVE_PHOTO_LIMIT,
   LOVE_GENDERS,
@@ -188,16 +188,16 @@ export function LoveProfileForm({ values, errors, onChange, onBlur, phone, disab
         <Section title="Account type">
           <AccountTypeOption
             type="public"
-            title="Free"
-            description="Discover everyone and connect with Public members."
+            title={fromPrice("public")}
+            description="Discover everyone and connect with Public members. Weekly, monthly or yearly; you pay next."
             selected={values.accountType === "public"}
             onPress={() => set("accountType", "public")}
             disabled={disabled}
           />
           <AccountTypeOption
             type="private"
-            title={`${formatMembershipPrice()} / ${PRIVATE_MEMBERSHIP_PLAN.periodLabel}`}
-            description="Connect with anyone, including Private members. You pay next; Private starts once payment is confirmed."
+            title={fromPrice("private")}
+            description="Connect with anyone, including Private members. Weekly, monthly or yearly; you pay next."
             selected={values.accountType === "private"}
             onPress={() => set("accountType", "private")}
             disabled={disabled}
@@ -206,6 +206,12 @@ export function LoveProfileForm({ values, errors, onChange, onBlur, phone, disab
       ) : null}
     </View>
   );
+}
+
+/** "From RWF 499 / week": both types offer the same periods, only the price differs. */
+function fromPrice(type: LoveAccountType): string {
+  const plan = cheapestPlan(type);
+  return `From ${formatMembershipPrice(plan.price)} / ${plan.periodLabel}`;
 }
 
 function PhotoSlots({

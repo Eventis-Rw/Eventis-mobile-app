@@ -17,11 +17,16 @@ export interface LoveActivity {
 interface FindLoveDemoContextValue {
   tokenBalance: number;
   connections: LoveProfile[];
-  pendingProfiles: LoveProfile[];
+  /** Requests the member sent that are still waiting. */
+  sentRequests: LoveProfile[];
+  /** Requests other members sent to the member. */
+  receivedRequests: LoveProfile[];
   activity: LoveActivity[];
   purchaseTokens: (amount: number, priceLabel: string) => void;
   sendGift: (profile: LoveProfile, amount: number) => boolean;
   recordMessage: (profile: LoveProfile) => void;
+  /** Adds a connection event (request sent, accepted, declined…) to Notifications. */
+  recordConnection: (type: "connection" | "request", title: string, description: string) => void;
 }
 
 interface StoredDemoState {
@@ -33,6 +38,20 @@ const FindLoveDemoContext = createContext<FindLoveDemoContextValue | null>(null)
 const DEMO_STATE_KEY = "@eventis_find_love_demo_v1";
 
 const INITIAL_ACTIVITY: LoveActivity[] = [
+  {
+    id: "activity-request-keza",
+    type: "request",
+    title: "keza_dances sent you a connection request",
+    description: "Open Inbox › Pending › Received to accept or decline.",
+    createdAt: "1h ago",
+  },
+  {
+    id: "activity-request-noah",
+    type: "request",
+    title: "noah.runs sent you a connection request",
+    description: "Open Inbox › Pending › Received to accept or decline.",
+    createdAt: "5h ago",
+  },
   {
     id: "activity-connected-amara",
     type: "connection",
@@ -130,18 +149,30 @@ export function FindLoveDemoProvider({ children }: { children: React.ReactNode }
     persist(tokenBalance, nextActivity);
   }, [activity, persist, tokenBalance]);
 
+  const recordConnection = useCallback((type: "connection" | "request", title: string, description: string) => {
+    setActivity((current) => {
+      const nextActivity: LoveActivity[] = [{ id: "activity-" + Date.now(), type, title, description, createdAt: "Just now" }, ...current];
+      persist(tokenBalance, nextActivity);
+      return nextActivity;
+    });
+  }, [persist, tokenBalance]);
+
   const connections = useMemo(
     () => profiles.filter((profile) => getConnectionStatus(profile.id) === "connected"),
     [profiles, getConnectionStatus],
   );
-  const pendingProfiles = useMemo(
+  const sentRequests = useMemo(
     () => profiles.filter((profile) => getConnectionStatus(profile.id) === "pending"),
+    [profiles, getConnectionStatus],
+  );
+  const receivedRequests = useMemo(
+    () => profiles.filter((profile) => getConnectionStatus(profile.id) === "received"),
     [profiles, getConnectionStatus],
   );
 
   const value = useMemo(
-    () => ({ tokenBalance, connections, pendingProfiles, activity, purchaseTokens, sendGift, recordMessage }),
-    [tokenBalance, connections, pendingProfiles, activity, purchaseTokens, sendGift, recordMessage],
+    () => ({ tokenBalance, connections, sentRequests, receivedRequests, activity, purchaseTokens, sendGift, recordMessage, recordConnection }),
+    [tokenBalance, connections, sentRequests, receivedRequests, activity, purchaseTokens, sendGift, recordMessage, recordConnection],
   );
 
   return <FindLoveDemoContext.Provider value={value}>{children}</FindLoveDemoContext.Provider>;

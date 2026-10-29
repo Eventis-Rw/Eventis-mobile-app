@@ -3,38 +3,32 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import type { LoveActivity, LoveActivityType } from "@/context/FindLoveDemoContext";
 import type { LoveProfile } from "@/constants/loveProfiles";
 import { useFindLoveChat } from "@/context/FindLoveChatContext";
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
+import { useLoveProfilesState } from "@/context/LoveProfilesContext";
+import { PendingRequests } from "@/components/love/ConnectionRequests";
 import { LoveHeader } from "@/components/love/LoveHeader";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useColors } from "@/hooks/useColors";
 import { formatInboxTime, loveMessagePreview, summarizeConversations, type LoveChatMessage } from "@/utils/findLoveChat";
 import { presenceOf } from "@/utils/findLoveDiscovery";
 
-type ConnectionsTab = "connections" | "pending" | "notifications";
-
-const ACTIVITY_ICONS: Record<LoveActivityType, keyof typeof Ionicons.glyphMap> = {
-  connection: "heart-circle-outline",
-  request: "time-outline",
-  gift: "gift-outline",
-  purchase: "card-outline",
-  message: "chatbubble-ellipses-outline",
-};
+type ConnectionsTab = "connections" | "pending";
 
 function tabFromParam(tab: string | undefined): ConnectionsTab {
-  return tab === "pending" || tab === "notifications" ? tab : "connections";
+  return tab === "pending" ? tab : "connections";
 }
 
-/** FindLove Inbox tab: chats with connected people, pending likes and notifications such as new matches. */
+/** FindLove Inbox tab: chats with connected people and pending requests. Notifications have their own page. */
 export default function LoveInboxScreen() {
-  // `at` changes on every bell tap, so the effect below runs again even for the same tab.
+  // `at` changes on every link here, so the effect below runs again even for the same tab.
   const { tab, at } = useLocalSearchParams<{ tab?: string; at?: string }>();
   const router = useRouter();
   const colors = useColors();
   const [activeTab, setActiveTab] = useState<ConnectionsTab>(tabFromParam(tab));
-  const { connections, pendingProfiles, activity } = useFindLoveDemo();
+  const { connections, sentRequests, receivedRequests } = useFindLoveDemo();
+  const { refreshProfiles } = useLoveProfilesState();
   const { threads, totalUnread } = useFindLoveChat();
 
   // Newest chat first; connections with no messages yet go last.
@@ -46,17 +40,21 @@ export default function LoveInboxScreen() {
     }));
   }, [connections, threads]);
 
-  // The Home bell opens this tab with tab=notifications, even when it is already mounted.
+  // Links can open a given tab (tab=pending), even when the Inbox is already mounted.
   useEffect(() => {
     if (tab) setActiveTab(tabFromParam(tab));
   }, [tab, at]);
 
+  // Requests change on the other member's side; fetch the latest when Pending opens.
+  useEffect(() => {
+    if (activeTab === "pending") void refreshProfiles();
+  }, [activeTab, refreshProfiles]);
+
   const tabs = useMemo(() => [
     // Chats counts unread messages, not people, so the badge means "something new".
     { id: "connections" as const, label: "Chats", count: totalUnread },
-    { id: "pending" as const, label: "Pending", count: pendingProfiles.length },
-    { id: "notifications" as const, label: "Notifications", count: activity.length },
-  ], [totalUnread, pendingProfiles.length, activity.length]);
+    { id: "pending" as const, label: "Pending", count: receivedRequests.length + sentRequests.length },
+  ], [totalUnread, receivedRequests.length, sentRequests.length]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -98,28 +96,7 @@ export default function LoveInboxScreen() {
           ) : <EmptyState icon="people-outline" title="No chats yet" body="When you connect with someone, your chat with them appears here." colors={colors} />
         ) : null}
 
-        {activeTab === "pending" ? (
-          pendingProfiles.length ? pendingProfiles.map((profile) => (
-            <Pressable key={profile.id} onPress={() => router.push({ pathname: "/love/[id]", params: { id: profile.id } } as any)} style={[styles.pendingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Image source={{ uri: profile.imageUrl }} style={styles.pendingAvatar} />
-              <View style={styles.profileCopy}>
-                <View style={styles.nameRow}>
-                  <Text style={[styles.name, { color: colors.foreground }]}>{profile.username}</Text>
-                  <MembershipBadge type={profile.accountType} size="sm" iconOnly />
-                </View>
-                <Text style={[styles.meta, { color: colors.mutedForeground }]}>{profile.city} · Request awaiting response</Text>
-              </View>
-              <View style={[styles.pendingBadge, { backgroundColor: colors.secondary }]}>
-                <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
-                <Text style={[styles.pendingText, { color: colors.mutedForeground }]}>Pending</Text>
-              </View>
-            </Pressable>
-          )) : <EmptyState icon="time-outline" title="No pending requests" body="New connection requests will appear here." colors={colors} />
-        ) : null}
-
-        {activeTab === "notifications" ? (
-          activity.length ? activity.map((entry) => <ActivityRow key={entry.id} entry={entry} colors={colors} />) : <EmptyState icon="notifications-outline" title="No notifications yet" body="New matches and messages will appear here." colors={colors} />
-        ) : null}
+        {activeTab === "pending" ? <PendingRequests received={receivedRequests} sent={sentRequests} /> : null}
       </ScrollView>
     </View>
   );
@@ -197,21 +174,6 @@ function ConversationRow({
   );
 }
 
-function ActivityRow({ entry, colors }: { entry: LoveActivity; colors: ReturnType<typeof useColors> }) {
-  return (
-    <View style={[styles.activityRow, { borderBottomColor: colors.border }]}>
-      <View style={[styles.activityIcon, { backgroundColor: colors.glass }]}>
-        <Ionicons name={ACTIVITY_ICONS[entry.type]} size={20} color={colors.primary} />
-      </View>
-      <View style={styles.profileCopy}>
-        <Text style={[styles.activityTitle, { color: colors.foreground }]}>{entry.title}</Text>
-        <Text style={[styles.activityDescription, { color: colors.mutedForeground }]}>{entry.description}</Text>
-      </View>
-      <Text style={[styles.activityTime, { color: colors.mutedForeground }]}>{entry.createdAt}</Text>
-    </View>
-  );
-}
-
 function EmptyState({ icon, title, body, colors }: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string; colors: ReturnType<typeof useColors> }) {
   return (
     <View style={styles.empty}>
@@ -246,18 +208,7 @@ const styles = StyleSheet.create({
   unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   unreadText: { color: "#FFFFFF", fontSize: 11, fontFamily: "Inter_700Bold" },
   profileCopy: { flex: 1, minWidth: 0 },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   name: { flexShrink: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
-  meta: { fontSize: 11, lineHeight: 17, fontFamily: "Inter_400Regular", marginTop: 3 },
-  pendingCard: { minHeight: 82, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 18, padding: 11, marginBottom: 11 },
-  pendingAvatar: { width: 58, height: 58, borderRadius: 16, backgroundColor: "#E5E7EB" },
-  pendingBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 99 },
-  pendingText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
-  activityRow: { minHeight: 86, flexDirection: "row", alignItems: "flex-start", gap: 12, borderBottomWidth: 1, paddingVertical: 14 },
-  activityIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  activityTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  activityDescription: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular", marginTop: 3 },
-  activityTime: { fontSize: 10, fontFamily: "Inter_500Medium" },
   empty: { alignItems: "center", paddingVertical: 70, paddingHorizontal: 24 },
   emptyIcon: { width: 68, height: 68, borderRadius: 23, alignItems: "center", justifyContent: "center" },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginTop: 16 },
