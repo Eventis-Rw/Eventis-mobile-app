@@ -10,7 +10,9 @@ export type LoveChatThreads = Record<string, LoveChatThread>;
 //   GET  /api/v1/love-chats/:profileId/messages  -> LoveChatMessage[]
 //   POST /api/v1/love-chats/:profileId/messages  -> LoveChatMessage (server sets id and sentAt)
 //   POST /api/v1/love-chats/:profileId/read      -> marks the chat read up to now
-// The server must only allow chats between connected members.
+// The server must only allow chats between connected members, except for ONE
+// text message from each side while a request is waiting (see
+// utils/findLoveConnections.ts): the sender's note and the receiver's reply.
 const chatsKey = (userId: string) => `@eventis_findlove_chats_v1_${userId}`;
 
 const MINUTE = 60 * 1000;

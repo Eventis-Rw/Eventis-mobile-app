@@ -9,8 +9,8 @@ import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
 import { useLoveSettings } from "@/hooks/useLoveSettings";
-import { formatMembershipPrice, PRIVATE_MEMBERSHIP_PLAN } from "@/utils/findLoveMembership";
-import { countryName } from "@/utils/findLoveProfile";
+import { cheapestPlan, formatMembershipPrice } from "@/utils/findLoveMembership";
+import { countryName, formatDateOfBirth } from "@/utils/findLoveProfile";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -24,6 +24,9 @@ export default function LoveMeScreen() {
   const [photoFailed, setPhotoFailed] = useState(false);
   const photo = myProfile?.photoUrls[0];
   const isPrivate = accountType === "private";
+  const expiresAt = myProfile?.membership.expiresAt;
+  const runsUntil = expiresAt ? ` Runs until ${formatDateOfBirth(expiresAt.slice(0, 10))}.` : "";
+  const privateFrom = cheapestPlan("private");
 
   const rows: { icon: IconName; label: string; value?: string; onPress: () => void }[] = [
     { icon: "create-outline", label: "Edit profile, bio & photos", onPress: () => router.push("/love/edit" as any) },
@@ -67,11 +70,11 @@ export default function LoveMeScreen() {
             <Ionicons name={isPrivate ? "diamond" : "diamond-outline"} size={20} color={colors.primary} />
           </View>
           <View style={styles.profileCopy}>
-            <Text style={[styles.membershipTitle, { color: colors.foreground }]}>{isPrivate ? "Private member" : "Public account"}</Text>
+            <Text style={[styles.membershipTitle, { color: colors.foreground }]}>{isPrivate ? "Private member" : "Public member"}</Text>
             <Text style={[styles.meta, { color: colors.mutedForeground }]}>
               {isPrivate
-                ? "You can connect with every member."
-                : `Go Private to connect with Private members. ${formatMembershipPrice()} / ${PRIVATE_MEMBERSHIP_PLAN.periodLabel}.`}
+                ? `You can connect with every member.${runsUntil}`
+                : `Go Private to connect with Private members, from ${formatMembershipPrice(privateFrom.price)} / ${privateFrom.periodLabel}.${runsUntil}`}
             </Text>
           </View>
           {!isPrivate ? (

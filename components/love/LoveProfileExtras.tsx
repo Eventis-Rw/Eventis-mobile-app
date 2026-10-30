@@ -1,9 +1,9 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
+import { OptionPicker } from "@/components/love/OptionPicker";
 import { Section } from "@/components/love/LoveProfileForm";
 import { FormField } from "@/components/OrganisationForm";
-import { InlineError } from "@/components/profile/ProfileSection";
 import { useColors } from "@/hooks/useColors";
 import {
   LOVE_BIO_MAX,
@@ -41,17 +41,7 @@ export function LoveProfileExtras({
   disabled?: boolean;
 }) {
   const colors = useColors();
-  const atLimit = values.interests.length >= LOVE_INTERESTS_MAX;
   const neighborhoods = neighborhoodsFor(country);
-
-  const toggleInterest = (interest: string) => {
-    const has = values.interests.includes(interest);
-    if (!has && atLimit) return;
-    onChange({
-      ...values,
-      interests: has ? values.interests.filter((i) => i !== interest) : [...values.interests, interest],
-    });
-  };
 
   return (
     <>
@@ -71,47 +61,31 @@ export function LoveProfileExtras({
         </View>
       </Section>
 
-      <Section
-        title="Interests (optional)"
-        hint={`Pick up to ${LOVE_INTERESTS_MAX}. ${values.interests.length}/${LOVE_INTERESTS_MAX} selected.`}
-      >
-        <View style={styles.chips}>
-          {LOVE_INTERESTS.map((interest) => {
-            const selected = values.interests.includes(interest);
-            const blocked = !selected && atLimit;
-            return (
-              <Chip
-                key={interest}
-                label={interest}
-                selected={selected}
-                onPress={() => toggleInterest(interest)}
-                disabled={disabled || blocked}
-                role="checkbox"
-              />
-            );
-          })}
-        </View>
-        {errors.interests ? <InlineError message={errors.interests} /> : null}
+      <Section title="Interests (optional)" hint={`Pick up to ${LOVE_INTERESTS_MAX}.`}>
+        <OptionPicker
+          multiple
+          label="Interests"
+          placeholder="Select your interests"
+          options={INTEREST_OPTIONS}
+          max={LOVE_INTERESTS_MAX}
+          searchable
+          value={values.interests}
+          onChange={(interests) => onChange({ ...values, interests })}
+          error={errors.interests}
+          disabled={disabled}
+        />
       </Section>
 
       <Section title="Relationship goal (optional)" hint="Let people know what you are here for.">
-        <View style={styles.chips}>
-          {LOVE_RELATIONSHIP_GOALS.map((goal) => {
-            const selected = values.relationshipGoal === goal;
-            return (
-              <Chip
-                key={goal}
-                label={goal}
-                selected={selected}
-                // Tapping the selected one again clears it.
-                onPress={() => onChange({ ...values, relationshipGoal: selected ? undefined : goal })}
-                disabled={disabled}
-                role="radio"
-              />
-            );
-          })}
-        </View>
-        {errors.relationshipGoal ? <InlineError message={errors.relationshipGoal} /> : null}
+        <OptionPicker
+          label="Relationship goal"
+          placeholder="Select a goal"
+          options={GOAL_OPTIONS}
+          value={values.relationshipGoal}
+          onChange={(goal) => onChange({ ...values, relationshipGoal: goal as LoveRelationshipGoal | undefined })}
+          error={errors.relationshipGoal}
+          disabled={disabled}
+        />
         <View style={[styles.card, styles.lookingFor, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <FormField
             label="What I'm looking for"
@@ -132,67 +106,26 @@ export function LoveProfileExtras({
           title="Neighbourhood (optional)"
           hint="Helps people nearby find you. Only the neighbourhood is shown, never your exact location."
         >
-          <View style={styles.chips}>
-            {neighborhoods.map(({ name, city }) => {
-              const selected = values.neighborhood === name;
-              return (
-                <Chip
-                  key={name}
-                  label={city === "Kigali" ? name : `${name}, ${city}`}
-                  selected={selected}
-                  // Tapping the selected one again clears it.
-                  onPress={() => onChange({ ...values, neighborhood: selected ? undefined : name })}
-                  disabled={disabled}
-                  role="radio"
-                />
-              );
-            })}
-          </View>
-          {errors.neighborhood ? <InlineError message={errors.neighborhood} /> : null}
+          <OptionPicker
+            label="Neighbourhood"
+            placeholder="Select your neighbourhood"
+            options={neighborhoods.map(({ name, city }) => ({ value: name, label: city === "Kigali" ? name : `${name}, ${city}` }))}
+            searchable
+            value={values.neighborhood}
+            onChange={(neighborhood) => onChange({ ...values, neighborhood })}
+            error={errors.neighborhood}
+            disabled={disabled}
+          />
         </Section>
       ) : null}
     </>
   );
 }
 
-function Chip({
-  label,
-  selected,
-  onPress,
-  disabled,
-  role,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  disabled?: boolean;
-  role: "checkbox" | "radio";
-}) {
-  const colors = useColors();
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={[
-        styles.chip,
-        {
-          backgroundColor: selected ? colors.primary : colors.secondary,
-          borderColor: selected ? colors.primary : colors.border,
-          opacity: disabled && !selected ? 0.5 : 1,
-        },
-      ]}
-      accessibilityRole={role}
-      accessibilityState={{ checked: selected, disabled }}
-    >
-      <Text style={[styles.chipText, { color: selected ? "#FFFFFF" : colors.foreground }]}>{label}</Text>
-    </Pressable>
-  );
-}
+const INTEREST_OPTIONS = LOVE_INTERESTS.map((interest) => ({ value: interest, label: interest }));
+const GOAL_OPTIONS = LOVE_RELATIONSHIP_GOALS.map((goal) => ({ value: goal, label: goal }));
 
 const styles = StyleSheet.create({
   card: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 14 },
   lookingFor: { marginTop: 12 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 14, minHeight: 38, justifyContent: "center", borderRadius: 999, borderWidth: 1 },
-  chipText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

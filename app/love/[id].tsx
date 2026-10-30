@@ -5,6 +5,7 @@ import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "rea
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { Skeleton } from "@/components/SkeletonLoader";
+import { RequestMessageSheet, useConnectionActions } from "@/components/love/ConnectionRequests";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useLoveConnect } from "@/components/love/UpgradePrompt";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
@@ -17,7 +18,10 @@ export default function LoveProfileDetailScreen() {
   const colors = useColors();
   const { isLoading, getProfileById, getConnectionStatus } = useLoveProfiles();
   const { connect: connectWith, upgradePrompt } = useLoveConnect();
+  const { accept } = useConnectionActions();
   const [imageFailed, setImageFailed] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [openPost, setOpenPost] = useState<string | null>(null);
   const profile = getProfileById(id ?? "");
 
@@ -50,15 +54,35 @@ export default function LoveProfileDetailScreen() {
   const profileId = profile.id;
   const connectionStatus = getConnectionStatus(profileId);
   const pending = connectionStatus === "pending";
+  const received = connectionStatus === "received";
   const connected = connectionStatus === "connected";
   const posts = profile.postImageUrls.slice(0, 3);
 
-  // One button that follows the connection: Connect, then Pending, then Send Message.
-  function primaryAction() {
-    if (!profile || pending) return;
-    if (connected) router.push({ pathname: "/love/chat/[id]", params: { id: profileId } } as any);
-    else void connectWith(profile);
+  // Connect follows the request: Connect → Pending, or Accept when they asked first.
+  async function connectAction() {
+    if (!profile || pending || connected || busy) return;
+    setBusy(true);
+    if (received) await accept(profile);
+    else await connectWith(profile);
+    setBusy(false);
   }
+
+  // Message works before connecting too: one message goes with the request
+  // (or, for a request they sent, one reply). Connected members chat freely.
+  function messageAction() {
+    if (received) setReplyOpen(true);
+    else router.push({ pathname: "/love/chat/[id]", params: { id: profileId } } as any);
+  }
+
+  const connectLabel = connected ? "Connected" : pending ? "Pending" : received ? "Accept" : "Connect";
+  const connectIcon = connected ? "checkmark" : pending ? "time-outline" : received ? "checkmark" : "person-add-outline";
+  const connectMuted = pending || connected;
+  // Same look as the Home cards: tinted when connected, outlined while pending, solid otherwise.
+  const connectStyle = connected
+    ? { background: colors.glass, border: colors.primary, text: colors.primary }
+    : pending
+      ? { background: "transparent", border: colors.border, text: colors.mutedForeground }
+      : { background: colors.primary, border: colors.primary, text: "#FFFFFF" };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -165,27 +189,33 @@ export default function LoveProfileDetailScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 14) }]}>
-        <Pressable
-          onPress={primaryAction}
-          disabled={pending}
-          accessibilityRole="button"
-          accessibilityLabel={pending ? `Connection pending with ${profile.username}` : connected ? `Send ${profile.username} a message` : `Connect with ${profile.username}`}
-          accessibilityState={{ disabled: pending }}
-          style={({ pressed }) => [
-            styles.actionButton,
-            pending ? { backgroundColor: colors.secondary, borderColor: colors.border } : { backgroundColor: colors.primary, borderColor: colors.primary },
-            { opacity: pressed ? 0.85 : 1 },
-          ]}
-        >
-          <Ionicons
-            name={pending ? "time-outline" : connected ? "chatbubble-ellipses-outline" : "heart"}
-            size={20}
-            color={pending ? colors.mutedForeground : "#FFFFFF"}
-          />
-          <Text style={[styles.connectText, { color: pending ? colors.mutedForeground : "#FFFFFF" }]}>
-            {pending ? "Pending" : connected ? "Send Message" : "Connect"}
-          </Text>
-        </Pressable>
+        <View style={styles.actions}>
+          <Pressable
+            onPress={() => void connectAction()}
+            disabled={connectMuted || busy}
+            accessibilityRole="button"
+            accessibilityLabel={
+              pending ? `Connection pending with ${profile.username}` : connected ? `Connected with ${profile.username}` : `${connectLabel} ${profile.username}`
+            }
+            accessibilityState={{ disabled: connectMuted, busy }}
+            style={({ pressed }) => [
+              styles.actionButton,
+              { backgroundColor: connectStyle.background, borderColor: connectStyle.border },
+              { opacity: pressed || busy ? 0.85 : 1 },
+            ]}
+          >
+            <Ionicons name={connectIcon} size={20} color={connectStyle.text} />
+            <Text style={[styles.connectText, { color: connectStyle.text }]}>{connectLabel}</Text>
+          </Pressable>
+          <Pressable
+            onPress={messageAction}
+            accessibilityRole="button"
+            accessibilityLabel={`Message ${profile.username}`}
+            style={({ pressed }) => [styles.messageButton, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Ionicons name="chatbubble-outline" size={22} color="#FFFFFF" />
+          </Pressable>
+        </View>
       </View>
       <Modal visible={!!openPost} transparent animationType="fade" onRequestClose={() => setOpenPost(null)}>
         <Pressable style={styles.viewer} onPress={() => setOpenPost(null)} accessibilityRole="button" accessibilityLabel="Close post">
@@ -195,6 +225,7 @@ export default function LoveProfileDetailScreen() {
           </View>
         </Pressable>
       </Modal>
+      <RequestMessageSheet profile={replyOpen ? profile : null} onClose={() => setReplyOpen(false)} />
       {upgradePrompt}
     </View>
   );
@@ -234,7 +265,9 @@ const styles = StyleSheet.create({
   viewerImage: { width: "100%", height: "80%" },
   viewerClose: { position: "absolute", right: 18, width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)" },
   footer: { position: "absolute", left: 0, right: 0, bottom: 0, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 13 },
-  actionButton: { width: "100%", maxWidth: 680, alignSelf: "center", minHeight: 56, borderRadius: 18, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
+  actions: { width: "100%", maxWidth: 680, alignSelf: "center", flexDirection: "row", gap: 10 },
+  messageButton: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  actionButton: { flex: 1, minHeight: 56, borderRadius: 18, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
   connectText: { fontSize: 15, fontFamily: "Inter_700Bold" },
   loadingBody: { padding: 20 },
   loadingGap: { marginTop: 16 },

@@ -2,7 +2,13 @@ import type { LoveGender, LoveInterestedIn, LoveRelationshipGoal } from "@/utils
 import type { LoveAccountType, LoveMembership } from "@/utils/findLoveMembership";
 
 export type { LoveAccountType, LoveGender, LoveInterestedIn, LoveMembership, LoveRelationshipGoal };
-export type LoveConnectionStatus = "none" | "pending" | "connected";
+/**
+ * The viewer's connection with another member:
+ * - pending: the viewer sent a request, no answer yet.
+ * - received: the other member sent the viewer a request.
+ * - connected: accepted; they can chat freely.
+ */
+export type LoveConnectionStatus = "none" | "pending" | "received" | "connected";
 
 /**
  * The signed-in member's own FindLove profile. It belongs to their Eventis
@@ -89,6 +95,8 @@ export interface LoveProfile {
   eligible: boolean;
   verified?: boolean;
   connectionStatus?: LoveConnectionStatus;
+  /** "received" only: the one message they sent with their request. */
+  requestMessage?: string;
 }
 
 export const MOCK_LOVE_PROFILES: LoveProfile[] = [
@@ -199,6 +207,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     neighborhood: "Kicukiro",
     active: true,
     eligible: true,
+    connectionStatus: "received",
+    requestMessage: "Hi! I saw you like running too. Fancy a morning jog around Kicukiro sometime?",
   },
   {
     id: "love-keza",
@@ -225,6 +235,8 @@ export const MOCK_LOVE_PROFILES: LoveProfile[] = [
     neighborhood: "Ngoma",
     active: true,
     eligible: true,
+    connectionStatus: "received",
+    requestMessage: "Hey 👋 Your profile made me smile. Would love to chat about the festivals this season!",
   },
   {
     id: "love-samuel",

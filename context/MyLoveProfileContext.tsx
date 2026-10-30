@@ -4,7 +4,7 @@ import type { MyLoveProfile, MyLoveProfileInput } from "@/constants/loveProfiles
 import { useAuth } from "@/context/AuthContext";
 import { describeError } from "@/services/organiserService";
 import {
-  buyPrivateMembership,
+  buyMembership,
   fetchAgeVerification,
   fetchMyLoveProfile,
   resetDemoAgeVerification,
@@ -17,7 +17,12 @@ import {
   type LovePaymentMethod,
 } from "@/services/findLoveService";
 import { AGE_VERIFICATION_NOT_STARTED, type AgeVerification } from "@/utils/findLoveAgeVerification";
-import { activeAccountType, type LoveAccountType } from "@/utils/findLoveMembership";
+import {
+  activeAccountType,
+  hasActiveMembership,
+  type LoveAccountType,
+  type MembershipInterval,
+} from "@/utils/findLoveMembership";
 
 type Status = "idle" | "loading" | "ready" | "error";
 
@@ -31,11 +36,13 @@ interface MyLoveProfileContextValue {
   reload: () => Promise<void>;
   /** Creates or updates the profile. Throws so the form can show the error. */
   save: (input: MyLoveProfileInput) => Promise<MyLoveProfile>;
-  /** What the member actually has now: Private only with an active, paid membership. */
+  /** Whose connection rules apply now: Private only with an active, paid Private membership. */
   accountType: LoveAccountType;
-  /** Pays for Private, then reloads the profile so the membership comes from the server. */
-  buyPrivate: (
-    input: { paymentMethod: LovePaymentMethod; payerPhone: string },
+  /** A paid, unexpired Public or Private plan. FindLove stays closed without one. */
+  hasMembership: boolean;
+  /** Pays for a plan, then reloads the profile so the membership comes from the server. */
+  buyMembership: (
+    input: { type: LoveAccountType; interval: MembershipInterval; paymentMethod: LovePaymentMethod; payerPhone: string },
     demoOutcome?: LoveDemoOutcome,
   ) => Promise<LoveCheckoutResult>;
   /** The ID age check, as the server reports it. Comes first: no profile until "verified". */
@@ -102,10 +109,13 @@ export function MyLoveProfileProvider({ children }: { children: React.ReactNode 
     [userId, myProfile],
   );
 
-  const buyPrivate = useCallback(
-    async (input: { paymentMethod: LovePaymentMethod; payerPhone: string }, demoOutcome?: LoveDemoOutcome) => {
+  const buyPlan = useCallback(
+    async (
+      input: { type: LoveAccountType; interval: MembershipInterval; paymentMethod: LovePaymentMethod; payerPhone: string },
+      demoOutcome?: LoveDemoOutcome,
+    ) => {
       if (!userId) throw new Error("Sign in to use FindLove.");
-      const result = await buyPrivateMembership(userId, input, demoOutcome);
+      const result = await buyMembership(userId, input, demoOutcome);
       if (result.status === "succeeded" || result.status === "pending") {
         try {
           setMyProfile(await fetchMyLoveProfile(userId));
@@ -140,6 +150,7 @@ export function MyLoveProfileProvider({ children }: { children: React.ReactNode 
   }, [userId]);
 
   const accountType = activeAccountType(myProfile?.membership);
+  const hasMembership = hasActiveMembership(myProfile?.membership);
 
   const value = useMemo(
     () => ({
@@ -150,13 +161,14 @@ export function MyLoveProfileProvider({ children }: { children: React.ReactNode 
       reload,
       save,
       accountType,
-      buyPrivate,
+      hasMembership,
+      buyMembership: buyPlan,
       verification,
       submitVerification,
       refreshVerification,
       resetDemoVerification,
     }),
-    [myProfile, status, error, ensureLoaded, reload, save, accountType, buyPrivate, verification, submitVerification, refreshVerification, resetDemoVerification],
+    [myProfile, status, error, ensureLoaded, reload, save, accountType, hasMembership, buyPlan, verification, submitVerification, refreshVerification, resetDemoVerification],
   );
 
   return <MyLoveProfileContext.Provider value={value}>{children}</MyLoveProfileContext.Provider>;

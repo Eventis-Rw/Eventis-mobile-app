@@ -11,8 +11,8 @@ const GOLD = "#D4A017";
  * PUBLIC / PRIVATE badge. Pass the member's ACTUAL account type (active
  * membership), never the option they picked at sign-up.
  *
- * `iconOnly` is for showing OTHER members: a gold diamond for Private and
- * nothing for Public, with no text label.
+ * `iconOnly` is for showing OTHER members, with no text label: a gold diamond
+ * for Private, a globe in the accent colour for Public.
  */
 export function MembershipBadge({
   type,
@@ -31,15 +31,14 @@ export function MembershipBadge({
   const small = size === "sm";
 
   if (iconOnly) {
-    if (!isPrivate) return null;
     const diameter = small ? 16 : 20;
     return (
       <View
-        style={[styles.icon, { width: diameter, height: diameter, backgroundColor: GOLD }]}
+        style={[styles.icon, { width: diameter, height: diameter, backgroundColor: isPrivate ? GOLD : colors.primary }]}
         accessible
-        accessibilityLabel="Private member"
+        accessibilityLabel={isPrivate ? "Private member" : "Public member"}
       >
-        <Ionicons name="diamond" size={small ? 9 : 11} color="#1A1300" />
+        <Ionicons name={isPrivate ? "diamond" : "globe-outline"} size={small ? 9 : 12} color={isPrivate ? "#1A1300" : "#FFFFFF"} />
       </View>
     );
   }

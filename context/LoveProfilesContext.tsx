@@ -4,7 +4,13 @@ import type { LoveConnectionStatus, LoveProfile } from "@/constants/loveProfiles
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfileState } from "@/context/MyLoveProfileContext";
 import { describeError } from "@/services/organiserService";
-import { fetchLoveProfiles, MembershipRequiredError, requestLoveConnection } from "@/services/findLoveService";
+import {
+  cancelLoveConnection,
+  fetchLoveProfiles,
+  MembershipRequiredError,
+  requestLoveConnection,
+  respondToLoveConnection,
+} from "@/services/findLoveService";
 import { inCountry } from "@/utils/findLoveDiscovery";
 
 /** "upgrade_required": the server says this connection needs a Private membership. */
@@ -19,7 +25,12 @@ interface LoveProfilesContextValue {
   refreshProfiles: () => Promise<void>;
   getProfileById: (id: string) => LoveProfile | undefined;
   getConnectionStatus: (id: string) => LoveConnectionStatus;
-  sendConnectionRequest: (id: string) => Promise<LoveConnectResult>;
+  /** `message` is the one note allowed with a request. To someone who asked first, this accepts. */
+  sendConnectionRequest: (id: string, message?: string) => Promise<LoveConnectResult>;
+  /** Accept or decline a request this member received. False if it failed (error is set). */
+  respondToRequest: (id: string, accept: boolean) => Promise<boolean>;
+  /** Withdraw a request this member sent. False if it failed (error is set). */
+  cancelRequest: (id: string) => Promise<boolean>;
 }
 
 const LoveProfilesContext = createContext<LoveProfilesContextValue | null>(null);
@@ -86,19 +97,46 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
     );
   }, []);
 
-  const sendConnectionRequest = useCallback(async (id: string): Promise<LoveConnectResult> => {
+  const sendConnectionRequest = useCallback(async (id: string, message?: string): Promise<LoveConnectResult> => {
     setError(null);
-    setStatus(id, "pending");
+    const before = profiles.find((profile) => profile.id === id)?.connectionStatus ?? "none";
+    setStatus(id, before === "received" ? "connected" : "pending");
     try {
-      setStatus(id, await requestLoveConnection(id, user?.id));
+      setStatus(id, await requestLoveConnection(id, user?.id, message));
       return "sent";
     } catch (err) {
-      setStatus(id, "none");
+      setStatus(id, before);
       if (err instanceof MembershipRequiredError) return "upgrade_required";
       setError(describeError(err, "Your request was not sent. Please try again."));
       return "failed";
     }
-  }, [setStatus, user?.id]);
+  }, [profiles, setStatus, user?.id]);
+
+  // Not optimistic: the request leaves its list only once the server agrees.
+  const respondToRequest = useCallback(async (id: string, accept: boolean) => {
+    setError(null);
+    try {
+      setStatus(id, await respondToLoveConnection(id, accept));
+      return true;
+    } catch (err) {
+      setError(describeError(err, accept ? "We couldn't accept this request. Please try again." : "We couldn't decline this request. Please try again."));
+      return false;
+    }
+  }, [setStatus]);
+
+  const cancelRequest = useCallback(async (id: string) => {
+    setError(null);
+    try {
+      await cancelLoveConnection(id);
+      setStatus(id, "none");
+      return true;
+    } catch (err) {
+      setError(describeError(err, "We couldn't cancel this request. Please try again."));
+      // It may have been accepted meanwhile; show what the server has now.
+      void refreshProfiles();
+      return false;
+    }
+  }, [refreshProfiles, setStatus]);
 
   const value = useMemo(
     () => ({
@@ -110,6 +148,8 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
       getProfileById,
       getConnectionStatus,
       sendConnectionRequest,
+      respondToRequest,
+      cancelRequest,
     }),
     [
       visibleProfiles,
@@ -120,6 +160,8 @@ export function LoveProfilesProvider({ children }: { children: React.ReactNode }
       getProfileById,
       getConnectionStatus,
       sendConnectionRequest,
+      respondToRequest,
+      cancelRequest,
     ],
   );
 

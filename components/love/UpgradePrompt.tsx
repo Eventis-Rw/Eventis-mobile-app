@@ -10,7 +10,7 @@ import { useLoveProfilesState } from "@/context/LoveProfilesContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
-import { canConnect, formatMembershipPrice, PRIVATE_MEMBERSHIP_PLAN } from "@/utils/findLoveMembership";
+import { canConnect, cheapestPlan, formatMembershipPrice } from "@/utils/findLoveMembership";
 
 /** Explains that connecting with a Private member needs a Private membership. */
 export function UpgradePrompt({
@@ -46,8 +46,9 @@ export function UpgradePrompt({
             <Text style={[styles.text, { color: colors.mutedForeground }]}>account.</Text>
           </View>
           <Text style={[styles.text, styles.center, { color: colors.mutedForeground }]}>
-            Only Private members can send connection requests to Private members. Upgrade for{" "}
-            {formatMembershipPrice()} / {PRIVATE_MEMBERSHIP_PLAN.periodLabel} to connect with anyone.
+            Only Private members can send connection requests to Private members. Upgrade from{" "}
+            {formatMembershipPrice(cheapestPlan("private").price)} / {cheapestPlan("private").periodLabel} (weekly, monthly or
+            yearly) to connect with anyone.
           </Text>
           <Pressable
             onPress={onUpgrade}
@@ -73,20 +74,25 @@ export function UpgradePrompt({
 export function useLoveConnect() {
   const router = useRouter();
   const { accountType } = useMyLoveProfile();
-  const { sendConnectionRequest } = useLoveProfilesState();
+  const { sendConnectionRequest, getConnectionStatus } = useLoveProfilesState();
   const [upgradeFor, setUpgradeFor] = useState<string | null>(null);
 
+  /** Resolves true when the request was sent (or accepted), false otherwise. */
   const connect = useCallback(
-    async (profile: LoveProfile) => {
-      if (!canConnect(accountType, profile.accountType).allowed) {
+    async (profile: LoveProfile, message?: string): Promise<boolean> => {
+      // Accepting someone who asked first needs no particular membership.
+      const accepting = getConnectionStatus(profile.id) === "received";
+      if (!accepting && !canConnect(accountType, profile.accountType).allowed) {
         if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         setUpgradeFor(profile.username);
-        return;
+        return false;
       }
       if (Platform.OS !== "web") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      if ((await sendConnectionRequest(profile.id)) === "upgrade_required") setUpgradeFor(profile.username);
+      const result = await sendConnectionRequest(profile.id, message);
+      if (result === "upgrade_required") setUpgradeFor(profile.username);
+      return result === "sent";
     },
-    [accountType, sendConnectionRequest],
+    [accountType, getConnectionStatus, sendConnectionRequest],
   );
 
   const upgradePrompt = (

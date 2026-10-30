@@ -15,6 +15,7 @@ import {
 import { LoveProfileCard } from "@/components/LoveProfileCard";
 import { Skeleton } from "@/components/SkeletonLoader";
 import { DiscoveryFilters } from "@/components/love/DiscoveryFilters";
+import { useConnectionActions } from "@/components/love/ConnectionRequests";
 import { useLoveConnect } from "@/components/love/UpgradePrompt";
 import type { LoveProfile } from "@/constants/loveProfiles";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
@@ -36,6 +37,7 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const { profiles, isLoading, error, refreshProfiles, getConnectionStatus } = useLoveProfiles();
   const { connect, upgradePrompt } = useLoveConnect();
+  const { accept } = useConnectionActions();
   const { myProfile } = useMyLoveProfile();
   const country = myProfile?.country;
   const interestedIn = myProfile?.interestedIn;
@@ -74,7 +76,7 @@ export default function HomeScreen() {
   };
 
   const openNotifications = () => {
-    router.navigate({ pathname: "/love/messages", params: { tab: "notifications", at: String(Date.now()) } } as any);
+    router.push("/love/notifications" as any);
   };
 
   const openProfile = useCallback((profile: LoveProfile) => {
@@ -91,11 +93,11 @@ export default function HomeScreen() {
         profile={item}
         connectionStatus={getConnectionStatus(item.id)}
         onOpen={() => openProfile(item)}
-        onConnect={() => void connect(item)}
+        onConnect={() => void (getConnectionStatus(item.id) === "received" ? accept(item) : connect(item))}
         onMessage={() => openChat(item)}
       />
     </View>
-  ), [cellWidth, connect, getConnectionStatus, openChat, openProfile]);
+  ), [accept, cellWidth, connect, getConnectionStatus, openChat, openProfile]);
 
   const topBar = <HomeTopBar searchOpen={searchOpen} onSearch={toggleSearch} onNotifications={openNotifications} />;
 
@@ -196,7 +198,7 @@ export default function HomeScreen() {
   );
 }
 
-/** FindLove brand on the left; notifications and search on the right. */
+/** FindLove brand on the left; search, then notifications, on the right. */
 function HomeTopBar({ searchOpen, onSearch, onNotifications }: { searchOpen: boolean; onSearch: () => void; onNotifications: () => void }) {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
@@ -207,15 +209,6 @@ function HomeTopBar({ searchOpen, onSearch, onNotifications }: { searchOpen: boo
         <Text style={[styles.brandText, { color: colors.foreground }]}>FindLove</Text>
       </View>
       <Pressable
-        onPress={onNotifications}
-        hitSlop={6}
-        style={[styles.topIcon, { backgroundColor: colors.card, borderColor: colors.border }]}
-        accessibilityRole="button"
-        accessibilityLabel="Notifications"
-      >
-        <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
-      </Pressable>
-      <Pressable
         onPress={onSearch}
         hitSlop={6}
         style={[styles.topIcon, { backgroundColor: searchOpen ? colors.primary : colors.card, borderColor: searchOpen ? colors.primary : colors.border }]}
@@ -224,6 +217,15 @@ function HomeTopBar({ searchOpen, onSearch, onNotifications }: { searchOpen: boo
         accessibilityState={{ expanded: searchOpen }}
       >
         <Ionicons name={searchOpen ? "close" : "search-outline"} size={20} color={searchOpen ? "#FFFFFF" : colors.foreground} />
+      </Pressable>
+      <Pressable
+        onPress={onNotifications}
+        hitSlop={6}
+        style={[styles.topIcon, { backgroundColor: colors.card, borderColor: colors.border }]}
+        accessibilityRole="button"
+        accessibilityLabel="Notifications"
+      >
+        <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
       </Pressable>
     </View>
   );

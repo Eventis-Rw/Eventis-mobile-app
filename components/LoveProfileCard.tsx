@@ -17,9 +17,9 @@ interface LoveProfileCardProps {
   profile: LoveProfile;
   connectionStatus: LoveConnectionStatus;
   onOpen: () => void;
-  /** Like = send a connection request. */
+  /** Send a connection request, or accept one they sent first. */
   onConnect: () => void;
-  /** Connected members get a Message button instead of Like. */
+  /** Opens the chat: free chat once connected, one message with the request before that. */
   onMessage: () => void;
 }
 
@@ -28,23 +28,35 @@ function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect
   const [imageFailed, setImageFailed] = useState(false);
   const isPending = connectionStatus === "pending";
   const isConnected = connectionStatus === "connected";
+  const isReceived = connectionStatus === "received";
 
-  // Connected members can be messaged straight away; everyone else gets a Like first.
-  function handleAction(event: GestureResponderEvent) {
+  function handleConnect(event: GestureResponderEvent) {
     event.stopPropagation();
-    if (isConnected) onMessage();
-    else if (!isPending) onConnect();
+    if (!isPending && !isConnected) onConnect();
+  }
+
+  function handleMessage(event: GestureResponderEvent) {
+    event.stopPropagation();
+    onMessage();
   }
 
   // The card is narrow, so it shows two interests and a count of the rest.
   const shownInterests = profile.interests.slice(0, MAX_CARD_INTERESTS);
   const moreInterests = profile.interests.length - shownInterests.length;
 
-  const action = isConnected
-    ? { icon: "chatbubble-ellipses" as const, label: "Message" }
+  // Connect → Pending → Connected, or Accept when they asked first.
+  const status = isConnected
+    ? { icon: "checkmark" as const, label: "Connected" }
     : isPending
       ? { icon: "time-outline" as const, label: "Pending" }
-      : { icon: "heart" as const, label: "Like" };
+      : isReceived
+        ? { icon: "checkmark" as const, label: "Accept" }
+        : { icon: "person-add-outline" as const, label: "Connect" };
+  const statusStyle = isConnected
+    ? { background: colors.glass, border: colors.primary, text: colors.primary }
+    : isPending
+      ? { background: "transparent", border: colors.border, text: colors.mutedForeground }
+      : { background: colors.primary, border: colors.primary, text: "#FFFFFF" };
 
   return (
     <Pressable
@@ -90,24 +102,32 @@ function LoveProfileCardComponent({ profile, connectionStatus, onOpen, onConnect
           {moreInterests > 0 ? <Text style={[styles.more, { color: colors.mutedForeground }]}>+{moreInterests}</Text> : null}
         </View>
 
-        <Pressable
-          onPress={handleAction}
-          disabled={isPending}
-          hitSlop={4}
-          accessibilityRole="button"
-          accessibilityLabel={`${action.label} ${profile.username}`}
-          accessibilityState={{ disabled: isPending }}
-          style={({ pressed }) => [
-            styles.actionButton,
-            isPending
-              ? { borderColor: colors.border, backgroundColor: colors.secondary }
-              : { borderColor: colors.primary, backgroundColor: colors.primary },
-            { opacity: pressed ? 0.8 : 1 },
-          ]}
-        >
-          <Ionicons name={action.icon} size={14} color={isPending ? colors.mutedForeground : "#FFFFFF"} />
-          <Text style={[styles.actionText, { color: isPending ? colors.mutedForeground : "#FFFFFF" }]}>{action.label}</Text>
-        </Pressable>
+        <View style={styles.actions}>
+          <Pressable
+            onPress={handleConnect}
+            disabled={isPending || isConnected}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={isPending || isConnected ? `${status.label} with ${profile.username}` : `${status.label} ${profile.username}`}
+            accessibilityState={{ disabled: isPending || isConnected }}
+            style={({ pressed }) => [
+              styles.statusButton,
+              { borderColor: statusStyle.border, backgroundColor: statusStyle.background, opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Ionicons name={status.icon} size={14} color={statusStyle.text} />
+            <Text style={[styles.actionText, { color: statusStyle.text }]} numberOfLines={1}>{status.label}</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleMessage}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={`Message ${profile.username}`}
+            style={({ pressed }) => [styles.messageButton, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Ionicons name="chatbubble-outline" size={16} color="#FFFFFF" />
+          </Pressable>
+        </View>
       </View>
     </Pressable>
   );
@@ -131,6 +151,8 @@ const styles = StyleSheet.create({
   chip: { flexShrink: 1, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   chipText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   more: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
-  actionButton: { marginTop: 7, minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: 10, borderWidth: 1, paddingHorizontal: 4 },
-  actionText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  actions: { flexDirection: "row", gap: 6, marginTop: 7 },
+  statusButton: { flex: 1, minWidth: 0, minHeight: 36, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: 11, borderWidth: 1, paddingHorizontal: 4 },
+  messageButton: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  actionText: { flexShrink: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },
 });
