@@ -44,7 +44,6 @@ function StageTile({ member, revision, compact, showTag, mode }: {
   </View>;
 }
 
-/** Snapshot mutable SDK values on media/speaker events so every tile receives fresh primitives. */
 export function LiveBroadcastStage({ participants, revision, hostId, host, guests, mode, connected }: {
   participants: Participant[]; revision: number; hostId: string; host: LivePerson; guests: LivePerson[]; mode: "video" | "voice"; connected: boolean;
 }) {

@@ -24,7 +24,6 @@ export function LiveButton({ label, onPress, icon, secondary, disabled, danger, 
 export function LiveIcon({ name, label, onPress }: { name: React.ComponentProps<typeof Ionicons>["name"]; label: string; onPress: () => void }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={liveStyles.icon}><Ionicons name={name} size={23} color={liveColors.text} /></Pressable>;
 }
-/** Compact controls that stay legible over moving video. */
 export function LiveOverlayAction({ name, label, caption, onPress, active, disabled, badge }: {
   name: React.ComponentProps<typeof Ionicons>["name"]; label: string; caption?: string;
   onPress: () => void; active?: boolean; disabled?: boolean; badge?: number;

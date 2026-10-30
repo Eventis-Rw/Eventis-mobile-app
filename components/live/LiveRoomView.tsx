@@ -20,6 +20,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import {
   LIVE_GIFTS,
+  liveBalance,
   type LiveAction,
   type LivePerson,
   type LiveRoom,
@@ -33,6 +34,8 @@ import {
   liveColors as c,
   liveStyles as s,
 } from "./LivePrimitives";
+import { LiveGiftPicker, LiveRecharge } from "./LiveCoins";
+import { LiveReportForm } from "./LiveReport";
 import type { LiveEventReference } from "@/services/liveDirectoryService";
 import { useEvents } from "@/context/EventsContext";
 import { getEventImage } from "@/constants/eventImages";
@@ -57,7 +60,15 @@ type Props = {
   };
 };
 type Panel =
-  "people" | "gifts" | "settings" | "leave" | "simulate" | "event" | null;
+  | "people"
+  | "gifts"
+  | "recharge"
+  | "report"
+  | "settings"
+  | "leave"
+  | "simulate"
+  | "event"
+  | null;
 const samplePeople: LivePerson[] = [
   {
     id: "preview_aline",
@@ -110,8 +121,6 @@ export function LiveRoomView({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
-  const [selectedGift, setSelectedGift] = useState<string | null>(null);
-  const giftTransaction = useRef("");
   const [reaction, setReaction] = useState("");
   const animation = useRef(new Animated.Value(0)).current;
   const chat = useRef<ScrollView>(null);
@@ -119,9 +128,8 @@ export function LiveRoomView({
   useEffect(() => {
     if (!lastGift || Date.now() - lastGift.at > 5000) return;
     setReaction(
-      LIVE_GIFTS.find((g) => lastGift.text.includes(g.name))?.emoji ?? "✨",
+      LIVE_GIFTS.find((g) => lastGift.text.startsWith(g.emoji))?.emoji ?? "✨",
     );
-    // A new gift triggers once; ticking the room clock never restarts this animation.
   }, [lastGift?.id]);
   useEffect(() => {
     if (!reaction) return;
@@ -191,7 +199,7 @@ export function LiveRoomView({
           <View style={s.card}>
             <Text style={s.label}>
               {room.reactions} reactions
-              {broadcast ? "" : ` · ${received} demo gift coins`}
+              {broadcast ? "" : ` · ${received.toLocaleString("en-US")} coins in gifts`}
             </Text>
             <Text style={s.body}>
               {broadcast
@@ -580,10 +588,7 @@ export function LiveRoomView({
                   <LiveOverlayAction
                     name="gift-outline"
                     label="Send a gift"
-                    onPress={() => {
-                      setSelectedGift(null);
-                      setPanel("gifts");
-                    }}
+                    onPress={() => setPanel("gifts")}
                   />
                 ) : null}
                 <LiveOverlayAction
@@ -610,7 +615,9 @@ export function LiveRoomView({
           title={
             {
               people: "People in the room",
-              gifts: "Send a little love",
+              gifts: "Send a gift",
+              recharge: "Recharge coins",
+              report: "Report Live",
               settings: host ? "Host controls" : "Live options",
               leave: host ? "End your Live?" : "Leave this Live?",
               simulate: "Test the room",
@@ -817,71 +824,47 @@ export function LiveRoomView({
             </>
           ) : null}
           {panel === "gifts" ? (
-            <>
-              <Text style={s.body}>
-                Balance: {state.wallets[person.id] ?? 500} demo coins · no cash
-                value
-              </Text>
-              <View style={s.wrap}>
-                {LIVE_GIFTS.map((g) => (
-                  <View
-                    key={g.id}
-                    style={{
-                      width: "47%",
-                      gap: 6,
-                      padding: 14,
-                      borderRadius: 18,
-                      borderWidth: 1,
-                      borderColor: selectedGift === g.id ? c.blue : c.line,
-                    }}
-                  >
-                    <Text style={{ fontSize: 34 }}>{g.emoji}</Text>
-                    <Text style={s.label}>{g.name}</Text>
-                    <LiveButton
-                      compact
-                      secondary
-                      label={`${g.coins} coins`}
-                      onPress={() => {
-                        giftTransaction.current = `gift_${person.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-                        setSelectedGift(g.id);
-                      }}
-                    />
-                  </View>
-                ))}
-              </View>
-              {selectedGift ? (
-                <>
-                  <Text style={s.body}>
-                    Send {LIVE_GIFTS.find((g) => g.id === selectedGift)?.name}{" "}
-                    to {room.host.name}? The coins will be deducted from your
-                    demo balance.
-                  </Text>
-                  <LiveButton
-                    label="Confirm gift"
-                    disabled={busy || !room.giftsEnabled}
-                    onPress={() =>
-                      void run(
-                        {
-                          type: "gift",
-                          roomId: room.id,
-                          giftId: selectedGift,
-                          transactionId: giftTransaction.current,
-                        },
-                        person,
-                        () => {
-                          setSelectedGift(null);
-                          setPanel(null);
-                        },
-                      )
-                    }
-                  />
-                </>
-              ) : null}
-              <Text style={s.body}>
-                Daily limit: 1,000 coins. Purchases and cash withdrawals are not
-                enabled.
-              </Text>
-            </>
+            <LiveGiftPicker
+              balance={liveBalance(state, person.id)}
+              recipient={room.host.name}
+              enabled={room.giftsEnabled}
+              busy={busy}
+              onRecharge={() => setPanel("recharge")}
+              onSend={(giftId) =>
+                void run({
+                  type: "gift",
+                  roomId: room.id,
+                  giftId,
+                  transactionId: `gift_${person.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                })
+              }
+            />
+          ) : null}
+          {panel === "recharge" ? (
+            <LiveRecharge
+              balance={liveBalance(state, person.id)}
+              onCredited={(pack, paymentId) =>
+                act(person, {
+                  type: "topUp",
+                  paymentId,
+                  coins: pack.coins,
+                  priceRwf: pack.priceRwf,
+                })
+              }
+              onDone={() => setPanel("gifts")}
+            />
+          ) : null}
+          {panel === "report" ? (
+            <LiveReportForm
+              room={room}
+              person={person}
+              broadcast={!!broadcast}
+              onDone={() => setPanel(null)}
+              onLeave={() => {
+                setPanel(null);
+                void run({ type: "leave", roomId: room.id }, person, onClose);
+              }}
+            />
           ) : null}
           {panel === "settings" ? (
             <>
@@ -907,6 +890,15 @@ export function LiveRoomView({
                     viewers.
                   </Text>
                 </>
+              ) : null}
+              {!host ? (
+                <LiveButton
+                  secondary
+                  danger
+                  icon="flag-outline"
+                  label="Report Live"
+                  onPress={() => setPanel("report")}
+                />
               ) : null}
               {host ? (
                 <>

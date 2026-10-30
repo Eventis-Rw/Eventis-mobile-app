@@ -97,10 +97,23 @@ test('hosts and guests cannot self-gift and host can pause gifting', () => {
   f.run(viewer, { type: 'request' }); f.run(host, { type: 'accept', person: viewer }); assert.throws(() => f.run(viewer, gift), /cannot gift/);
 });
 test('daily gifting cap is enforced independently of available balance', () => {
-  const f = fixture(); f.state.wallets.viewer = 2000;
-  f.run(viewer, { type: 'gift', giftId: 'encore', transactionId: 'a' }); f.run(viewer, { type: 'gift', giftId: 'encore', transactionId: 'b' });
-  assert.throws(() => f.run(viewer, { type: 'gift', giftId: 'spark', transactionId: 'c' }), /daily/);
-  assert.equal(f.state.wallets.viewer, 1000);
+  const f = fixture(); f.state.wallets.viewer = 100000;
+  f.run(viewer, { type: 'gift', giftId: 'galaxy', transactionId: 'a' }); f.run(viewer, { type: 'gift', giftId: 'sports_car', transactionId: 'b' });
+  assert.throws(() => f.run(viewer, { type: 'gift', giftId: 'finger_heart', transactionId: 'c' }), /daily/);
+  assert.equal(f.state.wallets.viewer, 100000 - 44999 - 5000);
+});
+test('top-ups credit the wallet once per payment and are persisted', () => {
+  const f = fixture(); const topUp = { type: 'topUp', paymentId: 'pay_1', coins: 700, priceRwf: 10000 };
+  f.run(viewer, topUp); f.run(viewer, topUp);
+  assert.equal(f.state.wallets.viewer, 500 + 700);
+  assert.equal(f.state.purchases.length, 1);
+  assert.throws(() => f.run(viewer, { ...topUp, paymentId: 'pay_2', coins: 0 }), /unavailable/);
+  assert.deepEqual(api.readLiveState(JSON.stringify(f.state), now), f.state);
+  assert.throws(() => api.readLiveState(JSON.stringify({ ...f.state, purchases: [{ id: 'x' }] }), now), /could not be read/);
+});
+test('every gift has a unique id and a positive whole coin price', () => {
+  assert.equal(new Set(api.LIVE_GIFTS.map(g => g.id)).size, api.LIVE_GIFTS.length);
+  assert.ok(api.LIVE_GIFTS.every(g => Number.isSafeInteger(g.coins) && g.coins > 0));
 });
 test('wall-clock expiration works after backgrounding and persisted reloads', () => {
   const f = fixture(); const reloaded = JSON.parse(JSON.stringify(f.state));

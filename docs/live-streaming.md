@@ -88,7 +88,7 @@ The development token server still permits broad access. Directory owner tokens 
 
 Host snapshots include bounded chat history and are resent on join/reconnect. Request acknowledgements, deduplication, connection timeouts, host-loss handling and wall-clock expiry prevent most stale UI states. The shared directory enforces capacity for API-managed sessions and provides tap-to-watch discovery. It cannot prevent someone using the open LiveKit development token server from creating rooms outside the API. Chat history remains bounded in host memory; verified daily/eligibility checks and server-enforced guest permissions are not connected. Host departure ends the viewing session after a short reconnect window.
 
-Gifts and the coin wallet remain in the local demo; the real transport does not claim to synchronize or settle money. Production requires authenticated token issuance, server-side host/guest permissions, moderation, room discovery, eligibility/capacity checks and a verified wallet ledger.
+Gifts and the coin wallet remain in the local demo; the real transport does not claim to synchronize or settle money. See [Gifts, coins and reports](#gifts-coins-and-reports). Production requires authenticated token issuance, server-side host/guest permissions, moderation, room discovery, eligibility/capacity checks and a verified wallet ledger.
 
 ## Verification
 
@@ -136,3 +136,11 @@ The shared broadcast stage uses LiveKit's active-speaker events to show a blue p
 Animations stop on silence, muting and unmount, use the native animation driver on phones, and become static indicators when reduced motion is enabled. These effects do not open another microphone or transmit audio samples.
 
 Two independent browser clients with synthetic speech verified detection, silence with an enabled microphone, mute/unmute, the camera-off avatar halo, reduced-motion styling, leaving the stage and session cleanup without runtime exceptions. Mobile TypeScript and Live tests passed. Physical-device animation performance remains a manual check.
+
+## Gifts, coins and reports
+
+The gift sheet lists 24 gifts from 1 to 44,999 coins in a four-column grid. Tapping a gift selects it; tapping **Send** on the selected tile sends it, or opens **Recharge** when the balance is too low. The daily gifting limit is 50,000 coins.
+
+Coins are sold in RWF packages (70 for RWF 1,000 up to 7,000 for RWF 100,000) paid with MTN MoMo or Airtel Money. The number is validated as a Rwandan mobile number for the selected network. With `EXPO_PUBLIC_USE_LIVE_PAYMENTS_API=true` the app calls `POST /api/v1/live/coins/checkout` and polls `GET /api/v1/live/coins/payments/:id`, the same contract as the FindLove membership checkout; coins are credited only after the payment succeeds, once per payment ID. Without the flag, a test top-up credits coins without charging. The API payments module is not implemented, so the flag must stay off until those endpoints exist. The wallet is still stored on the device; a production wallet must move to the server ledger.
+
+Viewers can report a Live from **Live options → Report Live**: choose a reason, optionally add details, and receive a reference. `EXPO_PUBLIC_USE_LIVE_REPORTS_API=true` posts to `POST /api/v1/live/rooms/:id/reports`; otherwise reports are kept on the device. The API moderation module is not implemented yet.

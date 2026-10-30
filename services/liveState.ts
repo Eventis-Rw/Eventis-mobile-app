@@ -1,11 +1,33 @@
-/** Local Live simulator. None of these client-side checks authorize a real broadcast or payment. */
-export const LIVE_LIMITS = { rooms: 5, guests: 4, durationMs: 30 * 60_000, dailySessions: 1, dailyGiftCoins: 1000 } as const;
+/** Local Live simulator. These client-side checks never authorize a real broadcast; wallets are credited only after a confirmed payment. */
+export const LIVE_LIMITS = { rooms: 5, guests: 4, durationMs: 30 * 60_000, dailySessions: 1, dailyGiftCoins: 50_000 } as const;
+export const LIVE_STARTING_COINS = 500;
 export const LIVE_GIFTS = [
+  { id: "rose", name: "Rose", emoji: "🌹", coins: 1 },
+  { id: "gg", name: "GG", emoji: "👍", coins: 1 },
+  { id: "finger_heart", name: "Finger Heart", emoji: "🫶", coins: 5 },
   { id: "spark", name: "Spark", emoji: "✨", coins: 10 },
+  { id: "coffee", name: "Coffee", emoji: "☕", coins: 15 },
+  { id: "mic_drop", name: "Mic Drop", emoji: "🎤", coins: 30 },
   { id: "applause", name: "Applause", emoji: "👏", coins: 50 },
+  { id: "shades", name: "Cool Shades", emoji: "😎", coins: 75 },
   { id: "spotlight", name: "Spotlight", emoji: "🌟", coins: 100 },
+  { id: "ingoma", name: "Ingoma", emoji: "🥁", coins: 150 },
+  { id: "guitar", name: "Guitar", emoji: "🎸", coins: 199 },
+  { id: "confetti", name: "Confetti", emoji: "🎊", coins: 299 },
+  { id: "crown", name: "Crown", emoji: "👑", coins: 399 },
   { id: "encore", name: "Encore", emoji: "🎉", coins: 500 },
+  { id: "fireworks", name: "Fireworks", emoji: "🎆", coins: 1000 },
+  { id: "trophy", name: "Trophy", emoji: "🏆", coins: 1500 },
+  { id: "diamond", name: "Diamond", emoji: "💎", coins: 2000 },
+  { id: "silverback", name: "Silverback", emoji: "🦍", coins: 2999 },
+  { id: "sports_car", name: "Sports Car", emoji: "🏎️", coins: 5000 },
+  { id: "kivu_cruise", name: "Kivu Cruise", emoji: "🛥️", coins: 7500 },
+  { id: "private_jet", name: "Private Jet", emoji: "🛩️", coins: 10000 },
+  { id: "volcano", name: "Virunga", emoji: "🌋", coins: 20000 },
+  { id: "lion", name: "Lion King", emoji: "🦁", coins: 29999 },
+  { id: "galaxy", name: "Galaxy", emoji: "🌌", coins: 44999 },
 ] as const;
+export type LiveGift = (typeof LIVE_GIFTS)[number];
 export type LivePerson = { id: string; name: string; avatar?: string };
 export type LiveMode = "video" | "voice";
 export type LiveMessage = { id: string; person: LivePerson; text: string; at: number; kind: "chat" | "gift" | "system" };
@@ -17,10 +39,13 @@ export type LiveRoom = {
 };
 export type LiveDraft = { title: string; mode: LiveMode; eventId?: string; cover?: string; chatEnabled: boolean; giftsEnabled: boolean };
 export type LiveTransaction = { id: string; roomId: string; senderId: string; hostId: string; guestIds: string[]; giftId: string; coins: number; at: number };
+export type LivePurchase = { id: string; userId: string; coins: number; priceRwf: number; at: number };
 export type LiveState = {
   version: 1; rooms: LiveRoom[]; queue: { person: LivePerson; draft: LiveDraft; at: number }[];
   wallets: Record<string, number>; transactions: LiveTransaction[]; starts: { userId: string; at: number }[];
+  purchases?: LivePurchase[];
 };
+export const liveBalance = (state: LiveState, userId: string) => state.wallets[userId] ?? LIVE_STARTING_COINS;
 export type LiveFacts = { views: number; publishedEvents: number; joinedAt: number; verifiedOrganizer: boolean; suspended: boolean; safetyApproved: boolean };
 export function liveEligibility(facts: LiveFacts, now = Date.now()) {
   const checks = [
@@ -47,7 +72,6 @@ export function createLiveState(now = Date.now()): LiveState {
   })) };
 }
 export function activeRooms(state: LiveState, now = Date.now()) { return state.rooms.filter(r => !r.endedAt && r.endsAt > now); }
-/** Renew the built-in previews on app reopen without resetting the member's saved activity. */
 export function refreshLiveSamples(state: LiveState, now = Date.now()): LiveState {
   const settled = tickLiveState(state, now);
   const templates = createLiveState(now).rooms;
@@ -60,7 +84,6 @@ export function refreshLiveSamples(state: LiveState, now = Date.now()): LiveStat
   });
   return { ...settled, rooms: [...otherRooms, ...samples] };
 }
-/** Validate persisted demo data before it reaches the UI. A bad cache is recoverable via Reset demo. */
 export function readLiveState(raw: string | null, now = Date.now()): LiveState {
   if (!raw) return createLiveState(now);
   const data = JSON.parse(raw);
@@ -76,7 +99,8 @@ export function readLiveState(raw: string | null, now = Date.now()): LiveState {
     Array.isArray(data.queue) && data.queue.every((q: any) => q && person(q.person) && draft(q.draft) && Number.isFinite(q.at)) &&
     Array.isArray(data.starts) && data.starts.every((s: any) => s && typeof s.userId === "string" && Number.isFinite(s.at)) &&
     data.wallets && typeof data.wallets === "object" && !Array.isArray(data.wallets) && Object.values(data.wallets).every(n => Number.isSafeInteger(n) && Number(n) >= 0) &&
-    Array.isArray(data.transactions) && data.transactions.every((t: any) => t && [t.id, t.roomId, t.senderId, t.hostId, t.giftId].every(v => typeof v === "string") && strings(t.guestIds) && Number.isSafeInteger(t.coins) && t.coins > 0 && Number.isFinite(t.at));
+    Array.isArray(data.transactions) && data.transactions.every((t: any) => t && [t.id, t.roomId, t.senderId, t.hostId, t.giftId].every(v => typeof v === "string") && strings(t.guestIds) && Number.isSafeInteger(t.coins) && t.coins > 0 && Number.isFinite(t.at)) &&
+    (data.purchases === undefined || Array.isArray(data.purchases) && data.purchases.every((p: any) => p && typeof p.id === "string" && typeof p.userId === "string" && Number.isSafeInteger(p.coins) && p.coins > 0 && Number.isSafeInteger(p.priceRwf) && Number.isFinite(p.at)));
   ensure(valid, "Your Live demo data could not be read. Reset the demo to start again.");
   return tickLiveState(data as LiveState, now);
 }
@@ -87,17 +111,26 @@ export function tickLiveState(state: LiveState, now = Date.now()): LiveState {
 export type LiveAction =
   | { type: "start"; draft: LiveDraft }
   | { type: "cancelQueue" }
+  | { type: "topUp"; paymentId: string; coins: number; priceRwf: number }
   | { type: "join" | "leave" | "end" | "request" | "cancelRequest" | "acceptInvite" | "declineInvite" | "leaveSeat" | "react"; roomId: string }
   | { type: "message"; roomId: string; text: string }
   | { type: "accept" | "reject" | "invite" | "remove" | "mute" | "unmute" | "block"; roomId: string; person: LivePerson }
   | { type: "settings"; roomId: string; chatEnabled: boolean; giftsEnabled: boolean }
   | { type: "gift"; roomId: string; giftId: string; transactionId: string };
 
-/** Pure state transitions keep authorization, limits and accounting together. */
 export function reduceLive(previous: LiveState, actor: LivePerson, action: LiveAction, now = Date.now()): LiveState {
   const state: LiveState = JSON.parse(JSON.stringify(tickLiveState(previous, now)));
   ensure(actor.id && actor.name, "Sign in to use Live.");
   if (action.type === "cancelQueue") { state.queue = state.queue.filter(q => q.person.id !== actor.id); return state; }
+  if (action.type === "topUp") {
+    ensure(action.paymentId.trim(), "A payment reference is required.");
+    ensure(Number.isSafeInteger(action.coins) && action.coins > 0, "This coin package is unavailable.");
+    state.purchases ??= [];
+    if (state.purchases.some(p => p.id === action.paymentId)) return state;
+    state.wallets[actor.id] = liveBalance(state, actor.id) + action.coins;
+    state.purchases.push({ id: action.paymentId, userId: actor.id, coins: action.coins, priceRwf: action.priceRwf, at: now });
+    return state;
+  }
   if (action.type === "start") {
     ensure(action.draft.title.trim().length > 0 && action.draft.title.trim().length <= 80, "Add a title of up to 80 characters.");
     ensure(!activeRooms(state, now).some(r => r.host.id === actor.id), "You already have an active room.");
@@ -178,9 +211,9 @@ export function reduceLive(previous: LiveState, actor: LivePerson, action: LiveA
       const gift = LIVE_GIFTS.find(g => g.id === action.giftId);
       ensure(gift, "This gift is unavailable."); if (!gift) return state;
       const spent = state.transactions.filter(t => t.senderId === actor.id && day(t.at) === day(now)).reduce((n, t) => n + t.coins, 0);
-      ensure(spent + gift.coins <= LIVE_LIMITS.dailyGiftCoins, "You have reached the daily demo gift limit.");
-      const balance = state.wallets[actor.id] ?? 500;
-      ensure(balance >= gift.coins, "Not enough demo coins. Real top-ups are not available yet.");
+      ensure(spent + gift.coins <= LIVE_LIMITS.dailyGiftCoins, "You have reached the daily gifting limit.");
+      const balance = liveBalance(state, actor.id);
+      ensure(balance >= gift.coins, "Not enough coins. Recharge to send this gift.");
       state.wallets[actor.id] = balance - gift.coins;
       state.transactions.push({ id: action.transactionId, roomId: room.id, senderId: actor.id, hostId: room.host.id, guestIds: room.guests.map(p => p.id), giftId: gift.id, coins: gift.coins, at: now });
       room.messages.push({ id: action.transactionId, person: actor, text: `${gift.emoji} sent ${gift.name} · ${gift.coins} coins`, at: now, kind: "gift" }); break;

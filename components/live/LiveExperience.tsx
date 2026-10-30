@@ -23,6 +23,7 @@ import {
   liveEligibility,
   LIVE_GIFTS,
   LIVE_LIMITS,
+  liveBalance,
   type LiveDraft,
   type LivePerson,
   type LiveRoom,
@@ -39,6 +40,8 @@ import { LiveRoomView } from "./LiveRoomView";
 import type { PublisherEvent } from "@/services/publisherService";
 import { LiveBroadcastEntry } from "./LiveBroadcastEntry";
 import { LiveDiscovery } from "./LiveDiscovery";
+import { CoinBalance, LiveRecharge } from "./LiveCoins";
+import { formatRwf } from "@/services/liveCoinsService";
 
 export default function LiveScreen() {
   const { user } = useAuth();
@@ -82,7 +85,7 @@ function LiveExperience({ user }: { user: User }) {
     avatar: user.organisation?.logoUrl ?? user.avatarUrl,
   };
   const [panel, setPanel] = useState<
-    "access" | "wallet" | "setup" | "test" | null
+    "access" | "wallet" | "recharge" | "setup" | "test" | null
   >(null);
   const [resetConfirmed, setResetConfirmed] = useState(false);
   const [broadcastTab, setBroadcastTab] = useState<"host" | null>(null);
@@ -429,36 +432,59 @@ function LiveExperience({ user }: { user: User }) {
           </Text>
         </LiveSheet>
       ) : null}
+      {panel === "recharge" ? (
+        <LiveSheet title="Recharge coins" onClose={() => setPanel("wallet")}>
+          <LiveRecharge
+            balance={liveBalance(state, user.id)}
+            onCredited={(pack, paymentId) =>
+              act(person, {
+                type: "topUp",
+                paymentId,
+                coins: pack.coins,
+                priceRwf: pack.priceRwf,
+              })
+            }
+            onDone={() => setPanel("wallet")}
+          />
+        </LiveSheet>
+      ) : null}
       {panel === "wallet" ? (
         <LiveSheet title="Live wallet" onClose={() => setPanel(null)}>
           <View style={s.card}>
-            <Text style={s.eyebrow}>SPENDING BALANCE</Text>
-            <Text style={s.title}>
-              {state.wallets[user.id] ?? 500}{" "}
-              <Text style={s.body}>demo coins</Text>
-            </Text>
+            <Text style={s.eyebrow}>COIN BALANCE</Text>
+            <CoinBalance
+              balance={liveBalance(state, user.id)}
+              onRecharge={() => setPanel("recharge")}
+            />
             <Text style={s.body}>
-              500 test coins are provided once per account on this device. They
-              have no cash value and cannot be withdrawn.
+              Use coins to send gifts in Lives. Coins have no cash value and
+              can't be withdrawn.
             </Text>
           </View>
-          <Text style={s.heading}>Coin packages</Text>
-          <View style={s.wrap}>
-            {[100, 500, 1000, 5000].map((n) => (
-              <View key={n} style={[s.card, { width: "47%" }]}>
-                <Text style={s.label}>{n.toLocaleString()} coins</Text>
-                <Text style={s.body}>Pricing coming soon</Text>
-              </View>
-            ))}
-          </View>
-          <Text style={s.body}>
-            Card and mobile money purchases will be available after payment
-            integration. No money is charged in this demo.
-          </Text>
+          {(state.purchases ?? []).some((p) => p.userId === user.id) ? (
+            <>
+              <Text style={s.heading}>Recharges</Text>
+              {[...(state.purchases ?? [])]
+                .filter((p) => p.userId === user.id)
+                .reverse()
+                .map((p) => (
+                  <View key={p.id} style={s.card}>
+                    <Text style={s.label}>
+                      +{p.coins.toLocaleString("en-US")} coins ·{" "}
+                      {formatRwf(p.priceRwf)}
+                    </Text>
+                    <Text style={s.body}>{new Date(p.at).toLocaleString()}</Text>
+                    <Text selectable style={[s.body, { fontSize: 11 }]}>
+                      Reference: {p.id}
+                    </Text>
+                  </View>
+                ))}
+            </>
+          ) : null}
           <Text style={s.heading}>Earnings</Text>
           <View style={s.card}>
             <Text style={s.label}>
-              {pendingCoins} demo gift coins received in your rooms
+              {pendingCoins.toLocaleString("en-US")} gift coins received in your rooms
             </Text>
             <Text style={s.body}>
               These are gross gifts, before allocation. Host, guest and Eventis

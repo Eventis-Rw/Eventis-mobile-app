@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -52,6 +53,13 @@ import { LiveGuestPreparation } from "./LiveGuestPreparation";
 import { LiveCameraPreview } from "./LiveCameraPreview";
 
 type AccessCheck = { label: string; met: boolean; value?: string };
+const TITLE_IDEAS = [
+  "Backstage before the show",
+  "Q&A with the crew",
+  "Doors open soon",
+  "Soundcheck vibes",
+  "Meet the performers",
+];
 export function LiveBroadcastEntry({
   person,
   onClose,
@@ -82,6 +90,7 @@ export function LiveBroadcastEntry({
   const [queue, setQueue] = useState<LiveQueueTicket | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [countdown, setCountdown] = useState<number | null>(null);
   const operation = useRef("");
   const mounted = useRef(true);
   const lock = useRef(false);
@@ -211,16 +220,33 @@ export function LiveBroadcastEntry({
       if (mounted.current) setBusy(false);
     }
   };
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown === 0) {
+      setCountdown(null);
+      void start();
+      return;
+    }
+    if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => {});
+    const timer = setTimeout(() => setCountdown((n) => (n === null ? n : n - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
   const flip = () => {
     setCameraReady(false);
     setFacing((f) => (f === "back" ? "front" : "back"));
   };
-  const disabled =
-    busy ||
-    !!unavailable ||
-    !liveProject.tokenServerId ||
-    !title.trim() ||
-    (mode === "video" && !cameraReady);
+  const setupProblem = unavailable
+    ? "Camera preview only. Open the Eventis development app to broadcast."
+    : !liveProject.tokenServerId
+      ? "Connect your LiveKit project to start broadcasting."
+      : "";
+  const hint = !title.trim()
+    ? "Add a title so viewers know what’s happening."
+    : mode === "video" && !cameraReady
+      ? "Waiting for your camera…"
+      : "";
+  const disabled = busy || countdown !== null || !!setupProblem || !!hint;
+  const ideas = event ? [`Live from ${event.title}`, ...TITLE_IDEAS] : TITLE_IDEAS;
   return (
     <Modal
       animationType="slide"
@@ -491,6 +517,28 @@ export function LiveBroadcastEntry({
                     </View>
                     <Text style={entry.charCount}>{title.length}/80</Text>
                   </View>
+                  {!title.trim() ? (
+                    <ScrollView
+                      horizontal
+                      keyboardShouldPersistTaps="handled"
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 8 }}
+                    >
+                      {ideas.map((idea) => (
+                        <Pressable
+                          key={idea}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Use title: ${idea}`}
+                          onPress={() => setTitle(idea.slice(0, 80))}
+                          style={entry.idea}
+                        >
+                          <Text numberOfLines={1} style={entry.ideaText}>
+                            {idea}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  ) : null}
                   <View style={[s.row, { justifyContent: "space-between" }]}>
                     <Pressable
                       accessibilityRole="button"
@@ -532,15 +580,16 @@ export function LiveBroadcastEntry({
                       </Text>
                     </Pressable>
                   </View>
-                  {unavailable || !liveProject.tokenServerId || error ? (
+                  {error || setupProblem ? (
                     <Text
                       accessibilityRole={error ? "alert" : undefined}
                       style={entry.setupNotice}
                     >
-                      {error ||
-                        (unavailable
-                          ? "Camera preview only. Open the Eventis development app to broadcast."
-                          : "Connect your LiveKit project to start broadcasting.")}
+                      {error || setupProblem}
+                    </Text>
+                  ) : hint ? (
+                    <Text style={[entry.setupFootText, { textAlign: "center", fontSize: 12 }]}>
+                      {hint}
                     </Text>
                   ) : null}
                   <Pressable
@@ -548,7 +597,7 @@ export function LiveBroadcastEntry({
                     accessibilityLabel="Start broadcasting"
                     accessibilityState={{ disabled }}
                     disabled={disabled}
-                    onPress={() => void start()}
+                    onPress={() => setCountdown(3)}
                     style={({ pressed }) => [
                       entry.goLive,
                       { opacity: disabled ? 0.45 : pressed ? 0.7 : 1 },
@@ -571,6 +620,17 @@ export function LiveBroadcastEntry({
               </View>
             </KeyboardAvoidingView>
           )}
+          {countdown !== null ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Going live in ${countdown}. Tap to cancel.`}
+              onPress={() => setCountdown(null)}
+              style={entry.countdown}
+            >
+              <Text style={entry.countdownNumber}>{countdown || ""}</Text>
+              <Text style={entry.countdownText}>Going live · Tap to cancel</Text>
+            </Pressable>
+          ) : null}
           {eventPicker ? (
             <LiveSheet
               title="Link an event"
@@ -589,18 +649,32 @@ export function LiveBroadcastEntry({
               />
               {events.length ? (
                 events.map((e) => (
-                  <LiveButton
-                    secondary
+                  <Pressable
                     key={e.id}
-                    icon={
-                      eventId === e.id ? "checkmark-circle" : "calendar-outline"
-                    }
-                    label={e.title}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: eventId === e.id }}
                     onPress={() => {
                       setEventId(e.id);
                       setEventPicker(false);
                     }}
-                  />
+                    style={[
+                      entry.eventRow,
+                      eventId === e.id ? { borderColor: c.blue } : null,
+                    ]}
+                  >
+                    <Ionicons name="calendar-outline" size={20} color={c.blue} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text numberOfLines={1} style={[s.label, { fontSize: 14 }]}>
+                        {e.title}
+                      </Text>
+                      <Text numberOfLines={1} style={[s.body, { fontSize: 12 }]}>
+                        {e.date} · {e.location}
+                      </Text>
+                    </View>
+                    {eventId === e.id ? (
+                      <Ionicons name="checkmark-circle" size={20} color={c.blue} />
+                    ) : null}
+                  </Pressable>
                 ))
               ) : (
                 <Text style={s.body}>
@@ -884,18 +958,11 @@ const entry = StyleSheet.create({
     fontSize: 17,
     letterSpacing: 0.3,
   },
-  setupFoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
   setupFootText: {
     color: "#FFFFFF99",
     fontSize: 10,
     fontFamily: "Inter_400Regular",
   },
-  joinLink: { color: "#FFF", fontSize: 10, fontFamily: "Inter_600SemiBold" },
   voiceCanvas: {
     flex: 1,
     alignItems: "center",
@@ -917,47 +984,46 @@ const entry = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   voiceWave: { flexDirection: "row", height: 48, alignItems: "center", gap: 5 },
-  joinContent: {
-    flexGrow: 1,
+  idea: {
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 16,
     justifyContent: "center",
-    paddingHorizontal: 26,
-    paddingTop: 26,
-    gap: 20,
+    backgroundColor: "#FFFFFF1A",
+    borderWidth: 1,
+    borderColor: "#FFFFFF26",
   },
-  joinIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    backgroundColor: "#38BDF812",
+  ideaText: { color: "#FFF", fontSize: 12, fontFamily: "Inter_500Medium" },
+  countdown: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "#000A",
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
   },
-  joinTitle: {
+  countdownNumber: {
     color: "#FFF",
-    fontSize: 30,
-    letterSpacing: -0.8,
-    fontFamily: "Inter_700Bold",
+    fontSize: 120,
+    lineHeight: 140,
+    fontFamily: "Inter_800ExtraBold",
   },
-  joinDescription: {
-    color: c.muted,
-    fontFamily: "Inter_400Regular",
-    fontSize: 14,
-    lineHeight: 22,
-    maxWidth: 300,
+  countdownText: {
+    color: "#FFFFFFCC",
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
-  codeField: {
+  eventRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#FFFFFF20",
-    backgroundColor: "#FFFFFF08",
-    borderRadius: 18,
-  },
-  paste: { padding: 15 },
-  joinPrivacy: {
-    color: c.muted,
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
+    borderColor: c.line,
+    backgroundColor: c.raised,
   },
 });

@@ -16,10 +16,100 @@ import { getEventImage } from "@/constants/eventImages";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import type { LiveListing } from "@/services/liveDirectoryService";
-import type { LiveRoom } from "@/services/liveState";
+import type { LivePerson, LiveRoom } from "@/services/liveState";
 import { LiveAvatar } from "./LivePrimitives";
 
-/** The original Event Streams layout, backed by the shared Live flows. */
+function formatViewers(n: number) {
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K` : String(n);
+}
+
+function LiveTile({
+  title,
+  host,
+  cover,
+  mode,
+  badge,
+  meta,
+  disabled,
+  label,
+  onPress,
+}: {
+  title: string;
+  host: LivePerson;
+  cover: string;
+  mode: "video" | "voice";
+  badge: { text: string; live: boolean };
+  meta: string;
+  disabled?: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.tile,
+        { opacity: disabled ? 0.5 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+      ]}
+    >
+      <Image
+        source={getEventImage(cover)}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
+      />
+      <LinearGradient
+        colors={["#0007", "#0000", "#0000", "#000D"]}
+        locations={[0, 0.3, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.tileTop}>
+        <View style={[styles.badge, { backgroundColor: badge.live ? "#EF4444" : "#0F172ACC" }]}>
+          {badge.live ? <View style={styles.dot} /> : null}
+          <Text style={styles.badgeText}>{badge.text}</Text>
+        </View>
+        <View style={styles.pill}>
+          <Ionicons
+            name={mode === "voice" ? "mic" : "eye"}
+            size={11}
+            color="#FFF"
+          />
+          <Text style={styles.pillText}>{meta}</Text>
+        </View>
+      </View>
+      <View style={styles.tileBottom}>
+        <Text numberOfLines={2} style={styles.tileTitle}>
+          {title}
+        </Text>
+        <View style={styles.hostRow}>
+          <LiveAvatar person={host} size={20} />
+          <Text numberOfLines={1} style={styles.hostName}>
+            {host.name}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function SectionHeader({ title, count }: { title: string; count: string }) {
+  const colors = useColors();
+  return (
+    <View style={styles.sectionRow}>
+      <View style={styles.accent} />
+      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+        {title}
+      </Text>
+      <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>
+        {count}
+      </Text>
+    </View>
+  );
+}
+
 export function LiveDiscovery({
   rooms,
   busy,
@@ -59,19 +149,27 @@ export function LiveDiscovery({
       >
         <View style={styles.headerRow}>
           <View style={styles.titleWrap}>
-            <View style={styles.row}>
-              <View style={styles.redBadge}>
-                <View style={styles.dot} />
-                <Text style={styles.badgeText}>LIVE</Text>
-              </View>
-              <Text style={[styles.title, { color: colors.foreground }]}>
-                Event Streams
-              </Text>
-            </View>
-            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              Backstage moments, artist Q&As & community chats
+            <Text style={[styles.title, { color: colors.foreground }]}>
+              Live
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={[styles.subtitle, { color: colors.mutedForeground }]}
+            >
+              Backstage moments, Q&As and community chats
             </Text>
           </View>
+          {onWallet ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open coin wallet"
+              onPress={onWallet}
+              hitSlop={6}
+              style={[styles.iconButton, { borderColor: colors.border }]}
+            >
+              <Ionicons name="wallet-outline" size={19} color={colors.foreground} />
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Go Live"
@@ -99,267 +197,95 @@ export function LiveDiscovery({
         }
         contentContainerStyle={styles.content}
       >
-        <View style={styles.row}>
-          <View style={styles.accent} />
-          <Text
-            style={[styles.sectionTitle, { color: colors.foreground, flex: 1 }]}
-          >
-            Live now
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            {liveRooms.length} broadcasting
-          </Text>
-        </View>
+        <SectionHeader title="Live now" count={`${liveRooms.length} live`} />
         {liveError ? (
-          <GlassSurface style={styles.joinCard}>
+          <GlassSurface style={styles.stateCard}>
+            <Ionicons name="cloud-offline-outline" size={22} color={colors.mutedForeground} />
             <Text
               accessibilityRole="alert"
-              style={[styles.subtitle, { color: colors.foreground }]}
+              style={[styles.stateText, { color: colors.foreground, flex: 1 }]}
             >
               {liveError}
             </Text>
             <Pressable
               accessibilityRole="button"
               onPress={onRefresh}
-              style={[styles.joinButton, { backgroundColor: colors.primary }]}
+              style={[styles.retry, { backgroundColor: colors.primary }]}
             >
-              <Text style={styles.joinText}>Retry Live discovery</Text>
+              <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </GlassSurface>
         ) : null}
         {liveLoading && !liveRooms.length ? (
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
         ) : null}
         {!liveLoading && !liveError && !liveRooms.length ? (
-          <GlassSurface style={styles.joinCard}>
-            <View style={styles.row}>
-              <Ionicons name="radio-outline" size={25} color={colors.primary} />
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                The next moment starts here.
+          <GlassSurface style={styles.stateCard}>
+            <Ionicons name="radio-outline" size={22} color={colors.primary} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={[styles.stateTitle, { color: colors.foreground }]}>
+                No one is live right now
+              </Text>
+              <Text style={[styles.stateText, { color: colors.mutedForeground }]}>
+                Start a Live to share your event, or pull down to refresh.
               </Text>
             </View>
-            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              No events are broadcasting right now. Start a Live to share your
-              event, or explore the previews below.
-            </Text>
           </GlassSurface>
         ) : null}
-        {liveRooms.map((room) => (
-          <Pressable
-            key={room.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Watch Live: ${room.title}`}
-            onPress={() => onWatch?.(room)}
-            style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
-          >
-            <GlassSurface style={styles.streamCard}>
-              <View style={styles.media}>
-                <Image
-                  source={getEventImage(
-                    room.event?.image ??
-                      (room.mode === "voice" ? "tech" : "concert"),
-                  )}
-                  style={StyleSheet.absoluteFill}
-                  resizeMode="cover"
-                />
-                <LinearGradient
-                  colors={["#0004", "#0000", "#000C"]}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={[styles.row, { justifyContent: "space-between" }]}>
-                  <View style={styles.redBadge}>
-                    <View style={styles.dot} />
-                    <Text style={styles.badgeText}>LIVE</Text>
-                  </View>
-                  <View style={styles.modeBadge}>
-                    <Ionicons name="eye-outline" size={14} color="#FFF" />
-                    <Text style={styles.badgeText}>{room.viewers}</Text>
-                  </View>
-                </View>
-                <View style={styles.row}>
-                  <Ionicons
-                    name={
-                      room.mode === "voice" ? "mic-outline" : "videocam-outline"
-                    }
-                    size={16}
-                    color="#FFF"
-                  />
-                  <Text numberOfLines={1} style={styles.previewLabel}>
-                    {room.event?.title ?? "Live conversation"}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.details}>
-                <View style={styles.row}>
-                  <LiveAvatar person={room.host} size={40} />
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.host, { color: colors.foreground }]}
-                    >
-                      {room.host.name}
-                    </Text>
-                    <Text
-                      numberOfLines={2}
-                      style={[styles.streamTitle, { color: colors.foreground }]}
-                    >
-                      {room.title}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.joinButton,
-                      {
-                        backgroundColor: colors.primary,
-                        paddingHorizontal: 14,
-                      },
-                    ]}
-                  >
-                    <Ionicons name="play" size={14} color="#FFF" />
-                    <Text style={styles.joinText}>Watch</Text>
-                  </View>
-                </View>
-              </View>
-            </GlassSurface>
-          </Pressable>
-        ))}
+        {liveRooms.length ? (
+          <View style={styles.grid}>
+            {liveRooms.map((room) => (
+              <LiveTile
+                key={room.id}
+                label={`Watch ${room.host.name}: ${room.title}`}
+                title={room.title}
+                host={room.host}
+                cover={room.event?.image ?? (room.mode === "voice" ? "tech" : "concert")}
+                mode={room.mode}
+                badge={{ text: "LIVE", live: true }}
+                meta={formatViewers(room.viewers)}
+                onPress={() => onWatch?.(room)}
+              />
+            ))}
+          </View>
+        ) : null}
         {children}
-        <View style={styles.row}>
-          <View style={styles.accent} />
-          <Text
-            style={[styles.sectionTitle, { color: colors.foreground, flex: 1 }]}
+        {rooms.length ? (
+          <>
+            <SectionHeader title="Try a demo room" count={`${rooms.length} demos`} />
+            <Text style={[styles.stateText, { color: colors.mutedForeground, marginTop: -6 }]}>
+              Practice chatting and sending gifts. These are not real broadcasts.
+            </Text>
+            <View style={styles.grid}>
+              {rooms.map((room) => (
+                <LiveTile
+                  key={room.id}
+                  label={`Open demo room: ${room.title}`}
+                  title={room.title}
+                  host={room.host}
+                  cover={room.cover ?? (room.mode === "voice" ? "tech" : "concert")}
+                  mode={room.mode}
+                  badge={{ text: "DEMO", live: false }}
+                  meta={room.mode === "voice" ? "Voice" : "Video"}
+                  disabled={busy}
+                  onPress={() => onRoom(room)}
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
+        {onDemo ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onDemo}
+            style={styles.footerButton}
           >
-            Explore room previews
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            {rooms.length} demos
-          </Text>
-        </View>
-        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-          Sample rooms for trying chat and gifts. These are not live broadcasts.
-        </Text>
-        {rooms.map((room) => (
-          <GlassSurface key={room.id} style={styles.streamCard}>
-            <View style={styles.media}>
-              <Image
-                source={getEventImage(
-                  room.mode === "voice" ? "tech" : "concert",
-                )}
-                style={StyleSheet.absoluteFill}
-                resizeMode="cover"
-              />
-              {room.cover ? (
-                <Image
-                  source={getEventImage(room.cover)}
-                  style={StyleSheet.absoluteFill}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    { backgroundColor: "#0F172A" },
-                  ]}
-                />
-              )}
-              <LinearGradient
-                colors={["rgba(0,0,0,0.3)", "transparent", "rgba(0,0,0,0.85)"]}
-                style={StyleSheet.absoluteFill}
-              />
-              <View style={[styles.row, { justifyContent: "space-between" }]}>
-                <View style={styles.redBadge}>
-                  <Text style={styles.badgeText}>DEMO</Text>
-                </View>
-                <View style={styles.modeBadge}>
-                  <Ionicons
-                    name={
-                      room.mode === "voice" ? "mic-outline" : "videocam-outline"
-                    }
-                    size={14}
-                    color="#FFF"
-                  />
-                  <Text style={styles.badgeText}>
-                    {room.mode === "voice" ? "Voice room" : "Video room"}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.previewLabel}>Interactive room preview</Text>
-            </View>
-            <View style={styles.details}>
-              <View style={styles.row}>
-                <LiveAvatar person={room.host} size={40} />
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={[styles.host, { color: colors.foreground }]}>
-                    {room.host.name}
-                  </Text>
-                  <Text
-                    style={[styles.subtitle, { color: colors.mutedForeground }]}
-                  >
-                    {room.guests.length} guests · Demo room
-                  </Text>
-                </View>
-              </View>
-              <Text style={[styles.streamTitle, { color: colors.foreground }]}>
-                {room.title}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Open demo room: ${room.title}`}
-                accessibilityState={{ disabled: busy }}
-                disabled={busy}
-                onPress={() => onRoom(room)}
-                style={({ pressed }) => [
-                  styles.joinButton,
-                  {
-                    backgroundColor: colors.primary,
-                    opacity: busy ? 0.4 : pressed ? 0.8 : 1,
-                  },
-                ]}
-              >
-                <Ionicons name="chatbubbles" size={17} color="#FFF" />
-                <Text style={styles.joinText}>Open demo room</Text>
-                <Ionicons name="arrow-forward" size={17} color="#FFF" />
-              </Pressable>
-            </View>
-          </GlassSurface>
-        ))}
-        <View style={[styles.row, { justifyContent: "space-between" }]}>
-          {onWallet ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open Live wallet"
-              onPress={onWallet}
-              style={styles.footerButton}
-            >
-              <Ionicons
-                name="wallet-outline"
-                size={19}
-                color={colors.primary}
-              />
-              <Text style={[styles.subtitle, { color: colors.foreground }]}>
-                Demo wallet
-              </Text>
-            </Pressable>
-          ) : null}
-          {onDemo ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={onDemo}
-              style={styles.footerButton}
-            >
-              <Ionicons
-                name="flask-outline"
-                size={18}
-                color={colors.mutedForeground}
-              />
-              <Text
-                style={[styles.subtitle, { color: colors.mutedForeground }]}
-              >
-                Demo controls
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+            <Ionicons name="flask-outline" size={16} color={colors.mutedForeground} />
+            <Text style={[styles.stateText, { color: colors.mutedForeground }]}>
+              Demo controls
+            </Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -368,85 +294,115 @@ export function LiveDiscovery({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
     borderWidth: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  titleWrap: { flex: 1, gap: 6 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
-  redBadge: {
-    flexDirection: "row",
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  titleWrap: { flex: 1, gap: 2 },
+  title: { fontSize: 26, fontFamily: "Inter_700Bold", letterSpacing: -0.6 },
+  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "#EF4444",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    justifyContent: "center",
   },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#FFF" },
-  badgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", color: "#FFF" },
-  title: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.4,
-    flexShrink: 1,
-  },
-  subtitle: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
   goLive: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 13,
-    minHeight: 44,
-    borderRadius: 99,
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#EF4444",
   },
   goLiveText: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#FFF" },
-  content: { padding: 20, gap: 16, paddingBottom: 36 },
-  joinCard: { borderRadius: 22, padding: 16, gap: 14 },
-  sectionTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  content: { padding: 16, gap: 14, paddingBottom: 40 },
+  sectionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   accent: { width: 3, height: 16, borderRadius: 2, backgroundColor: "#EF4444" },
-  streamCard: { borderRadius: 22 },
-  media: {
-    width: "100%",
-    aspectRatio: 16 / 9,
-    padding: 12,
+  sectionTitle: { flex: 1, fontSize: 17, fontFamily: "Inter_700Bold" },
+  sectionCount: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
+    rowGap: 12,
+  },
+  tile: {
+    width: "48.5%",
+    aspectRatio: 3 / 4,
+    borderRadius: 18,
     overflow: "hidden",
+    backgroundColor: "#0F172A",
+    justifyContent: "space-between",
   },
-  modeBadge: {
+  tileTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 8,
+  },
+  badge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(0,0,0,.6)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
-  previewLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "#FFF" },
-  details: { padding: 16, gap: 12 },
-  host: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  streamTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    lineHeight: 21,
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#FFF" },
+  badgeText: {
+    fontSize: 9,
+    fontFamily: "Inter_800ExtraBold",
+    color: "#FFF",
+    letterSpacing: 0.4,
   },
-  joinButton: {
+  pill: {
     flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
-    gap: 8,
-    padding: 12,
-    borderRadius: 14,
-    minHeight: 44,
+    gap: 4,
+    backgroundColor: "#0008",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
-  joinText: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#FFF" },
+  pillText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#FFF" },
+  tileBottom: { padding: 10, gap: 7 },
+  tileTitle: {
+    color: "#FFF",
+    fontSize: 13,
+    lineHeight: 17,
+    fontFamily: "Inter_700Bold",
+    textShadowColor: "#0008",
+    textShadowRadius: 4,
+  },
+  hostRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  hostName: {
+    flex: 1,
+    color: "#FFFFFFD9",
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+  },
+  stateCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 18,
+    padding: 14,
+  },
+  stateTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  stateText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
+  retry: { paddingHorizontal: 14, height: 34, borderRadius: 17, justifyContent: "center" },
+  retryText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#FFF" },
   footerButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    alignSelf: "center",
+    gap: 6,
     minHeight: 44,
   },
 });
