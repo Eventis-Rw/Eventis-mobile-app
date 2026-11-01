@@ -68,7 +68,7 @@ This branch currently uses Android SDK 36, Build Tools 36.0.0 (plus 35.0.0 for E
 
 1. On phone A, select **Go Live** and grant camera permission. Verify that the preview shows the rear camera, then test Flip. Enter a title, choose camera/voice mode and tap **Start broadcasting**. Grant microphone permission. The selected camera direction carries over to the broadcast.
 2. On phone B, open **Live** and tap A’s broadcast. Alternatively, open its shared Live link. Viewers enter without publishing audio/video. Confirm the linked event details are available through **View event**.
-3. On B, request to join the stage. On A, open Participants and accept. B sees a private guest preview, chooses microphone/camera settings, then confirms **Join broadcast**. Verify **Stay watching** releases the guest spot without publishing. Test invitation acceptance/decline, removal, chat mute and block too.
+3. On B, tap an empty seat (the **+** circles under the title) to request to join. Tap it again to cancel. On A, tap an empty seat or open Participants and accept. B sees a private guest preview, chooses microphone/camera settings, then confirms **Join broadcast**. Verify **Stay watching** releases the guest spot without publishing. Test invitation acceptance/decline, removal, chat mute and block too.
 4. Test microphone mute, camera on/off, front/back flip, live chat, reactions, host ending, viewer leaving, and reconnection.
 5. Backgrounding disables local capture. Re-enable media explicitly when back in the app. Leaving the stage, removal and backgrounding unpublish and stop capture tracks. Leaving/unmounting disconnects and stops tracks/audio session.
 
@@ -129,7 +129,12 @@ The original room-code parser remains as an internal compatibility helper and te
 
 Final flow checks also verified that queued hosts release their preview tracks, a free slot does not auto-start a broadcast, and **Start my Live** begins a session only after explicit confirmation. The API verification command passed lint, TypeScript, boundary checks, money guards, 23 tests and compilation. Mobile TypeScript/Live tests and an Android JavaScript export passed. Browser CORS explicitly allows the methods used for queue cancellation and ending sessions.
 
-## Speaking indicators
+## Seats and speaking indicators
+
+Four guest seats sit under the room title, like TikTok multi-guest. Viewers tap an empty **+** seat to request to join; the seat shows **Requested** until the host answers, and tapping it again cancels. Hosts tap an empty seat to invite someone. Guests tap their own seat to leave the stage. Occupied seats and the host avatar in the header glow and pulse while that person speaks, and show a red badge when their microphone is off.
+
+Speaking and microphone state come from a `voice` snapshot of plain values that `useLiveBroadcast` rebuilds inside LiveKit's event handlers. React Compiler drops memo dependencies a component doesn't read, so components must not read `isSpeaking` from LiveKit's mutable participant objects during render. `LiveBroadcastStage` and `BroadcastVideo` opt out with `"use no memo"` because they read mutable track state.
+
 
 The shared broadcast stage uses LiveKit's active-speaker events to show a blue pulsing avatar halo when a host or guest speaks without video. Video tiles show animated activity bars and a blue outline. Muted microphones and disconnected sessions cannot show speaking activity. Participant media and speech values are snapshotted on SDK revisions so React sees updates to LiveKit's mutable participant objects. Guest avatars reuse the room's profile data.
 

@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Track, type Participant } from "livekit-client";
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import type { LiveVoice } from "@/hooks/useLiveBroadcast";
 import type { LivePerson } from "@/services/liveState";
 import { BroadcastVideo } from "./BroadcastVideo";
 import { LiveAvatar, liveColors as c } from "./LivePrimitives";
@@ -44,25 +45,26 @@ function StageTile({ member, revision, compact, showTag, mode }: {
   </View>;
 }
 
-export function LiveBroadcastStage({ participants, revision, hostId, host, guests, mode, connected }: {
-  participants: Participant[]; revision: number; hostId: string; host: LivePerson; guests: LivePerson[]; mode: "video" | "voice"; connected: boolean;
+export function LiveBroadcastStage({ participants, revision, voice, hostId, host, guests, mode, connected }: {
+  participants: Participant[]; revision: number; voice: LiveVoice; hostId: string; host: LivePerson; guests: LivePerson[]; mode: "video" | "voice"; connected: boolean;
 }) {
+  "use no memo";
   const members = useMemo(() => {
     const ids = [hostId, ...participants.filter(p => p.identity !== hostId).map(p => p.identity)];
     return ids.map(id => {
       const participant = participants.find(p => p.identity === id);
       const camera = participant?.getTrackPublication(Track.Source.Camera);
-      const microphone = !!participant?.isMicrophoneEnabled;
+      const microphone = !!voice[id]?.microphone;
       return {
         participant,
         person: id === hostId ? host : guests.find(p => p.id === id) ?? { id, name: participant?.name || "Guest" },
         isHost: id === hostId,
         hasVideo: !!camera?.track && !camera.isMuted,
         microphone,
-        speaking: connected && microphone && !!participant?.isSpeaking,
+        speaking: connected && !!voice[id]?.speaking,
       };
     });
-  }, [participants, revision, hostId, host, guests, connected]);
+  }, [participants, revision, voice, hostId, host, guests, connected]);
   const [leader, ...guestMembers] = members;
   const shared = guestMembers.length > 0;
   return <View testID="live-broadcast-stage" style={styles.canvas}>

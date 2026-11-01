@@ -769,6 +769,7 @@ function ConnectedBroadcast({
           },
           event: session.listing?.event,
           onStage: live.stageConsent,
+          voice: live.voice,
           notice: live.error || notice,
           onDismissNotice: () => {
             setNotice("");
@@ -778,6 +779,7 @@ function ConnectedBroadcast({
             <LiveBroadcastStage
               participants={stage}
               revision={live.revision}
+              voice={live.voice}
               hostId={session.hostId}
               host={live.model.host}
               guests={live.model.guests}

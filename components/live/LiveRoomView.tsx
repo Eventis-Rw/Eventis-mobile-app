@@ -36,6 +36,9 @@ import {
 } from "./LivePrimitives";
 import { LiveGiftPicker, LiveRecharge } from "./LiveCoins";
 import { LiveReportForm } from "./LiveReport";
+import { LiveSeats } from "./LiveSeats";
+import { LiveSpeakingAvatar } from "./LiveSpeakingIndicator";
+import type { LiveVoice } from "@/hooks/useLiveBroadcast";
 import type { LiveEventReference } from "@/services/liveDirectoryService";
 import { useEvents } from "@/context/EventsContext";
 import { getEventImage } from "@/constants/eventImages";
@@ -57,10 +60,12 @@ type Props = {
     onDismissNotice?: () => void;
     event?: LiveEventReference;
     onStage?: boolean;
+    voice?: LiveVoice;
   };
 };
 type Panel =
   | "people"
+  | "stage"
   | "gifts"
   | "recharge"
   | "report"
@@ -290,7 +295,12 @@ export function LiveRoomView({
       >
         <View style={ui.headerRow}>
           <View style={ui.hostChip}>
-            <LiveAvatar person={room.host} size={34} />
+            <LiveSpeakingAvatar
+              size="small"
+              speaking={!!broadcast?.voice?.[room.host.id]?.speaking}
+            >
+              <LiveAvatar person={room.host} size={28} />
+            </LiveSpeakingAvatar>
             <View style={{ flex: 1, gap: 3 }}>
               <Text numberOfLines={1} style={ui.hostName}>
                 {room.host.name}
@@ -334,40 +344,31 @@ export function LiveRoomView({
         <Text numberOfLines={1} style={ui.roomTitle}>
           {room.title}
         </Text>
-        {guest && (!broadcast || broadcast.onStage) ? (
-          <Text style={ui.stagePill}>ON STAGE</Text>
+        {!typing ? (
+          <LiveSeats
+            guests={room.guests}
+            me={person}
+            host={host}
+            requested={requested}
+            voice={broadcast?.voice}
+            disabled={busy}
+            onEmpty={() => {
+              if (host) setPanel("people");
+              else
+                void run({
+                  type: requested ? "cancelRequest" : "request",
+                  roomId: room.id,
+                });
+            }}
+            onSeat={(p) => setPanel(p.id === person.id ? "stage" : "people")}
+          />
         ) : null}
       </View>
       {!typing ? (
         <View
-          style={[ui.rail, { top: Math.max(insets.top + 132, height * 0.29) }]}
+          style={[ui.rail, { top: Math.max(insets.top + 196, height * 0.32) }]}
         >
           {broadcast?.controls}
-          {!host ? (
-            <LiveOverlayAction
-              name="people-outline"
-              label={
-                guest
-                  ? "Leave stage"
-                  : requested
-                    ? "Cancel request"
-                    : "Join stage"
-              }
-              caption={guest ? "Leave" : requested ? "Requested" : "Join"}
-              active={requested}
-              disabled={busy}
-              onPress={() =>
-                void run({
-                  type: guest
-                    ? "leaveSeat"
-                    : requested
-                      ? "cancelRequest"
-                      : "request",
-                  roomId: room.id,
-                })
-              }
-            />
-          ) : null}
           <LiveOverlayAction
             name="heart"
             label="Send a reaction"
@@ -615,6 +616,7 @@ export function LiveRoomView({
           title={
             {
               people: "People in the room",
+              stage: "You’re on stage",
               gifts: "Send a gift",
               recharge: "Recharge coins",
               report: "Report Live",
@@ -686,6 +688,29 @@ export function LiveRoomView({
               <LiveButton
                 secondary
                 label="Keep watching"
+                onPress={() => setPanel(null)}
+              />
+            </>
+          ) : null}
+          {panel === "stage" ? (
+            <>
+              <Text style={s.body}>
+                Everyone in the room can see and hear you while you’re on
+                stage.
+              </Text>
+              <LiveButton
+                danger
+                label="Leave the stage"
+                disabled={busy}
+                onPress={() =>
+                  void run({ type: "leaveSeat", roomId: room.id }, person, () =>
+                    setPanel(null),
+                  )
+                }
+              />
+              <LiveButton
+                secondary
+                label="Stay on stage"
                 onPress={() => setPanel(null)}
               />
             </>
@@ -1156,15 +1181,6 @@ const ui = StyleSheet.create({
     paddingLeft: 4,
     textShadowColor: "#000",
     textShadowRadius: 5,
-  },
-  stagePill: {
-    color: "#FFF",
-    fontSize: 9,
-    fontFamily: "Inter_700Bold",
-    alignSelf: "flex-start",
-    backgroundColor: "#0284C7B3",
-    borderRadius: 6,
-    padding: 5,
   },
   rail: { position: "absolute", right: 14, alignItems: "center", gap: 15 },
   reaction: { position: "absolute", bottom: 180, right: 22, fontSize: 56 },

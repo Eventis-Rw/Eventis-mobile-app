@@ -37,6 +37,15 @@ import {
   type LiveState,
 } from "@/services/liveState";
 
+export type LiveVoice = Record<string, { speaking: boolean; microphone: boolean }>;
+function voiceOf(rtc: Room): LiveVoice {
+  const voice: LiveVoice = {};
+  for (const p of [rtc.localParticipant, ...rtc.remoteParticipants.values()]) {
+    const microphone = p.isMicrophoneEnabled;
+    voice[p.identity] = { microphone, speaking: microphone && p.isSpeaking };
+  }
+  return voice;
+}
 function personOf(p: Participant): LivePerson {
   let avatar: string | undefined;
   try {
@@ -115,6 +124,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [voice, setVoice] = useState<LiveVoice>({});
   const [now, setNow] = useState(Date.now());
   const [attempt, setAttempt] = useState(0);
   const [stageConsent, setStageConsent] = useState(false);
@@ -289,6 +299,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
         });
         void broadcast().catch(fail);
       } else update(modelRef.current);
+      setVoice(voiceOf(rtc));
       setRevision((r) => r + 1);
     };
     const connectionChanged = (state: ConnectionState) => {
@@ -455,7 +466,9 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
         ])
           rtc.on(event, changed);
         rtc.on(RoomEvent.ActiveSpeakersChanged, () => {
-          if (!disposed) setRevision((r) => r + 1);
+          if (disposed || !rtc) return;
+          setVoice(voiceOf(rtc));
+          setRevision((r) => r + 1);
         });
         removeAudio = attachRoomAudio(rtc);
         await deadline(
@@ -687,6 +700,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
           throw new Error("Your guest spot is no longer available.");
         }
         setError("");
+        setVoice(voiceOf(room));
         setRevision((r) => r + 1);
       })
       .catch((e) => setError(messageOf(e)));
@@ -730,6 +744,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
       throw new Error("Your guest spot is no longer available.");
     }
     setError(errors.join(". "));
+    setVoice(voiceOf(room));
     setRevision((r) => r + 1);
   };
   const act = (_actor: LivePerson, action: LiveAction) =>
@@ -743,6 +758,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     ready,
     now,
     revision,
+    voice,
     participants,
     localMedia,
     approvedGuest,
