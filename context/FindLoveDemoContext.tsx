@@ -12,21 +12,20 @@ export interface LoveActivity {
   title: string;
   description: string;
   createdAt: string;
+  /** Which Inbox request tab opens from a request notification. */
+  tab?: "received" | "sent";
 }
 
 interface FindLoveDemoContextValue {
   tokenBalance: number;
   connections: LoveProfile[];
-  /** Requests the member sent that are still waiting. */
   sentRequests: LoveProfile[];
-  /** Requests other members sent to the member. */
   receivedRequests: LoveProfile[];
   activity: LoveActivity[];
   purchaseTokens: (amount: number, priceLabel: string) => void;
   sendGift: (profile: LoveProfile, amount: number) => boolean;
   recordMessage: (profile: LoveProfile) => void;
-  /** Adds a connection event (request sent, accepted, declined…) to Notifications. */
-  recordConnection: (type: "connection" | "request", title: string, description: string) => void;
+  recordConnection: (type: "connection" | "request", title: string, description: string, tab?: "received" | "sent") => void;
 }
 
 interface StoredDemoState {
@@ -42,15 +41,17 @@ const INITIAL_ACTIVITY: LoveActivity[] = [
     id: "activity-request-keza",
     type: "request",
     title: "keza_dances sent you a connection request",
-    description: "Open Inbox › Pending › Received to accept or decline.",
+    description: "Open Inbox › Received to accept or decline.",
     createdAt: "1h ago",
+    tab: "received",
   },
   {
     id: "activity-request-noah",
     type: "request",
     title: "noah.runs sent you a connection request",
-    description: "Open Inbox › Pending › Received to accept or decline.",
+    description: "Open Inbox › Received to accept or decline.",
     createdAt: "5h ago",
+    tab: "received",
   },
   {
     id: "activity-connected-amara",
@@ -72,6 +73,7 @@ const INITIAL_ACTIVITY: LoveActivity[] = [
     title: "Connection request pending",
     description: "Samuel has not responded to your request yet.",
     createdAt: "2d ago",
+    tab: "sent",
   },
 ];
 
@@ -84,9 +86,15 @@ export function FindLoveDemoProvider({ children }: { children: React.ReactNode }
     AsyncStorage.getItem(DEMO_STATE_KEY)
       .then((stored) => {
         if (!stored) return;
-        const state = JSON.parse(stored) as StoredDemoState;
-        if (Number.isFinite(state.tokenBalance)) setTokenBalance(state.tokenBalance);
-        if (Array.isArray(state.activity)) setActivity(state.activity);
+      const state = JSON.parse(stored) as StoredDemoState;
+      if (Number.isFinite(state.tokenBalance)) setTokenBalance(state.tokenBalance);
+      if (Array.isArray(state.activity)) {
+        setActivity(state.activity.map((entry) => ({
+          ...entry,
+          description: entry.description.replace("Inbox › Pending › Received", "Inbox › Received"),
+          tab: entry.tab ?? (entry.title === "Connection request pending" || entry.title.startsWith("Request sent to ") ? "sent" : entry.type === "request" ? "received" : undefined),
+        })));
+      }
       })
       .catch(() => {});
   }, []);
@@ -149,9 +157,9 @@ export function FindLoveDemoProvider({ children }: { children: React.ReactNode }
     persist(tokenBalance, nextActivity);
   }, [activity, persist, tokenBalance]);
 
-  const recordConnection = useCallback((type: "connection" | "request", title: string, description: string) => {
+  const recordConnection = useCallback((type: "connection" | "request", title: string, description: string, tab?: "received" | "sent") => {
     setActivity((current) => {
-      const nextActivity: LoveActivity[] = [{ id: "activity-" + Date.now(), type, title, description, createdAt: "Just now" }, ...current];
+      const nextActivity: LoveActivity[] = [{ id: "activity-" + Date.now(), type, title, description, createdAt: "Just now", tab }, ...current];
       persist(tokenBalance, nextActivity);
       return nextActivity;
     });

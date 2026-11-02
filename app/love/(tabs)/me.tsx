@@ -5,22 +5,18 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 
 import { LoveHeader } from "@/components/love/LoveHeader";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
-import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
-import { useLoveSettings } from "@/hooks/useLoveSettings";
 import { cheapestPlan, formatMembershipPrice } from "@/utils/findLoveMembership";
 import { countryName, formatDateOfBirth } from "@/utils/findLoveProfile";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-/** FindLove "Me" tab: the member's own profile, membership, tokens and settings. Leaving FindLove is the Eventis tab. */
+/** FindLove "Me" tab: the member's own profile, membership and settings. Leaving FindLove is the Eventis tab. */
 export default function LoveMeScreen() {
   const colors = useColors();
   const router = useRouter();
   const { myProfile, accountType, verification } = useMyLoveProfile();
-  const { tokenBalance } = useFindLoveDemo();
-  const { settings } = useLoveSettings();
   const [photoFailed, setPhotoFailed] = useState(false);
   const photo = myProfile?.photoUrls[0];
   const isPrivate = accountType === "private";
@@ -30,9 +26,7 @@ export default function LoveMeScreen() {
 
   const rows: { icon: IconName; label: string; value?: string; onPress: () => void }[] = [
     { icon: "create-outline", label: "Edit profile, bio & photos", onPress: () => router.push("/love/edit" as any) },
-    { icon: "locate-outline", label: "Match distance", value: `${settings.maxDistanceKm} km`, onPress: () => router.push("/love/settings" as any) },
     { icon: "lock-closed-outline", label: "Account safety", onPress: () => router.push("/love/settings" as any) },
-    { icon: "gift-outline", label: "Gift tokens", value: String(tokenBalance), onPress: () => router.push("/love/wallet" as any) },
     {
       icon: "shield-checkmark-outline",
       label: "Age verification",
@@ -77,15 +71,19 @@ export default function LoveMeScreen() {
                 : `Go Private to connect with Private members, from ${formatMembershipPrice(privateFrom.price)} / ${privateFrom.periodLabel}.${runsUntil}`}
             </Text>
           </View>
-          {!isPrivate ? (
-            <Pressable
-              onPress={() => router.push({ pathname: "/love/membership", params: { from: "upgrade" } } as any)}
-              style={[styles.upgrade, { backgroundColor: colors.primary }]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.upgradeText}>Upgrade</Text>
-            </Pressable>
-          ) : null}
+          <Pressable
+            onPress={() =>
+              router.push(
+                isPrivate
+                  ? ({ pathname: "/love/membership" } as any)
+                  : ({ pathname: "/love/membership", params: { from: "upgrade" } } as any),
+              )
+            }
+            style={[styles.upgrade, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.upgradeText}>{isPrivate ? "Change plan" : "Upgrade"}</Text>
+          </Pressable>
         </View>
 
         <View style={[styles.list, { backgroundColor: colors.card, borderColor: colors.border }]}>

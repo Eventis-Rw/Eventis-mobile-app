@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useRef } from "react";
-import { Image, StyleSheet, Text } from "react-native";
+import { Image, StyleSheet } from "react-native";
 import Animated, {
   Easing,
   runOnJS,
@@ -12,12 +12,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-import { useTheme } from "@/context/ThemeContext";
-
 export default function PresentationSplashScreen() {
   const router = useRouter();
-  const { scheme } = useTheme();
-  const isDark = scheme === "dark";
   const hasNavigated = useRef(false);
 
   const logoScale = useSharedValue(1);
@@ -91,22 +87,16 @@ export default function PresentationSplashScreen() {
     opacity: containerOpacity.value,
   }));
 
-  const bgColor = isDark ? "#000000" : "#FFFFFF";
-  const textColor = isDark ? "#FFFFFF" : "#0C0C1A";
-
   return (
-    <Animated.View style={[styles.root, { backgroundColor: bgColor }, animatedContainerStyle]}>
-      <StatusBar style={isDark ? "light" : "dark"} />
+    <Animated.View style={[styles.root, animatedContainerStyle]}>
+      <StatusBar style="dark" />
       <Animated.View style={[styles.center, animatedLogoStyle]}>
         <Image
-          source={require("../assets/images/logo-primary.png")}
+          source={require("../assets/images/logo_splach-mobile.jpeg")}
           style={styles.logo}
           resizeMode="contain"
           accessibilityLabel="Eventis"
         />
-        <Text style={[styles.brandText, { color: textColor }]}>
-          eventis
-        </Text>
       </Animated.View>
     </Animated.View>
   );
@@ -117,20 +107,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#FFFFFF",
   },
   center: {
     alignItems: "center",
     justifyContent: "center",
   },
   logo: {
-    width: 108,
-    height: 108,
-  },
-  brandText: {
-    fontSize: 34,
-    lineHeight: 38,
-    fontFamily: "Inter_900Black",
-    letterSpacing: -1.2,
-    marginTop: 14,
+    width: 300,
+    height: 527,
   },
 });

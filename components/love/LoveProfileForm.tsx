@@ -9,7 +9,7 @@ import { InlineError } from "@/components/profile/ProfileSection";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import type { LoveAccountType } from "@/constants/loveProfiles";
 import { useColors } from "@/hooks/useColors";
-import { cheapestPlan, formatMembershipPrice } from "@/utils/findLoveMembership";
+import { formatMembershipPrice, MEMBERSHIP_INTERVALS, membershipPlan, type MembershipInterval } from "@/utils/findLoveMembership";
 import {
   FREE_LOVE_PHOTO_LIMIT,
   LOVE_GENDERS,
@@ -28,10 +28,12 @@ export interface LoveProfileFormValues {
   country?: string;
   /** Create only. Membership changes after that go through the upgrade flow. */
   accountType?: LoveAccountType;
+  /** Create only: the billing period chosen with the account type. */
+  membershipInterval?: MembershipInterval;
   photoUrls: string[];
 }
 
-export type LoveProfileFormErrors = Partial<Record<"username" | "gender" | "interestedIn" | "country" | "photoUrls", string>>;
+export type LoveProfileFormErrors = Partial<Record<"username" | "gender" | "interestedIn" | "country" | "accountType" | "photoUrls", string>>;
 
 interface Props {
   values: LoveProfileFormValues;
@@ -40,12 +42,15 @@ interface Props {
   onBlur: (field: keyof LoveProfileFormErrors) => void;
   /** The Eventis account phone; FindLove uses it as-is. */
   phone?: string;
+  /** Create only: lets the member pick Public or Private and a billing period. */
+  showAccountType?: boolean;
   disabled?: boolean;
 }
 
 /** Fields shared by "Create profile" and "Edit profile". */
-export function LoveProfileForm({ values, errors, onChange, onBlur, phone, disabled }: Props) {
+export function LoveProfileForm({ values, errors, onChange, onBlur, phone, showAccountType, disabled }: Props) {
   const colors = useColors();
+  const selectedInterval = values.membershipInterval ?? "month";
   const set = <K extends keyof LoveProfileFormValues>(key: K, value: LoveProfileFormValues[K]) =>
     onChange({ ...values, [key]: value });
 
@@ -184,34 +189,66 @@ export function LoveProfileForm({ values, errors, onChange, onBlur, phone, disab
         </View>
       </Section>
 
-      {values.accountType ? (
+      {showAccountType ? (
         <Section title="Account type">
           <AccountTypeOption
             type="public"
-            title={fromPrice("public")}
-            description="Discover everyone and connect with Public members. Weekly, monthly or yearly; you pay next."
+            title={periodPrice("public", selectedInterval)}
+            description="Discover everyone and connect with Public members."
             selected={values.accountType === "public"}
             onPress={() => set("accountType", "public")}
             disabled={disabled}
           />
           <AccountTypeOption
             type="private"
-            title={fromPrice("private")}
-            description="Connect with anyone, including Private members. Weekly, monthly or yearly; you pay next."
+            title={periodPrice("private", selectedInterval)}
+            description="Connect with anyone, including Private members."
             selected={values.accountType === "private"}
             onPress={() => set("accountType", "private")}
             disabled={disabled}
           />
+          {errors.accountType ? <InlineError message={errors.accountType} /> : null}
+
+          {values.accountType ? (
+            <>
+              <Text style={[styles.periodHeading, { color: colors.foreground }]}>Choose a billing period</Text>
+              <View style={styles.periods} accessibilityRole="radiogroup">
+                {MEMBERSHIP_INTERVALS.map((option) => {
+                  const selected = selectedInterval === option.id;
+                  return (
+                    <Pressable
+                      key={option.id}
+                      onPress={() => set("membershipInterval", option.id)}
+                      disabled={disabled}
+                      style={[
+                        styles.period,
+                        {
+                          backgroundColor: selected ? colors.primary : colors.secondary,
+                          borderColor: selected ? colors.primary : colors.border,
+                        },
+                      ]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected, disabled }}
+                    >
+                      <Text style={[styles.periodText, { color: selected ? "#FFFFFF" : colors.foreground }]}>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
         </Section>
       ) : null}
     </View>
   );
 }
 
-/** "From RWF 499 / week": both types offer the same periods, only the price differs. */
-function fromPrice(type: LoveAccountType): string {
-  const plan = cheapestPlan(type);
-  return `From ${formatMembershipPrice(plan.price)} / ${plan.periodLabel}`;
+/** "RWF 999 / month": the amount follows the billing period chosen above. */
+function periodPrice(type: LoveAccountType, interval: MembershipInterval): string {
+  const plan = membershipPlan(type, interval);
+  return `${formatMembershipPrice(plan.price)} / ${plan.periodLabel}`;
 }
 
 function PhotoSlots({
@@ -368,6 +405,10 @@ const styles = StyleSheet.create({
   card: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 14 },
   group: { gap: 8 },
   label: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  periodHeading: { fontSize: 13, fontFamily: "Inter_600SemiBold", paddingHorizontal: 4 },
+  periods: { flexDirection: "row", gap: 8 },
+  period: { flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  periodText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   choice: { flexGrow: 1, flexBasis: "30%", paddingHorizontal: 8, minHeight: 46, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   choiceText: { fontSize: 14, textAlign: "center", fontFamily: "Inter_600SemiBold" },

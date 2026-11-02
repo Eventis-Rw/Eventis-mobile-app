@@ -68,13 +68,13 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo-primary.png",
-          "imageWidth": 130,
+          "image": "./assets/images/logo_splach-mobile.jpeg",
+          "imageWidth": 300,
           "resizeMode": "contain",
           "backgroundColor": "#FFFFFF",
           "dark": {
-            "backgroundColor": "#000000",
-            "image": "./assets/images/logo-primary.png"
+            "backgroundColor": "#FFFFFF",
+            "image": "./assets/images/logo_splach-mobile.jpeg"
           }
         }
       ],
@@ -92,7 +92,10 @@
           "microphonePermission": "Allow Eventis to share your voice during Live broadcasts.",
           "recordAudioAndroid": true
         }
-      ]
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

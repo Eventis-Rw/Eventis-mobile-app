@@ -12,7 +12,7 @@ const GOLD = "#D4A017";
  * membership), never the option they picked at sign-up.
  *
  * `iconOnly` is for showing OTHER members, with no text label: a gold diamond
- * for Private, a globe in the accent colour for Public.
+ * for Private, a people icon in the accent colour for Public.
  */
 export function MembershipBadge({
   type,
@@ -38,7 +38,7 @@ export function MembershipBadge({
         accessible
         accessibilityLabel={isPrivate ? "Private member" : "Public member"}
       >
-        <Ionicons name={isPrivate ? "diamond" : "globe-outline"} size={small ? 9 : 12} color={isPrivate ? "#1A1300" : "#FFFFFF"} />
+        <Ionicons name={isPrivate ? "diamond" : "people"} size={small ? 9 : 12} color={isPrivate ? "#1A1300" : "#FFFFFF"} />
       </View>
     );
   }
@@ -54,7 +54,7 @@ export function MembershipBadge({
       accessible
       accessibilityLabel={isPrivate ? "Private account" : "Public account"}
     >
-      <Ionicons name={isPrivate ? "diamond" : "globe-outline"} size={small ? 9 : 12} color={foreground} />
+      <Ionicons name={isPrivate ? "diamond" : "people"} size={small ? 9 : 12} color={foreground} />
       <Text style={[styles.text, small && styles.smallText, { color: foreground }]}>{isPrivate ? "PRIVATE" : "PUBLIC"}</Text>
     </View>
   );
