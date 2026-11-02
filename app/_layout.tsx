@@ -86,6 +86,7 @@ function RootLayoutNav() {
       <Stack.Screen name="presentation-splash" options={{ gestureEnabled: false, animation: "fade" }} />
       <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
       <Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="search" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="auth" options={{ animation: "none" }} />
       <Stack.Screen
         name="event/[id]"

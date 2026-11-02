@@ -27,7 +27,7 @@ export default function CreateLoveProfileScreen() {
   const { user } = useAuth();
   const { myProfile, status, save, verification } = useMyLoveProfile();
 
-  const [values, setValues] = useState<LoveProfileFormValues>({ username: "", accountType: "public", photoUrls: [] });
+  const [values, setValues] = useState<LoveProfileFormValues>({ username: "", photoUrls: [] });
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [serverErrors, setServerErrors] = useState<LoveProfileFormErrors>({});
@@ -41,6 +41,7 @@ export default function CreateLoveProfileScreen() {
       gender: shown("gender") ? validateLoveGender(values.gender) : undefined,
       interestedIn: shown("interestedIn") ? validateLoveInterestedIn(values.interestedIn) : undefined,
       country: serverErrors.country ?? (shown("country") ? validateLoveCountry(values.country) : undefined),
+      accountType: shown("accountType") && !values.accountType ? "Choose Public or Private." : undefined,
       photoUrls: serverErrors.photoUrls,
     };
   }, [values, touched, submitAttempted, serverErrors]);
@@ -115,8 +116,9 @@ export default function CreateLoveProfileScreen() {
       !!validateLoveUsername(values.username) ||
       !!validateLoveGender(values.gender) ||
       !!validateLoveInterestedIn(values.interestedIn) ||
-      !!validateLoveCountry(values.country);
-    if (hasErrors || !values.gender || !values.interestedIn || !values.country) {
+      !!validateLoveCountry(values.country) ||
+      !values.accountType;
+    if (hasErrors || !values.gender || !values.interestedIn || !values.country || !values.accountType) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
@@ -134,7 +136,10 @@ export default function CreateLoveProfileScreen() {
       });
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Public and Private are both paid plans: FindLove opens once the payment is confirmed.
-      router.replace({ pathname: "/love/membership", params: { from: "create" } } as any);
+      router.replace({
+        pathname: "/love/membership",
+        params: { from: "create", interval: values.membershipInterval ?? "month" },
+      } as any);
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (err instanceof LoveProfileInputError) {
@@ -190,6 +195,7 @@ export default function CreateLoveProfileScreen() {
           }}
           onBlur={(field) => setTouched((t) => ({ ...t, [field]: true }))}
           phone={user.phone}
+          showAccountType
           disabled={saving}
         />
         <Pressable

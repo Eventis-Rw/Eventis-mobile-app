@@ -19,7 +19,6 @@ import {
   type LovePaymentMethod,
 } from "@/services/findLoveService";
 import {
-  cheapestPlan,
   formatMembershipPrice,
   MEMBERSHIP_BENEFITS,
   MEMBERSHIP_INTERVALS,
@@ -59,12 +58,13 @@ function splitPhone(phone?: string): { country: Country; local: string } {
  * period (same periods for both, only the price differs), then pay with mobile
  * money. The plan turns on only when the server confirms the payment. Opened
  * after creating a profile (from=create), from the membership gate, or from an
- * upgrade prompt (from=upgrade, which preselects Private).
+ * upgrade prompt (from=upgrade, which preselects Private). Paid members can
+ * switch between Public and Private from the same screen.
  */
 export default function LoveMembershipScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { from } = useLocalSearchParams<{ from?: string }>();
+  const { from, interval } = useLocalSearchParams<{ from?: string; interval?: string }>();
   const { user } = useAuth();
   const { myProfile, status, accountType, hasMembership, buyMembership, reload } = useMyLoveProfile();
 
@@ -78,7 +78,9 @@ export default function LoveMembershipScreen() {
   const [checking, setChecking] = useState(false);
   const [demoOutcome, setDemoOutcome] = useState<LoveDemoOutcome>("succeeded");
   const [chosenType, setChosenType] = useState<LoveAccountType | null>(null);
-  const [period, setPeriod] = useState<MembershipInterval>("month");
+  const [period, setPeriod] = useState<MembershipInterval>(
+    MEMBERSHIP_INTERVALS.find((option) => option.id === interval)?.id ?? "month",
+  );
 
   // Leaving mid-payment would hide the result, so the back button waits.
   useEffect(() => {
@@ -111,8 +113,8 @@ export default function LoveMembershipScreen() {
     );
   }
 
-  // Paid Public members are here to upgrade; everyone else starts on the type they chose.
-  const type: LoveAccountType = chosenType ?? (from === "upgrade" || hasMembership ? "private" : myProfile.membership.type);
+  // Start on the member's current type; an upgrade prompt preselects Private.
+  const type: LoveAccountType = chosenType ?? (from === "upgrade" ? "private" : myProfile.membership.type);
   const plan = membershipPlan(type, period);
   const price = formatMembershipPrice(plan.price);
 
@@ -151,9 +153,8 @@ export default function LoveMembershipScreen() {
   const shownPhase: Phase = phase === "succeeded" && !activeNow ? "pending" : phase === "pending" && activeNow ? "succeeded" : phase;
   const expires = myProfile.membership.expiresAt ? formatDateOfBirth(myProfile.membership.expiresAt.slice(0, 10)) : null;
 
-  // Private already includes everything, so a Private member sees their plan, not a checkout.
-  if (shownPhase !== "form" || (isPrivate && phase === "form")) {
-    const done = phase === "form" ? isPrivate : activeNow;
+  if (shownPhase !== "form") {
+    const done = activeNow;
     return (
       <LoveScreenShell title="Membership" onBack={phase === "processing" ? () => undefined : leave}>
         <Stack.Screen options={{ gestureEnabled: phase !== "processing" }} />
@@ -168,12 +169,10 @@ export default function LoveMembershipScreen() {
             </>
           ) : done ? (
             <>
-              <View style={[styles.statusIcon, styles.goldIcon]}>
-                <Ionicons name="diamond" size={30} color="#D4A017" />
+              <View style={[styles.statusIcon, isPrivate ? styles.goldIcon : { backgroundColor: colors.secondary }]}>
+                <Ionicons name={isPrivate ? "diamond" : "people"} size={30} color={isPrivate ? "#D4A017" : colors.primary} />
               </View>
-              <Text style={[styles.statusTitle, { color: colors.foreground }]}>
-                {phase === "form" ? "You're a Private member" : `Welcome to ${TYPE_LABEL[type]}`}
-              </Text>
+              <Text style={[styles.statusTitle, { color: colors.foreground }]}>Welcome to {TYPE_LABEL[type]}</Text>
               <MembershipBadge type={accountType} />
               <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
                 {isPrivate ? "You can now connect with Private and Public members." : "You can now connect and chat with Public members."}
@@ -224,7 +223,7 @@ export default function LoveMembershipScreen() {
         <View style={styles.types} accessibilityRole="radiogroup">
           {(["public", "private"] as LoveAccountType[]).map((option) => {
             const selected = type === option;
-            const cheapest = cheapestPlan(option);
+            const optionPlan = membershipPlan(option, period);
             return (
               <Pressable
                 key={option}
@@ -239,15 +238,14 @@ export default function LoveMembershipScreen() {
                 </View>
                 <Text style={[styles.typeText, { color: colors.mutedForeground }]}>{TYPE_DESCRIPTION[option]}</Text>
                 <Text style={[styles.typeFrom, { color: colors.foreground }]}>
-                  From {formatMembershipPrice(cheapest.price)} / {cheapest.periodLabel}
+                  {formatMembershipPrice(optionPlan.price)} / {optionPlan.periodLabel}
                 </Text>
               </Pressable>
             );
           })}
         </View>
-      </Section>
 
-      <Section title="Billing period">
+        <Text style={[styles.periodHeading, { color: colors.foreground }]}>Choose a billing period</Text>
         <View style={[styles.periods, { backgroundColor: colors.secondary }]} accessibilityRole="radiogroup">
           {MEMBERSHIP_INTERVALS.map((option) => {
             const selected = period === option.id;
@@ -377,6 +375,7 @@ const styles = StyleSheet.create({
   typeHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   typeText: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
   typeFrom: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  periodHeading: { marginTop: 4, fontSize: 14, fontFamily: "Inter_600SemiBold" },
   periods: { flexDirection: "row", borderRadius: 14, padding: 4, gap: 4 },
   periodTab: { flex: 1, minHeight: 40, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   periodTabText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },

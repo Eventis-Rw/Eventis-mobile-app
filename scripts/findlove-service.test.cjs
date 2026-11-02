@@ -600,7 +600,7 @@ test("demo: choosing Private starts unpaid, and the profile form can't grant it"
 });
 
 test("demo: a Public member is refused a Private member until payment succeeds", async () => {
-  const privateMember = profiles.MOCK_LOVE_PROFILES.find((p) => p.accountType === "private");
+  const privateMember = profiles.MOCK_LOVE_PROFILES.find((p) => p.accountType === "private" && (p.connectionStatus ?? "none") === "none");
   const publicMember = profiles.MOCK_LOVE_PROFILES.find((p) => p.accountType === "public" && (p.connectionStatus ?? "none") === "none");
   await demo.saveMyLoveProfile("u1", { ...validInput, accountType: "private" }, true);
 

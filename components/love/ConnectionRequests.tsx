@@ -56,14 +56,25 @@ export function useConnectionActions() {
   return { accept, decline, cancel };
 }
 
-/** Inbox › Pending: requests the member received and requests they sent. */
-export function PendingRequests({ received, sent }: { received: LoveProfile[]; sent: LoveProfile[] }) {
+/** Inbox › Received or Sent: request cards with the actions for that side. */
+export function ConnectionRequestList({
+  received,
+  sent,
+  mode,
+}: {
+  received: LoveProfile[];
+  sent: LoveProfile[];
+  /** Set to show one side directly; omitted for the two-tab layout. */
+  mode?: RequestsTab;
+}) {
   const colors = useColors();
   const router = useRouter();
   const { error } = useLoveProfilesState();
+  const { threads } = useFindLoveChat();
   const { accept, decline, cancel } = useConnectionActions();
   // Start where there is something to answer.
   const [tab, setTab] = useState<RequestsTab>(received.length || !sent.length ? "received" : "sent");
+  const activeTab = mode ?? tab;
   const [busy, setBusy] = useState<string | null>(null);
   const [messageFor, setMessageFor] = useState<LoveProfile | null>(null);
   const [cancelFor, setCancelFor] = useState<LoveProfile | null>(null);
@@ -75,87 +86,119 @@ export function PendingRequests({ received, sent }: { received: LoveProfile[]; s
   };
 
   const openProfile = (profile: LoveProfile) => router.push({ pathname: "/love/[id]", params: { id: profile.id } } as any);
-  const list = tab === "received" ? received : sent;
+  const list = activeTab === "received" ? received : sent;
 
   return (
     <View>
-      <View style={[styles.segments, { backgroundColor: colors.secondary }]} accessibilityRole="tablist">
-        {(["received", "sent"] as RequestsTab[]).map((option) => {
-          const selected = tab === option;
-          const count = option === "received" ? received.length : sent.length;
-          return (
-            <Pressable
-              key={option}
-              onPress={() => setTab(option)}
-              style={[styles.segment, selected && { backgroundColor: colors.card }]}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-            >
-              <Text style={[styles.segmentText, { color: selected ? colors.foreground : colors.mutedForeground }]}>
-                {option === "received" ? "Received" : "Sent"} · {count}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      {mode ? null : (
+        <View style={[styles.segments, { backgroundColor: colors.secondary }]} accessibilityRole="tablist">
+          {(["received", "sent"] as RequestsTab[]).map((option) => {
+            const selected = tab === option;
+            const count = option === "received" ? received.length : sent.length;
+            return (
+              <Pressable
+                key={option}
+                onPress={() => setTab(option)}
+                style={[styles.segment, selected && { backgroundColor: colors.card }]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+              >
+                <Text style={[styles.segmentText, { color: selected ? colors.foreground : colors.mutedForeground }]}>
+                  {option === "received" ? "Received" : "Sent"} · {count}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
 
       {list.length === 0 ? (
         <View style={styles.empty}>
           <View style={[styles.emptyIcon, { backgroundColor: colors.secondary }]}>
-            <Ionicons name={tab === "received" ? "mail-unread-outline" : "paper-plane-outline"} size={30} color={colors.primary} />
+            <Ionicons name={activeTab === "received" ? "mail-unread-outline" : "paper-plane-outline"} size={30} color={colors.primary} />
           </View>
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-            {tab === "received" ? "No requests received" : "No requests sent"}
+            {activeTab === "received" ? "No requests received" : "No requests sent"}
           </Text>
           <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>
-            {tab === "received"
+            {activeTab === "received"
               ? "When someone wants to connect with you, they appear here."
               : "People you send a connection request to appear here until they answer."}
           </Text>
         </View>
       ) : (
-        list.map((profile) => (
-          <View key={profile.id} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Pressable onPress={() => openProfile(profile)} style={styles.cardTop} accessibilityRole="button" accessibilityLabel={`View ${profile.username}'s profile`}>
-              <Avatar profile={profile} />
-              <View style={styles.copy}>
-                <View style={styles.nameRow}>
-                  <Text style={[styles.name, { color: colors.foreground }]} numberOfLines={1}>{profile.username}</Text>
-                  {profile.verified ? <Ionicons name="checkmark-circle" size={15} color={colors.primary} /> : null}
-                  <MembershipBadge type={profile.accountType} size="sm" iconOnly />
-                </View>
-                <Text style={[styles.meta, { color: colors.mutedForeground }]} numberOfLines={1}>
-                  {profile.neighborhood ? `${profile.neighborhood}, ${profile.city}` : profile.city}
-                </Text>
-                {tab === "received" && profile.requestMessage ? (
-                  <Text style={[styles.note, { color: colors.foreground }]} numberOfLines={2}>“{profile.requestMessage}”</Text>
-                ) : null}
-              </View>
-              {tab === "sent" ? (
-                <View style={[styles.status, { backgroundColor: colors.secondary }]}>
-                  <Ionicons name="time-outline" size={13} color={colors.mutedForeground} />
-                  <Text style={[styles.statusText, { color: colors.mutedForeground }]}>Pending</Text>
-                </View>
-              ) : null}
-            </Pressable>
+        list.map((profile) => {
+          const thread = threads[profile.id];
+          const sentMessage =
+            activeTab === "sent"
+              ? thread?.messages.find((message) => message.own && message.kind === "text")
+              : undefined;
+          const theirReply =
+            activeTab === "sent"
+              ? [...(thread?.messages ?? [])].reverse().find((message) => !message.own && message.kind === "text")
+              : undefined;
+          const replied = !!theirReply;
 
-            {busy === profile.id ? (
-              <ActivityIndicator style={styles.busy} color={colors.primary} />
-            ) : tab === "received" ? (
-              <View style={styles.actions}>
-                <ActionButton label="Accept" icon="checkmark" kind="primary" onPress={() => void run(profile, accept)} />
-                <ActionButton label="Decline" icon="close" kind="secondary" onPress={() => void run(profile, decline)} />
-                <ActionButton label="Message" icon="chatbubble-ellipses-outline" kind="secondary" onPress={() => setMessageFor(profile)} />
-              </View>
-            ) : (
-              <View style={styles.actions}>
-                <ActionButton label="Cancel connection" icon="close-circle-outline" kind="danger" onPress={() => setCancelFor(profile)} />
-              </View>
-            )}
-          </View>
-        ))
+          return (
+            <View key={profile.id} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Pressable onPress={() => openProfile(profile)} style={styles.cardTop} accessibilityRole="button" accessibilityLabel={`View ${profile.username}'s profile`}>
+                <Avatar profile={profile} />
+                <View style={styles.copy}>
+                  <View style={styles.nameRow}>
+                    <Text style={[styles.name, { color: colors.foreground }]} numberOfLines={1}>{profile.username}</Text>
+                    {profile.verified ? <Ionicons name="checkmark-circle" size={15} color={colors.primary} /> : null}
+                    <MembershipBadge type={profile.accountType} size="sm" iconOnly />
+                  </View>
+                  <Text style={[styles.meta, { color: colors.mutedForeground }]} numberOfLines={1}>
+                    {profile.neighborhood ? `${profile.neighborhood}, ${profile.city}` : profile.city}
+                  </Text>
+                  {activeTab === "received" && profile.requestMessage ? (
+                    <Text style={[styles.note, { color: colors.foreground }]} numberOfLines={2}>“{profile.requestMessage}”</Text>
+                  ) : null}
+                  {sentMessage?.kind === "text" ? (
+                    <Text style={[styles.note, { color: colors.foreground }]} numberOfLines={2}>
+                      <Text style={{ color: colors.mutedForeground }}>You: </Text>“{sentMessage.text}”
+                    </Text>
+                  ) : null}
+                  {theirReply?.kind === "text" ? (
+                    <View style={[styles.reply, { backgroundColor: colors.glass, borderColor: colors.border }]}>
+                      <Ionicons name="return-down-forward-outline" size={13} color={colors.primary} />
+                      <Text style={[styles.replyText, { color: colors.foreground }]} numberOfLines={2}>{theirReply.text}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {activeTab === "sent" ? (
+                  <View style={[styles.status, { backgroundColor: replied ? colors.glass : colors.secondary }]}>
+                    <Ionicons
+                      name={replied ? "chatbubble-ellipses-outline" : "time-outline"}
+                      size={13}
+                      color={replied ? colors.primary : colors.mutedForeground}
+                    />
+                    <Text style={[styles.statusText, { color: replied ? colors.primary : colors.mutedForeground }]}>
+                      {replied ? "Replied" : "Pending"}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+
+              {busy === profile.id ? (
+                <ActivityIndicator style={styles.busy} color={colors.primary} />
+              ) : activeTab === "received" ? (
+                <View style={styles.actions}>
+                  <ActionButton label="Accept" icon="checkmark" kind="primary" onPress={() => void run(profile, accept)} />
+                  <ActionButton label="Decline" icon="close" kind="secondary" onPress={() => void run(profile, decline)} />
+                  <ActionButton label="Message" icon="chatbubble-ellipses-outline" kind="secondary" onPress={() => setMessageFor(profile)} />
+                </View>
+              ) : (
+                <View style={styles.actions}>
+                  <ActionButton label="Cancel connection" icon="close-circle-outline" kind="danger" onPress={() => void run(profile, cancel)} />
+                </View>
+              )}
+            </View>
+          );
+        })
       )}
 
       <RequestMessageSheet profile={messageFor} onClose={() => setMessageFor(null)} />
@@ -348,6 +391,8 @@ const styles = StyleSheet.create({
   name: { flexShrink: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
   meta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   note: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 5 },
+  reply: { flexDirection: "row", alignItems: "flex-start", gap: 5, borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6, marginTop: 6 },
+  replyText: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
   status: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 99 },
   statusText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   actions: { flexDirection: "row", gap: 8 },

@@ -142,7 +142,7 @@ export default function LoveChatScreen() {
     setSending(false);
     if (!sent) return;
     append({ kind: "text", text });
-    recordConnection("request", `Request sent to ${chatProfile.username}`, "Your message went with it. You'll be told when they answer.");
+    recordConnection("request", `Request sent to ${chatProfile.username}`, "Your message went with it. You'll be told when they answer.", "sent");
     setComposer("");
   }
 

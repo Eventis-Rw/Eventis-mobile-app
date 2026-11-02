@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useRef } from "react";
-import { Image, StyleSheet, Text, useColorScheme } from "react-native";
+import { Image, StyleSheet } from "react-native";
 import Animated, {
   Easing,
   runOnJS,
@@ -13,14 +13,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-import { useTheme } from "@/context/ThemeContext";
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 
 export default function AppEntryScreen() {
   const router = useRouter();
-  const systemScheme = useColorScheme();
-  const { scheme } = useTheme();
-  const isDark = (scheme ?? systemScheme) === "dark";
   const hasNavigated = useRef(false);
 
   const logoScale = useSharedValue(1);
@@ -110,23 +106,16 @@ export default function AppEntryScreen() {
     opacity: containerOpacity.value,
   }));
 
-  // Background takes the color theme set on the phone (dark on dark phone, white on light phone)
-  const bgColor = isDark ? "#000000" : "#FFFFFF";
-  const textColor = isDark ? "#FFFFFF" : "#0C0C1A";
-
   return (
-    <Animated.View style={[styles.root, { backgroundColor: bgColor }, animatedContainerStyle]}>
-      <StatusBar style={isDark ? "light" : "dark"} />
+    <Animated.View style={[styles.root, animatedContainerStyle]}>
+      <StatusBar style="dark" />
       <Animated.View style={[styles.center, animatedLogoStyle]}>
         <Image
-          source={require("../assets/images/logo-primary.png")}
+          source={require("../assets/images/logo_splach-mobile.jpeg")}
           style={styles.logo}
           resizeMode="contain"
           accessibilityLabel="Eventis"
         />
-        <Text style={[styles.brandText, { color: textColor }]}>
-          eventis
-        </Text>
       </Animated.View>
     </Animated.View>
   );
@@ -137,20 +126,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#FFFFFF",
   },
   center: {
     alignItems: "center",
     justifyContent: "center",
   },
   logo: {
-    width: 108,
-    height: 108,
-  },
-  brandText: {
-    fontSize: 34,
-    lineHeight: 38,
-    fontFamily: "Inter_900Black",
-    letterSpacing: -1.2,
-    marginTop: 14,
+    width: 300,
+    height: 527,
   },
 });

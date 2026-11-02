@@ -7,17 +7,19 @@ import type { LoveProfile } from "@/constants/loveProfiles";
 import { useFindLoveChat } from "@/context/FindLoveChatContext";
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useLoveProfilesState } from "@/context/LoveProfilesContext";
-import { PendingRequests } from "@/components/love/ConnectionRequests";
+import { ConnectionRequestList } from "@/components/love/ConnectionRequests";
 import { LoveHeader } from "@/components/love/LoveHeader";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useColors } from "@/hooks/useColors";
 import { formatInboxTime, loveMessagePreview, summarizeConversations, type LoveChatMessage } from "@/utils/findLoveChat";
 import { presenceOf } from "@/utils/findLoveDiscovery";
 
-type ConnectionsTab = "connections" | "pending";
+type InboxTab = "connections" | "received" | "sent";
 
-function tabFromParam(tab: string | undefined): ConnectionsTab {
-  return tab === "pending" ? tab : "connections";
+function tabFromParam(tab: string | undefined): InboxTab {
+  if (tab === "sent") return "sent";
+  if (tab === "pending" || tab === "received") return "received";
+  return "connections";
 }
 
 /** FindLove Inbox tab: chats with connected people and pending requests. Notifications have their own page. */
@@ -26,7 +28,7 @@ export default function LoveInboxScreen() {
   const { tab, at } = useLocalSearchParams<{ tab?: string; at?: string }>();
   const router = useRouter();
   const colors = useColors();
-  const [activeTab, setActiveTab] = useState<ConnectionsTab>(tabFromParam(tab));
+  const [activeTab, setActiveTab] = useState<InboxTab>(tabFromParam(tab));
   const { connections, sentRequests, receivedRequests } = useFindLoveDemo();
   const { refreshProfiles } = useLoveProfilesState();
   const { threads, totalUnread } = useFindLoveChat();
@@ -45,15 +47,16 @@ export default function LoveInboxScreen() {
     if (tab) setActiveTab(tabFromParam(tab));
   }, [tab, at]);
 
-  // Requests change on the other member's side; fetch the latest when Pending opens.
+  // Requests change on the other member's side; fetch the latest when a request tab opens.
   useEffect(() => {
-    if (activeTab === "pending") void refreshProfiles();
+    if (activeTab !== "connections") void refreshProfiles();
   }, [activeTab, refreshProfiles]);
 
   const tabs = useMemo(() => [
     // Chats counts unread messages, not people, so the badge means "something new".
     { id: "connections" as const, label: "Chats", count: totalUnread },
-    { id: "pending" as const, label: "Pending", count: receivedRequests.length + sentRequests.length },
+    { id: "received" as const, label: "Received", count: receivedRequests.length },
+    { id: "sent" as const, label: "Sent", count: sentRequests.length },
   ], [totalUnread, receivedRequests.length, sentRequests.length]);
 
   return (
@@ -96,7 +99,12 @@ export default function LoveInboxScreen() {
           ) : <EmptyState icon="people-outline" title="No chats yet" body="When you connect with someone, your chat with them appears here." colors={colors} />
         ) : null}
 
-        {activeTab === "pending" ? <PendingRequests received={receivedRequests} sent={sentRequests} /> : null}
+        {activeTab === "received" ? (
+          <ConnectionRequestList received={receivedRequests} sent={sentRequests} mode="received" />
+        ) : null}
+        {activeTab === "sent" ? (
+          <ConnectionRequestList received={receivedRequests} sent={sentRequests} mode="sent" />
+        ) : null}
       </ScrollView>
     </View>
   );

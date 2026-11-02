@@ -170,7 +170,6 @@ export default function HomeScreen() {
 
             <View style={styles.resultsRow}>
               <Text style={[styles.resultsTitle, { color: colors.foreground }]}>{filtering ? "Results" : place ? `People in ${place}` : "People to discover"}</Text>
-              <Text style={[styles.resultsCount, { color: colors.mutedForeground }]}>{filteredProfiles.length} profiles</Text>
             </View>
           </View>
         }
@@ -251,7 +250,6 @@ const styles = StyleSheet.create({
   retryText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   resultsRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 4, marginBottom: 13 },
   resultsTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  resultsCount: { fontSize: 12, fontFamily: "Inter_500Medium" },
   columnRow: { flexDirection: "row", gap: GRID_GAP, maxWidth: MAX_GRID_WIDTH, width: "100%", alignSelf: "center" },
   cardCell: { alignSelf: "stretch" },
   emptyState: { alignItems: "center", justifyContent: "center", paddingVertical: 70, paddingHorizontal: 24 },

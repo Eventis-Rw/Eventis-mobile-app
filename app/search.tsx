@@ -65,7 +65,6 @@ export default function SearchScreen() {
   );
 
   const hasActiveQuery = query.trim().length > 0;
-  const hasActiveSearch = hasActiveQuery || selectedCategory !== "All";
 
   const results = useMemo(() => {
     let evts = [...events];
@@ -132,24 +131,6 @@ export default function SearchScreen() {
             <Ionicons name="chevron-back" size={20} color={colors.foreground} />
           </Pressable>
           <Text style={[styles.title, { color: colors.foreground }]}>Search</Text>
-          <View
-            style={[
-              styles.titleBadge,
-              { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}35` },
-            ]}
-          >
-            <View
-              style={[
-                styles.titleBadgeDot,
-                { backgroundColor: results.length > 0 ? "#10B981" : colors.mutedForeground },
-              ]}
-            />
-            <Text style={[styles.titleBadgeText, { color: colors.primary }]}>
-              {hasActiveSearch
-                ? `${results.length} ${results.length === 1 ? "match" : "matches"}`
-                : `${events.length} events`}
-            </Text>
-          </View>
         </View>
         <View
           style={[
@@ -170,26 +151,14 @@ export default function SearchScreen() {
             autoFocus
           />
           {query.length > 0 && (
-            <View style={styles.inputRightCluster}>
-              <View
-                style={[
-                  styles.inputCountPill,
-                  { backgroundColor: `${colors.primary}20` },
-                ]}
-              >
-                <Text style={[styles.inputCountText, { color: colors.primary }]}>
-                  {results.length}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => setQuery("")}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-              >
-                <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={() => setQuery("")}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
+              <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+            </Pressable>
           )}
         </View>
 
@@ -267,15 +236,6 @@ export default function SearchScreen() {
                   {results.length > 0 ? "Live match" : "No match"}
                 </Text>
               </View>
-              <Text style={[styles.resultsCountText, { color: colors.mutedForeground }]}>
-                <Text style={{ color: colors.foreground, fontFamily: "Inter_700Bold" }}>
-                  {results.length}
-                </Text>{" "}
-                {results.length === 1 ? "event" : "events"} matching{" "}
-                <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>
-                  "{query.trim()}"
-                </Text>
-              </Text>
             </View>
           ) : selectedCategory !== "All" ? (
             <View style={styles.resultsHeader}>
@@ -293,23 +253,12 @@ export default function SearchScreen() {
                   {selectedCategory}
                 </Text>
               </View>
-              <Text style={[styles.resultsCountText, { color: colors.mutedForeground }]}>
-                <Text style={{ color: colors.foreground, fontFamily: "Inter_700Bold" }}>
-                  {results.length}
-                </Text>{" "}
-                {results.length === 1 ? "event" : "events"} in this category
-              </Text>
             </View>
           ) : (
             <View style={styles.discoverHeader}>
-              <View style={styles.discoverHeaderTop}>
-                <Text style={[styles.discoverTitle, { color: colors.foreground }]}>
-                  All Events
-                </Text>
-                <Text style={[styles.discoverCount, { color: colors.mutedForeground }]}>
-                  {results.length} available
-                </Text>
-              </View>
+              <Text style={[styles.discoverTitle, { color: colors.foreground }]}>
+                All Events
+              </Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -387,43 +336,25 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   header: {
     paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 14,
-  },
-  titleBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  titleBadgeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  titleBadgeText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    gap: 8,
+    marginBottom: 8,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontFamily: "Inter_700Bold",
   },
   searchRow: {
@@ -431,42 +362,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    minHeight: 48,
-    gap: 10,
-    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    minHeight: 40,
+    gap: 8,
+    marginBottom: 8,
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
-  },
-  inputRightCluster: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  inputCountPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  inputCountText: {
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
   },
   // Scrolls edge to edge while the first pill lines up with the header padding.
   categoryScroll: { marginHorizontal: -20 },
   categoryRow: { paddingHorizontal: 20 },
   // Feed cards run edge to edge, so only the header text gets side padding.
-  list: { paddingTop: 16 },
+  list: { paddingTop: 12 },
   resultsHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 10,
     gap: 10,
     flexWrap: "wrap",
   },
@@ -488,29 +404,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
-  resultsCountText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    flex: 1,
-    textAlign: "right",
-  },
   discoverHeader: {
     paddingHorizontal: 20,
-    marginBottom: 14,
-    gap: 10,
-  },
-  discoverHeaderTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    marginBottom: 10,
+    gap: 8,
   },
   discoverTitle: {
     fontSize: 18,
     fontFamily: "Inter_700Bold",
-  },
-  discoverCount: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
   },
   quickPopularScroll: {
     marginHorizontal: -20,
