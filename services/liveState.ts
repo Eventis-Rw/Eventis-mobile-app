@@ -33,6 +33,8 @@ export type LiveMode = "video" | "voice";
 export type LiveMessage = { id: string; person: LivePerson; text: string; at: number; kind: "chat" | "gift" | "system" };
 export type LiveRoom = {
   id: string; host: LivePerson; title: string; mode: LiveMode; eventId?: string; cover?: string;
+  /** Display-only count for seeded previews; never used as real audience or analytics. */
+  previewViewers?: number;
   startedAt: number; endsAt: number; endedAt?: number; guests: LivePerson[]; requests: LivePerson[];
   invitations: LivePerson[]; audience: LivePerson[]; mutedIds: string[]; blockedIds: string[];
   messages: LiveMessage[]; chatEnabled: boolean; giftsEnabled: boolean; reactions: number;
@@ -61,12 +63,14 @@ const id = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(
 const ensure = (ok: unknown, message: string) => { if (!ok) throw new Error(message); };
 export function createLiveState(now = Date.now()): LiveState {
   const hosts = [
-    { name: "Kigali Jazz", title: "Backstage before the first song", mode: "video" as const, avatar: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=160", cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=900" },
-    { name: "Tech Kigali", title: "Ideas after hours · open mic", mode: "voice" as const, avatar: "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=160", cover: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=900" },
-    { name: "Midnight Beats", title: "The warm-up room", mode: "video" as const, avatar: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=160", cover: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=900" },
+    { name: "Kigali Jazz", title: "Backstage pre-show", mode: "video" as const, previewViewers: 1200, cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=900" },
+    { name: "DJ Mugo", title: "Friday warm-up set", mode: "video" as const, previewViewers: 348, cover: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=900" },
+    { name: "Aline U.", title: "Artist Q&A", mode: "voice" as const, previewViewers: 96 },
+    { name: "Beats KG", title: "Live beat making", mode: "voice" as const, previewViewers: 52 },
+    { name: "Nadia S.", title: "Open dance class", mode: "video" as const, previewViewers: 21 },
   ];
   return { version: 1, queue: [], wallets: {}, transactions: [], starts: [], rooms: hosts.map((h, i) => ({
-    ...h, id: `sample_${i}`, host: { id: `sample_host_${i}`, name: h.name, avatar: h.avatar },
+    ...h, id: `sample_${i}`, host: { id: `sample_host_${i}`, name: h.name },
     startedAt: now, endsAt: now + LIVE_LIMITS.durationMs, guests: [], requests: [], invitations: [], audience: [],
     mutedIds: [], blockedIds: [], messages: [], chatEnabled: true, giftsEnabled: true, reactions: 0,
   })) };
@@ -80,7 +84,9 @@ export function refreshLiveSamples(state: LiveState, now = Date.now()): LiveStat
   const available = Math.max(0, LIVE_LIMITS.rooms - otherRooms.filter(room => !room.endedAt && room.endsAt > now).length);
   const samples = templates.slice(0, available).map(template => {
     const existing = settled.rooms.find(room => room.id === template.id && !room.endedAt && room.endsAt > now);
-    return existing ? { ...existing, startedAt: now, endsAt: now + LIVE_LIMITS.durationMs } : template;
+    // Refresh fixture presentation for existing installs without losing their interactions.
+    return existing ? { ...existing, host: template.host, title: template.title, mode: template.mode, cover: template.cover,
+      previewViewers: template.previewViewers, startedAt: now, endsAt: now + LIVE_LIMITS.durationMs } : template;
   });
   return { ...settled, rooms: [...otherRooms, ...samples] };
 }

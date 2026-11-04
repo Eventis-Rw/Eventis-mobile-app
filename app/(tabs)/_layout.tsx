@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
+import { mainTabBarHeight } from "@/constants/tabLayout";
 
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -279,7 +280,7 @@ function TabLayout() {
             shadowOffset: { width: 0, height: -4 },
             shadowOpacity: isDark ? 0.25 : 0.06,
             shadowRadius: 16,
-            height: isWeb ? 68 : 58 + insets.bottom,
+            height: mainTabBarHeight(insets.bottom),
             paddingBottom: isWeb ? 0 : Math.max(insets.bottom - 4, 4),
             paddingTop: 4,
           },
