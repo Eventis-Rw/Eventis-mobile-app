@@ -49,21 +49,15 @@ Run the install command from `Eventis-mobile-app`. If the phone disconnects, rep
 
 ## 3. Start the shared API
 
-One API serves both testers. Use the branches containing the Live changes in **all three repositories**: `Eventis-contracts`, `Eventis-api`, and `Eventis-mobile-app`.
+One API serves both testers. Use the `feat/go-live` branches in `Eventis-api` and `Eventis-mobile-app`. The API includes its contracts and tooling; no third repository is needed.
 
 Install Node 22+, Bun 1.4.2+, pnpm, and Docker. Keep the repositories beside each other.
 
-**First setup — shared packages:**
+**First setup — API dependencies:**
 
 ```bash
-cd Eventis-contracts
-bun install
-bun run build
-(cd packages/contracts && bun link)
-(cd packages/eslint-config && bun link)
-(cd packages/tsconfig && bun link)
-cd ../Eventis-api
-bun install
+cd Eventis-api
+bun install --frozen-lockfile
 ```
 
 **First setup — API environment:**
@@ -152,7 +146,7 @@ For quick co-host testing, open the same sample card on both phones. Requests ar
 | Camera unavailable in Expo Go | Install the development APK. |
 | Phone cannot load the app | Keep Metro running; check the laptop IP, Wi-Fi, and port 8081. |
 | Live discovery unavailable | Check API `/readyz`, `LIVE_DEVELOPMENT_ACCESS=true`, and the phone's API address. |
-| Backend dependency install fails | Build and `bun link` all three shared packages in step 3 first. |
+| Backend dependency install fails | Check out the current `feat/go-live` branch and run `bun install --frozen-lockfile`. No package links are required. |
 | Camera/mic remain off after backgrounding | Return to Eventis and explicitly enable them in your controls. |
 | Browser has no camera/mic | Use localhost or HTTPS; a plain LAN HTTP URL cannot access browser media. |
 | APK update reports a signature conflict | Use an APK signed by the same teammate. Uninstalling clears local app data. |
