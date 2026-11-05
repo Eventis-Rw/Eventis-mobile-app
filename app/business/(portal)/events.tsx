@@ -40,7 +40,7 @@ export default function OrganiserEventsScreen() {
           <Text style={[styles.description, { color: palette.muted, textAlign: "center" }]}>{error ?? "Add the date, venue and public details. Your event will appear here when published."}</Text>
           <Pressable onPress={error ? () => void refresh() : create} accessibilityRole="button" style={[styles.create, { backgroundColor: palette.blue }]}><Text style={styles.createText}>{error ? "Try again" : "Start event"}</Text></Pressable>
         </View>}
-      ListFooterComponent={error && events.length ? <Pressable onPress={() => void refresh()} accessibilityRole="button" style={styles.state}><Text style={[styles.description, { color: palette.danger }]}>{error} Tap to retry.</Text></Pressable> : null}
+      ListFooterComponent={error && events.length ? <Pressable onPress={() => void refresh()} accessibilityRole="button" style={styles.state}><Text style={[styles.description, { color: palette.danger }]}>{error} Tap to retry.</Text></Pressable> : undefined}
       renderItem={({ item: event }) => <View style={[styles.card, compact && styles.stack, { backgroundColor: palette.surface, borderColor: palette.line }]}>
         <View style={[styles.imageWrap, compact && styles.imageWide]}><Image source={getEventImage(event.image)} style={styles.image} accessibilityLabel={`${event.title} poster`} /></View>
         <View style={styles.copy}>

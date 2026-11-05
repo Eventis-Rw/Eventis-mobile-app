@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
+import { mainTabBarHeight } from "@/constants/tabLayout";
 
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -110,7 +111,7 @@ function TabIcon({
       <Ionicons
         name={focused ? activeIcon : inactiveIcon}
         size={24}
-        color={isDisabled ? colors.disabled : focused ? colors.primary : color}
+        color={isDisabled ? colors.disabled : focused ? colors.primary : (typeof color === "string" ? color : colors.foreground)}
       />
 
       {/* Unread message badge */}
@@ -145,6 +146,7 @@ function LiveTabIcon({
   color: ColorValue;
   focused: boolean;
 }) {
+  const colors = useColors();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacity = useRef(new Animated.Value(0.7)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -212,7 +214,7 @@ function LiveTabIcon({
       <Ionicons
         name={focused ? "videocam" : "videocam-outline"}
         size={24}
-        color={focused ? "#EF4444" : color}
+        color={focused ? "#EF4444" : (typeof color === "string" ? color : colors.mutedForeground)}
       />
       {/* Sleek LIVE micro-badge with pulsing beacon */}
       <View style={styles.liveMicroBadge}>
@@ -279,7 +281,7 @@ function TabLayout() {
             shadowOffset: { width: 0, height: -4 },
             shadowOpacity: isDark ? 0.25 : 0.06,
             shadowRadius: 16,
-            height: isWeb ? 68 : 58 + insets.bottom,
+            height: mainTabBarHeight(insets.bottom),
             paddingBottom: isWeb ? 0 : Math.max(insets.bottom - 4, 4),
             paddingTop: 4,
           },

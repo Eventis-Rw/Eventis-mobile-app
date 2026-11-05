@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ComponentRef, useCallback, useEffect, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { useSafeAreaFrame } from "react-native-safe-area-context";
 
@@ -6,7 +6,7 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 /** Reserve only the system inset that actually overlaps this screen's viewport. */
 export function useChatBottomInset(keyboardVisible: boolean) {
-  const viewport = useRef<View>(null);
+  const viewport = useRef<ComponentRef<typeof View>>(null);
   const frame = useSafeAreaFrame();
   const insets = useAppSafeAreaInsets();
   // Some edge-to-edge Android devices report a zero safe-area inset even

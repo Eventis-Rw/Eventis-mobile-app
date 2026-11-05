@@ -5,7 +5,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
-  ViewToken,
+  type FlatListProps,
 } from "react-native";
 
 import { EventCard } from "./EventCard";
@@ -38,10 +38,9 @@ export function BannerCarousel({ events, loading = false, inset = 20 }: BannerCa
   );
 
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0 && viewableItems[0].index !== null) {
-        setActiveIndex(viewableItems[0].index);
-      }
+    ({ viewableItems }: Parameters<NonNullable<FlatListProps<Event>["onViewableItemsChanged"]>>[0]) => {
+      const index = viewableItems[0]?.index;
+      if (typeof index === "number") setActiveIndex(index);
     },
     []
   );

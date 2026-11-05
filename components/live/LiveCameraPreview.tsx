@@ -3,7 +3,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Linking, Platform, StyleSheet, Text, View } from "react-native";
 import { LiveButton, LiveIcon, liveColors as c, liveStyles as s } from "./LivePrimitives";
 
-/** Local camera only. Unmounting releases it before LiveKit starts publishing. */
 export function LiveCameraPreview({ facing, onFlip, onReadyChange, immersive = false }: {
   immersive?: boolean; facing: CameraType; onFlip: () => void; onReadyChange: (ready: boolean) => void;
 }) {

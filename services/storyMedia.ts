@@ -47,7 +47,7 @@ async function resolveMedia(uri: string) {
 }
 export async function resolveStoryMedia(items: PublishedStory[]) {
   return Promise.all(items.map(async (story) => {
-    const imageUri = typeof story.storyImage === "object" && !Array.isArray(story.storyImage) ? story.storyImage?.uri : undefined;
+    const imageUri = typeof story.storyImage === "object" && story.storyImage !== null && "uri" in story.storyImage ? story.storyImage.uri : undefined;
     const uri = story.mediaUrl || imageUri;
     if (!uri?.startsWith(PREFIX)) return story;
     const resolved = await resolveMedia(uri);

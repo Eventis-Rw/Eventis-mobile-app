@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { type ComponentRef, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -41,7 +41,7 @@ export default function OrganisationSetupScreen() {
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const { user, setupOrganisation } = useAuth();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
 
   const [values, setValues] = useState<OrganisationFormValues>(() =>
     organisationFormValues({ name: user?.businessName, website: user?.businessWebsite }),

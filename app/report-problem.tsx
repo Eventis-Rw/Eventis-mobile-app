@@ -1,8 +1,9 @@
+import { usePreventRemove } from "expo-router/react-navigation";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { type ComponentRef, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -45,8 +46,8 @@ export default function ReportProblemScreen() {
   const { user } = useAuth();
   // `?reference=` prefills a booking or ticket code when opened from one.
   const params = useLocalSearchParams<{ reference?: string; category?: string }>();
-  const scrollRef = useRef<ScrollView>(null);
-  const allowLeave = useRef(false);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [allowLeave, setAllowLeave] = useState(false);
 
   const initialCategory = REPORT_CATEGORIES.some((c) => c.key === params.category) ? (params.category as ReportCategory) : "";
   const [category, setCategory] = useState<ReportCategory | "">(initialCategory);
@@ -77,13 +78,12 @@ export default function ReportProblemScreen() {
   const errorFor = (key: keyof typeof errors) => (submitAttempted || touched[key] ? errors[key] : undefined);
   const isDirty = !receipt && (!!description.trim() || !!screenshotUri || category !== initialCategory);
 
-  useEffect(() => {
-    return navigation.addListener("beforeRemove", (event) => {
-      if (allowLeave.current || !isDirty || submitting) return;
-      event.preventDefault();
-      setPendingLeave(() => () => navigation.dispatch(event.data.action));
-    });
-  }, [navigation, isDirty, submitting]);
+  usePreventRemove(isDirty && !submitting && !allowLeave, (options) => {
+    const repeat = "repeat" in options ? options.repeat : undefined;
+    setPendingLeave(() => typeof repeat === "function"
+      ? () => repeat()
+      : () => navigation.dispatch(options.data.action));
+  });
 
   const pickScreenshot = async () => {
     setPhotoError(null);
@@ -128,7 +128,7 @@ export default function ReportProblemScreen() {
           </Text>
           <Pressable
             onPress={() => {
-              allowLeave.current = true;
+              setAllowLeave(true);
               router.back();
             }}
             style={({ pressed }) => [styles.primaryBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
@@ -300,7 +300,7 @@ export default function ReportProblemScreen() {
         onConfirm={() => {
           const leave = pendingLeave;
           setPendingLeave(null);
-          allowLeave.current = true;
+          setAllowLeave(true);
           leave?.();
         }}
         onClose={() => setPendingLeave(null)}

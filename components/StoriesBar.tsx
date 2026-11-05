@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { type ComponentRef, useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { AccessibilityInfo, AppState, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StoryAvatar } from "@/components/StoryAvatar";
@@ -10,7 +10,7 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: { user: User | null;
   const colors = useColors();
   const router = useRouter();
   const { collections, openStories, loading, error, refresh, viewerOpen } = useStories();
-  const tray = useRef<ScrollView>(null);
+  const tray = useRef<ComponentRef<typeof ScrollView>>(null);
   const scroll = useRef({ offset: 0, width: 0, content: 0, touching: false, resumeAt: 0 });
   const [focused, setFocused] = useState(false);
   const [foreground, setForeground] = useState(AppState.currentState !== "background");
