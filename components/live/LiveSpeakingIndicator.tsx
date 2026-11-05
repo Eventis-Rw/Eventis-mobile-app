@@ -26,7 +26,7 @@ function useSpeakingPulse(speaking: boolean) {
   return { pulse, reduceMotion };
 }
 
-export function LiveSpeakingAvatar({ speaking, size = "large", children }: { speaking: boolean; size?: "small" | "large"; children: React.ReactNode }) {
+export function LiveSpeakingAvatar({ speaking, size = "large", minimal = false, children }: { speaking: boolean; size?: "small" | "large"; minimal?: boolean; children: React.ReactNode }) {
   const { pulse, reduceMotion } = useSpeakingPulse(speaking);
   const small = size === "small";
   return <View style={[styles.avatar, { padding: small ? 4 : 12 }]}>
@@ -37,7 +37,7 @@ export function LiveSpeakingAvatar({ speaking, size = "large", children }: { spe
         transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, small ? 1.35 : 1.3] }) }],
       }]} /> : null}
     </> : null}
-    <View style={[styles.ring, { padding: small ? 2 : 6, borderWidth: small ? 2 : 3 }, speaking && styles.activeRing]}>{children}</View>
+    <View style={[styles.ring, { padding: small ? 2 : 6, borderWidth: small ? 2 : 3 }, minimal && !speaking && { borderColor: "transparent", backgroundColor: "transparent" }, speaking && styles.activeRing]}>{children}</View>
   </View>;
 }
 

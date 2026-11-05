@@ -37,8 +37,10 @@ import {
   roomState,
   type BroadcastSession,
 } from "@/services/liveBroadcastProtocol";
+import { LiveMediaControls } from "./LiveMediaControls";
 import { mediaUnavailableReason } from "@/services/liveMedia";
-import type { LivePerson } from "@/services/liveState";
+import { liveBalance, reduceLive, type LiveAction, type LivePerson, type LiveState } from "@/services/liveState";
+import { useLiveDemo } from "@/hooks/useLiveDemo";
 import {
   LiveAvatar,
   LiveButton,
@@ -64,12 +66,14 @@ export function LiveBroadcastEntry({
   person,
   onClose,
   initialSession,
+  sampleWallet,
   events = [],
   checks = [],
 }: {
   person: LivePerson;
   onClose: () => void;
   initialSession?: BroadcastSession;
+  sampleWallet?: ReturnType<typeof useLiveDemo>;
   events?: PublisherEvent[];
   checks?: AccessCheck[];
 }) {
@@ -254,7 +258,11 @@ export function LiveBroadcastEntry({
       onRequestClose={() => (session ? setCloseSignal((n) => n + 1) : close())}
     >
       <StatusBar style="light" />
-      {session ? (
+      {session?.sample && sampleWallet ? (
+        <ConnectedBroadcast key={session.code} session={session} name={person.name} closeSignal={closeSignal} onClose={close} wallet={sampleWallet} />
+      ) : session?.sample ? (
+        <SampleConnectedBroadcast key={session.code} session={session} name={person.name} closeSignal={closeSignal} onClose={close} />
+      ) : session ? (
         <ConnectedBroadcast
           key={session.code}
           session={session}
@@ -690,21 +698,23 @@ export function LiveBroadcastEntry({
   );
 }
 
+type ConnectedProps = { session: BroadcastSession; name: string; closeSignal: number; onClose: () => void };
+function SampleConnectedBroadcast(props: ConnectedProps) {
+  const wallet = useLiveDemo(props.session.profile!.id);
+  return <ConnectedBroadcast {...props} wallet={wallet} />;
+}
+
 function ConnectedBroadcast({
   session,
   name,
   closeSignal,
   onClose,
-}: {
-  session: BroadcastSession;
-  name: string;
-  closeSignal: number;
-  onClose: () => void;
-}) {
+  wallet,
+}: ConnectedProps & { wallet?: ReturnType<typeof useLiveDemo> }) {
   const live = useLiveBroadcast(session, name);
   const [notice, setNotice] = useState("");
   const insets = useAppSafeAreaInsets();
-  const own = { id: session.identity, name };
+  const own = { ...session.profile, id: session.identity, name };
   useEffect(() => {
     if (closeSignal && !live.ready) onClose();
   }, [closeSignal, live.ready, onClose]);
@@ -746,15 +756,28 @@ function ConnectedBroadcast({
       live.model.guests.some((g) => g.id === p.identity),
   );
   const disabled = live.connection !== "connected";
+  const act = async (actor: LivePerson, action: LiveAction): Promise<LiveState> => {
+    if (!session.sample || !wallet || !session.profile) return live.act(actor, action);
+    if (action.type === "topUp") return wallet.act(session.profile, action);
+    if (action.type !== "gift") return live.act(actor, action);
+    if (live.approvedGuest) throw new Error("Leave the stage before sending gifts.");
+    const localAction = { ...action, roomId: session.sample.id };
+    const joined = await wallet.act(session.profile, { type: "join", roomId: session.sample.id });
+    reduceLive(joined, session.profile, localAction);
+    await live.act(actor, action);
+    return wallet.act(session.profile, localAction);
+  };
+  const state = roomState(live.model);
+  if (wallet?.state && session.profile) state.wallets[own.id] = liveBalance(wallet.state, session.profile.id);
   return (
     <>
       <LiveRoomView
-        room={live.model}
+        room={session.sample ? { ...live.model, giftsEnabled: true } : live.model}
         person={own}
-        state={roomState(live.model)}
+        state={state}
         now={live.now}
         closeSignal={closeSignal}
-        act={live.act}
+        act={act}
         onClose={onClose}
         broadcast={{
           status:
@@ -762,7 +785,7 @@ function ConnectedBroadcast({
               ? "LIVE · TEST SESSION"
               : live.connection.toUpperCase(),
           onShare: () => {
-            const url = Linking.createURL(`/live/${session.listing?.id ?? ""}`);
+            const url = Linking.createURL(`/live/${session.sample?.id ?? session.listing?.id ?? ""}`);
             void Share.share({
               message: `Watch ${live.model.title} on Eventis. ${url}`,
             }).catch(() => setNotice("Sharing is unavailable right now."));
@@ -775,76 +798,29 @@ function ConnectedBroadcast({
             setNotice("");
             live.clearError();
           },
-          stage: (
+          stage: (actions) => (
             <LiveBroadcastStage
+              actions={actions}
               participants={stage}
               revision={live.revision}
               voice={live.voice}
               hostId={session.hostId}
               host={live.model.host}
+              placeholderHost={!!session.sample}
               guests={live.model.guests}
               connected={live.connection === "connected"}
               mode={session.mode}
             />
           ),
-          controls: (
-            <>
-              {live.canPublish ? (
-                <>
-                  <LiveOverlayAction
-                    name={
-                      live.localMedia.microphone
-                        ? "mic-outline"
-                        : "mic-off-outline"
-                    }
-                    label={live.localMedia.microphone ? "Mute" : "Enable mic"}
-                    caption="Mic"
-                    active={!live.localMedia.microphone}
-                    disabled={disabled}
-                    onPress={() => live.media("mic")}
-                  />
-                  {session.mode === "video" ? (
-                    <>
-                      <LiveOverlayAction
-                        name={
-                          live.localMedia.camera
-                            ? "videocam-outline"
-                            : "videocam-off-outline"
-                        }
-                        label={
-                          live.localMedia.camera ? "Camera off" : "Camera on"
-                        }
-                        caption="Camera"
-                        active={!live.localMedia.camera}
-                        disabled={disabled}
-                        onPress={() => live.media("camera")}
-                      />
-                      <LiveOverlayAction
-                        name="camera-reverse-outline"
-                        label="Flip"
-                        caption="Flip"
-                        disabled={disabled || !live.localMedia.camera}
-                        onPress={() => live.media("flip")}
-                      />
-                    </>
-                  ) : null}
-                </>
-              ) : null}
-              {Platform.OS === "web" ? (
-                <LiveOverlayAction
-                  name="volume-high-outline"
-                  label="Enable sound"
-                  disabled={disabled}
-                  onPress={() => live.media("audio")}
-                />
-              ) : null}
-            </>
-          ),
+          controls: live.canPublish ? <LiveMediaControls microphone={live.localMedia.microphone} camera={live.localMedia.camera}
+            video={session.mode === "video"} disabled={disabled || live.mediaBusy} onAction={live.media} /> : null,
+          playbackControl: Platform.OS === "web" ? <LiveOverlayAction name="volume-high-outline" label="Enable sound"
+            disabled={disabled || live.mediaBusy} onPress={() => live.media("audio")} /> : null,
         }}
       />
       {!session.hosting &&
       live.approvedGuest &&
-      !live.stageConsent &&
+      (!live.stageConsent || live.joiningStage) &&
       !live.model.endedAt ? (
         <LiveGuestPreparation
           mode={session.mode}

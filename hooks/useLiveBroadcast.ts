@@ -3,6 +3,7 @@ import {
   liveDirectoryApi,
   publicLiveImage,
 } from "@/services/liveDirectoryService";
+import { publishGuestMedia } from "@/services/liveStageMedia";
 import { ApiError } from "@/utils/apiClient";
 import { AppState, Platform } from "react-native";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/services/liveMedia";
 import {
   initialBroadcastRoom,
+  liveCoordinator,
   LIVE_DATA_TOPIC,
   liveProject,
   parseGuestAction,
@@ -128,6 +130,11 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
   const [now, setNow] = useState(Date.now());
   const [attempt, setAttempt] = useState(0);
   const [stageConsent, setStageConsent] = useState(false);
+  const [joiningStage, setJoiningStage] = useState(false);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const alive = useRef(false);
+  const captureEpoch = useRef(0);
+  const handledMute = useRef(0);
   const modelRef = useRef(model);
   const channel = useRef<{
     act: (a: LiveAction) => Promise<LiveState>;
@@ -138,6 +145,9 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
   const isHost = session.hosting;
 
   useEffect(() => {
+    alive.current = true;
+    captureEpoch.current++;
+    handledMute.current = 0;
     let disposed = false;
     let rtc: Room | null = null;
     let removeAudio = () => {};
@@ -166,6 +176,12 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     setConnection("connecting");
     setError("");
     setStageConsent(false);
+    setJoiningStage(false);
+    setMediaBusy(false);
+    const coordinator = () => session.sample && rtc
+      ? liveCoordinator([rtc.localParticipant, ...rtc.remoteParticipants.values()])
+      : session.hostId;
+    const coordinates = () => isHost || (!!session.sample && coordinator() === session.identity);
     const roster = () =>
       rtc
         ? [rtc.localParticipant, ...rtc.remoteParticipants.values()]
@@ -195,7 +211,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     const snapshot = () => serializeBroadcastRoom(modelRef.current);
     const broadcast = () => send({ type: "state", room: snapshot() });
     const apply = (actor: LivePerson, action: LiveAction) => {
-      if (action.type === "gift")
+      if (action.type === "gift" && !session.sample)
         throw new Error(
           "Gifts remain in the local demo until a shared wallet is connected.",
         );
@@ -204,9 +220,17 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
       if (action.type === "request" && modelRef.current.requests.length >= 20)
         throw new Error("The request list is full. Try again shortly.");
       update(modelRef.current);
-      const next = reduceLive(roomState(modelRef.current), actor, action)
-        .rooms[0];
-      update(next);
+      const previous = roomState(modelRef.current);
+      if (session.sample && action.type === "gift") {
+        if (modelRef.current.messages.some(m => m.id === action.transactionId)) return previous;
+        previous.rooms = [{ ...modelRef.current, giftsEnabled: true }];
+        previous.wallets[actor.id] = 50000;
+      }
+      let next = reduceLive(previous, actor, action);
+      next.rooms[0].giftsEnabled = false;
+      if (session.sample && action.type === "request")
+        next = reduceLive(next, next.rooms[0].host, { type: "accept", roomId: session.code, person: actor });
+      update(next.rooms[0]);
       return roomState(modelRef.current);
     };
     const fail = (e: unknown) => {
@@ -232,7 +256,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
         return;
       }
       if (!data || typeof data !== "object") return;
-      if (isHost) {
+      if (coordinates()) {
         if (data.type === "hello") {
           void send({ type: "state", room: snapshot() }, sender.identity).catch(
             fail,
@@ -245,7 +269,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
           data.id.length > 100
         )
           return;
-        const action = parseGuestAction(data.action, session.code);
+        const action = parseGuestAction(data.action, session.code, !!session.sample);
         if (!action) return;
         const key = `${sender.identity}:${data.id}`;
         let actionError = processed.get(key);
@@ -264,8 +288,8 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
           sender.identity,
         ).catch(fail);
         void broadcast().catch(fail);
-      } else if (sender.identity === session.hostId) {
-        const next = parseHostSnapshot(data.room, sender.identity, session);
+      } else if (sender.identity === coordinator()) {
+        const next = parseHostSnapshot(data.room, sender.identity, session, coordinator());
         if (next) {
           receivedSnapshot = true;
           update(next);
@@ -287,7 +311,8 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     };
     const changed = () => {
       if (disposed || !rtc) return;
-      if (isHost) {
+      if (coordinates()) {
+        if (session.sample) { receivedSnapshot = true; setReady(true); }
         const present = new Set(roster().map((p) => p.id));
         update({
           ...modelRef.current,
@@ -304,8 +329,8 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     };
     const connectionChanged = (state: ConnectionState) => {
       if (!disposed) setConnection(state);
-      if (state === ConnectionState.Connected && rtc && !isHost)
-        void send({ type: "hello" }, session.hostId).catch(fail);
+      if (state === ConnectionState.Connected && rtc && !coordinates())
+        void send({ type: "hello" }, coordinator()).catch(fail);
     };
     const disconnect = async () => {
       await rtc?.disconnect(true);
@@ -321,6 +346,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     const appListener = AppState.addEventListener("change", (state) => {
       if (state === "background") {
         backgrounded = true;
+        captureEpoch.current++;
         void stopPublishing();
         if (
           !disposed &&
@@ -335,6 +361,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     const visibility = () => {
       if (document.visibilityState === "hidden") {
         backgrounded = true;
+        captureEpoch.current++;
         void stopPublishing();
       }
     };
@@ -344,7 +371,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
       if (disposed) return;
       setNow(Date.now());
       if (!rtc || rtc.state !== ConnectionState.Connected) return;
-      if (isHost) {
+      if (coordinates()) {
         if (
           Date.now() >= modelRef.current.endsAt &&
           !modelRef.current.endedAt
@@ -361,7 +388,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
             .catch(fail);
         }
       } else {
-        if (rtc.remoteParticipants.has(session.hostId)) hostMissingAt = 0;
+        if (session.sample || rtc.remoteParticipants.has(session.hostId)) hostMissingAt = 0;
         else {
           hostMissingAt ||= Date.now();
           if (Date.now() - hostMissingAt > 15000) {
@@ -389,7 +416,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
       )
         return;
       void (
-        isHost ? broadcast() : send({ type: "hello" }, session.hostId)
+        coordinates() ? broadcast() : send({ type: "hello" }, coordinator())
       ).catch(fail);
       if (isHost && session.listing && session.controlToken)
         void liveDirectoryApi
@@ -495,6 +522,11 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
           );
         setRoom(rtc);
         update(modelRef.current);
+        if (session.sample && coordinates()) {
+          receivedSnapshot = true;
+          setReady(true);
+          await broadcast();
+        }
         if (isHost) {
           setReady(true);
           await broadcast();
@@ -525,15 +557,17 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
             await disconnect();
             return;
           }
-        } else await send({ type: "hello" }, session.hostId);
+          if (backgrounded) await stopPublishing();
+        } else if (!coordinates()) await send({ type: "hello" }, coordinator());
         if (disposed) return;
         channel.current = {
           disconnect,
           act: async (action: LiveAction) => {
             if (!rtc || rtc.state !== ConnectionState.Connected)
               throw new Error("Wait for the room to reconnect.");
-            if (isHost) {
-              const state = apply({ id: session.identity, name }, action);
+            if (coordinates()) {
+              if (!isHost && !parseGuestAction(action, session.code, !!session.sample)) throw new Error("Only the host can do that.");
+              const state = apply(personOf(rtc.localParticipant), action);
               await broadcast();
               if (action.type === "end") {
                 if (session.listing && session.controlToken)
@@ -544,7 +578,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
               }
               return state;
             }
-            const allowed = parseGuestAction(action, session.code);
+            const allowed = parseGuestAction(action, session.code, !!session.sample);
             if (!allowed) throw new Error("Only the host can do that.");
             const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
             return new Promise<LiveState>((resolve, reject) => {
@@ -555,7 +589,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
               acknowledgements.set(id, { resolve, reject, timer: timeout });
               void send(
                 { type: "action", id, action: allowed },
-                session.hostId,
+                coordinator(),
               ).catch((e) => {
                 clearTimeout(timeout);
                 acknowledgements.delete(id);
@@ -576,6 +610,8 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     })();
     return () => {
       disposed = true;
+      alive.current = false;
+      captureEpoch.current++;
       channel.current = null;
       clearInterval(timer);
       clearInterval(heartbeat);
@@ -633,6 +669,7 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
         model.endedAt ||
         model.blockedIds.includes(session.identity))
     ) {
+      captureEpoch.current++;
       void releaseLocalCapture(room);
       if (
         (!isHost && model.endedAt) ||
@@ -648,104 +685,87 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     session.identity,
     isHost,
   ]);
+  const muteRequest = model.microphoneMutes?.[session.identity] ?? 0;
+  useEffect(() => {
+    if (!room || isHost || muteRequest <= handledMute.current) return;
+    handledMute.current = muteRequest;
+    mediaLock.current = mediaLock.current.catch(() => {}).then(async () => {
+      await releaseLocalCapture(room, [Track.Source.Microphone]);
+      if (!alive.current) return;
+      setVoice(voiceOf(room));
+      setRevision(r => r + 1);
+      setError("The host muted your microphone. You can turn it back on when you're ready to speak.");
+    });
+  }, [room, isHost, muteRequest]);
+  const allowed = (rtc: Room, epoch: number) => alive.current && captureEpoch.current === epoch &&
+    rtc.state === ConnectionState.Connected && !modelRef.current.endedAt &&
+    !modelRef.current.blockedIds.includes(session.identity) &&
+    (isHost || modelRef.current.guests.some(p => p.id === session.identity));
   const media = (kind: "mic" | "camera" | "flip" | "audio") => {
-    mediaLock.current = mediaLock.current
-      .catch(() => {})
-      .then(async () => {
-        if (!room || room.state !== ConnectionState.Connected)
-          throw new Error("Connect to the room first.");
-        if (kind === "audio") {
-          await room.startAudio();
-          return;
-        }
-        if (
-          !(
-            isHost ||
-            (stageConsent &&
-              modelRef.current.guests.some((p) => p.id === session.identity))
-          ) ||
-          modelRef.current.endedAt ||
-          modelRef.current.blockedIds.includes(session.identity)
-        )
-          throw new Error(
-            "Ask the host to join the stage before enabling your microphone or camera.",
-          );
-        if (kind === "mic") {
-          if (room.localParticipant.isMicrophoneEnabled)
-            await releaseLocalCapture(room, [Track.Source.Microphone]);
-          else await room.localParticipant.setMicrophoneEnabled(true);
-        }
-        if (kind === "camera")
-          await room.localParticipant.setCameraEnabled(
-            !room.localParticipant.isCameraEnabled,
-            { facingMode: facing.current },
-          );
-        if (kind === "flip") {
-          const track = room.localParticipant.getTrackPublication(
-            Track.Source.Camera,
-          )?.track;
-          if (!track) throw new Error("Turn on your camera first.");
-          facing.current = facing.current === "user" ? "environment" : "user";
-          await (
-            track as import("livekit-client").LocalVideoTrack
-          ).restartTrack({ facingMode: facing.current });
-        }
-        if (
-          !isHost &&
-          (!modelRef.current.guests.some((p) => p.id === session.identity) ||
-            modelRef.current.endedAt ||
-            modelRef.current.blockedIds.includes(session.identity))
-        ) {
-          await releaseLocalCapture(room);
-          throw new Error("Your guest spot is no longer available.");
-        }
-        setError("");
-        setVoice(voiceOf(room));
-        setRevision((r) => r + 1);
-      })
-      .catch((e) => setError(messageOf(e)));
+    if (mediaBusy) return;
+    setMediaBusy(true);
+    mediaLock.current = mediaLock.current.catch(() => {}).then(async () => {
+      if (!room || room.state !== ConnectionState.Connected) throw new Error("Connect to the room first.");
+      if (kind === "audio") { await room.startAudio(); return; }
+      const epoch = captureEpoch.current;
+      const muteAtStart = modelRef.current.microphoneMutes?.[session.identity] ?? 0;
+      if (!allowed(room, epoch) || (!isHost && !stageConsent))
+        throw new Error("Ask the host to join the stage before enabling your microphone or camera.");
+      if (kind === "mic") {
+        if (room.localParticipant.isMicrophoneEnabled) await releaseLocalCapture(room, [Track.Source.Microphone]);
+        else await room.localParticipant.setMicrophoneEnabled(true);
+      }
+      if (kind === "camera") {
+        if (session.mode !== "video") throw new Error("This is an audio Live. Cameras are off for everyone.");
+        if (room.localParticipant.isCameraEnabled) await releaseLocalCapture(room, [Track.Source.Camera]);
+        else await room.localParticipant.setCameraEnabled(true, { facingMode: facing.current });
+      }
+      if (kind === "flip") {
+        const track = room.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
+        if (!track) throw new Error("Turn on your camera first.");
+        facing.current = facing.current === "user" ? "environment" : "user";
+        await (track as import("livekit-client").LocalVideoTrack).restartTrack({ facingMode: facing.current });
+      }
+      if (!allowed(room, epoch)) {
+        await releaseLocalCapture(room);
+        throw new Error("Your guest spot is no longer available, or the app was backgrounded.");
+      }
+      if ((modelRef.current.microphoneMutes?.[session.identity] ?? 0) > muteAtStart)
+        await releaseLocalCapture(room, [Track.Source.Microphone]);
+      setError("");
+      setVoice(voiceOf(room));
+      setRevision(r => r + 1);
+    }).catch(e => { if (alive.current) setError(messageOf(e)); })
+      .finally(() => { if (alive.current) setMediaBusy(false); });
   };
-  const joinStage = async (settings: {
-    microphone: boolean;
-    camera: boolean;
-    facing: "user" | "environment";
-  }) => {
-    if (
-      !room ||
-      room.state !== ConnectionState.Connected ||
-      !modelRef.current.guests.some((p) => p.id === session.identity) ||
-      modelRef.current.endedAt ||
-      modelRef.current.blockedIds.includes(session.identity)
-    )
-      throw new Error("Your guest invitation is no longer available.");
-    const errors: string[] = [];
+  const joinStage = async (settings: { microphone: boolean; camera: boolean; facing: "user" | "environment" }) => {
+    if (joiningStage) return;
+    const epoch = captureEpoch.current;
+    if (!room || !allowed(room, epoch)) throw new Error("Your guest invitation is no longer available.");
+    const muteAtStart = modelRef.current.microphoneMutes?.[session.identity] ?? 0;
     facing.current = settings.facing;
+    setJoiningStage(true);
+    setMediaBusy(true);
     setStageConsent(true);
     try {
-      await room.localParticipant.setMicrophoneEnabled(settings.microphone);
+      const errors = await publishGuestMedia({
+        microphone: enabled => room.localParticipant.setMicrophoneEnabled(enabled),
+        camera: enabled => room.localParticipant.setCameraEnabled(enabled, { facingMode: settings.facing }),
+        stop: () => releaseLocalCapture(room),
+      }, { microphone: settings.microphone, camera: session.mode === "video" && settings.camera }, () => allowed(room, epoch));
+      if ((modelRef.current.microphoneMutes?.[session.identity] ?? 0) > muteAtStart) {
+        await releaseLocalCapture(room, [Track.Source.Microphone]);
+        errors.push("The host muted your microphone.");
+      }
+      setError(errors.join(". "));
+      setVoice(voiceOf(room));
+      setRevision(r => r + 1);
     } catch (e) {
-      errors.push(`Microphone: ${messageOf(e)}`);
+      if (alive.current) setStageConsent(false);
+      throw e;
+    } finally {
+      if (alive.current) { setJoiningStage(false); setMediaBusy(false); }
     }
-    try {
-      if (session.mode === "video")
-        await room.localParticipant.setCameraEnabled(settings.camera, {
-          facingMode: settings.facing,
-        });
-    } catch (e) {
-      errors.push(`Camera: ${messageOf(e)}`);
-    }
-    // The host may remove this seat while the operating system asks for permission.
-    if (
-      !modelRef.current.guests.some((p) => p.id === session.identity) ||
-      modelRef.current.endedAt
-    ) {
-      await releaseLocalCapture(room);
-      setStageConsent(false);
-      throw new Error("Your guest spot is no longer available.");
-    }
-    setError(errors.join(". "));
-    setVoice(voiceOf(room));
-    setRevision((r) => r + 1);
   };
   const act = (_actor: LivePerson, action: LiveAction) =>
     channel.current?.act(action) ??
@@ -763,6 +783,8 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     localMedia,
     approvedGuest,
     stageConsent,
+    joiningStage,
+    mediaBusy,
     joinStage,
     canPublish,
     media,

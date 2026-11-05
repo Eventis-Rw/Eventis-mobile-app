@@ -35,6 +35,8 @@ export type LiveRoom = {
   id: string; host: LivePerson; title: string; mode: LiveMode; eventId?: string; cover?: string;
   /** Display-only count for seeded previews; never used as real audience or analytics. */
   previewViewers?: number;
+  /** Host-issued, one-way microphone stop requests; guests explicitly unmute themselves. */
+  microphoneMutes?: Record<string, number>;
   startedAt: number; endsAt: number; endedAt?: number; guests: LivePerson[]; requests: LivePerson[];
   invitations: LivePerson[]; audience: LivePerson[]; mutedIds: string[]; blockedIds: string[];
   messages: LiveMessage[]; chatEnabled: boolean; giftsEnabled: boolean; reactions: number;
@@ -101,6 +103,7 @@ export function readLiveState(raw: string | null, now = Date.now()): LiveState {
     draft(r) && typeof r.id === "string" && person(r.host) && Number.isFinite(r.startedAt) && Number.isFinite(r.endsAt) &&
     (!r.endedAt || Number.isFinite(r.endedAt)) && Number.isFinite(r.reactions) &&
     people(r.guests) && people(r.requests) && people(r.invitations) && people(r.audience) && strings(r.mutedIds) && strings(r.blockedIds) &&
+    (r.microphoneMutes === undefined || (r.microphoneMutes && typeof r.microphoneMutes === "object" && !Array.isArray(r.microphoneMutes) && Object.values(r.microphoneMutes).every(n => Number.isSafeInteger(n) && Number(n) > 0))) &&
     Array.isArray(r.messages) && r.messages.every((m: any) => m && typeof m.id === "string" && person(m.person) && typeof m.text === "string" && Number.isFinite(m.at) && ["chat", "gift", "system"].includes(m.kind))) &&
     Array.isArray(data.queue) && data.queue.every((q: any) => q && person(q.person) && draft(q.draft) && Number.isFinite(q.at)) &&
     Array.isArray(data.starts) && data.starts.every((s: any) => s && typeof s.userId === "string" && Number.isFinite(s.at)) &&
@@ -120,7 +123,7 @@ export type LiveAction =
   | { type: "topUp"; paymentId: string; coins: number; priceRwf: number }
   | { type: "join" | "leave" | "end" | "request" | "cancelRequest" | "acceptInvite" | "declineInvite" | "leaveSeat" | "react"; roomId: string }
   | { type: "message"; roomId: string; text: string }
-  | { type: "accept" | "reject" | "invite" | "remove" | "mute" | "unmute" | "block"; roomId: string; person: LivePerson }
+  | { type: "accept" | "reject" | "invite" | "remove" | "mute" | "unmute" | "muteMicrophone" | "block"; roomId: string; person: LivePerson }
   | { type: "settings"; roomId: string; chatEnabled: boolean; giftsEnabled: boolean }
   | { type: "gift"; roomId: string; giftId: string; transactionId: string };
 
@@ -166,7 +169,7 @@ export function reduceLive(previous: LiveState, actor: LivePerson, action: LiveA
   }
   ensure(!room.endedAt && room.endsAt > now, "This Live has ended.");
   ensure(!room.blockedIds.includes(actor.id), "The host has blocked you from this room.");
-  const hostActions = ["end", "accept", "reject", "invite", "remove", "mute", "unmute", "block", "settings"];
+  const hostActions = ["end", "accept", "reject", "invite", "remove", "mute", "unmute", "muteMicrophone", "block", "settings"];
   if (hostActions.includes(action.type)) ensure(host, "Only the host can do that.");
   if (action.type !== "join" && !host) ensure(room.audience.some(p => p.id === actor.id), "Join the room first.");
   switch (action.type) {
@@ -200,6 +203,10 @@ export function reduceLive(previous: LiveState, actor: LivePerson, action: LiveA
     case "reject": room.requests = room.requests.filter(p => p.id !== action.person.id); break;
     case "remove": room.guests = room.guests.filter(p => p.id !== action.person.id); break;
     case "leaveSeat": room.guests = room.guests.filter(p => p.id !== actor.id); break;
+    case "muteMicrophone":
+      ensure(room.guests.some(p => p.id === action.person.id), "Only a guest on stage can be muted.");
+      room.microphoneMutes = { ...room.microphoneMutes, [action.person.id]: (room.microphoneMutes?.[action.person.id] ?? 0) + 1 };
+      break;
     case "mute": if (!room.mutedIds.includes(action.person.id)) room.mutedIds.push(action.person.id); break;
     case "unmute": room.mutedIds = room.mutedIds.filter(p => p !== action.person.id); break;
     case "block":

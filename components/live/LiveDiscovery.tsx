@@ -109,7 +109,7 @@ export function LiveDiscovery({ rooms, busy, onHost, onRoom, liveRooms = [], liv
     ...rooms.map(room => ({
       id: `demo:${room.id}`, title: room.title, host: room.host,
       viewers: room.previewViewers ?? room.audience.length,
-      label: `Open demo room: ${room.title}`, disabled: busy,
+      label: `Open Live: ${room.title}`, disabled: busy,
       onPress: () => onRoom(room),
     })),
   ].slice(0, 5);
@@ -145,8 +145,8 @@ export function LiveDiscovery({ rooms, busy, onHost, onRoom, liveRooms = [], liv
           {onRefresh ? <Pressable accessibilityRole="button" accessibilityLabel="Retry loading live broadcasts" onPress={onRefresh} style={styles.retry}><Text style={styles.retryText}>Retry</Text></Pressable> : null}
         </View> : null}
         {onWallet || onDemo ? <View style={styles.footerTools}>
-          {onWallet ? <Pressable accessibilityRole="button" accessibilityLabel="Open coin wallet" onPress={onWallet} style={styles.footerButton}><Ionicons name="wallet-outline" size={16} color={palette.muted} /><Text style={styles.stateText}>Demo wallet</Text></Pressable> : null}
-          {onDemo ? <Pressable accessibilityRole="button" onPress={onDemo} style={styles.footerButton}><Ionicons name="flask-outline" size={16} color={palette.muted} /><Text style={styles.stateText}>Demo controls</Text></Pressable> : null}
+          {onWallet ? <Pressable accessibilityRole="button" accessibilityLabel="Open coin wallet" onPress={onWallet} style={styles.footerButton}><Ionicons name="wallet-outline" size={16} color={palette.muted} /><Text style={styles.stateText}>Wallet</Text></Pressable> : null}
+          {onDemo ? <Pressable accessibilityRole="button" onPress={onDemo} style={styles.footerButton}><Ionicons name="flask-outline" size={16} color={palette.muted} /><Text style={styles.stateText}>Test controls</Text></Pressable> : null}
         </View> : null}
       </ScrollView>
       <View pointerEvents="box-none" style={[styles.hostDock, { bottom: tabHeight }]}>

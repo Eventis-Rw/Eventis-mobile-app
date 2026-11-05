@@ -2,7 +2,7 @@
 
 Eventis Live uses a shared API directory for discovery and LiveKit for real media. Open the **Live** tab and tap an active broadcast to watch, or open a shared `/live/:id` link. Viewers never enter room codes. The same room UI handles chat, reactions, guest requests/invitations and moderation over LiveKit data packets.
 
-Hosts check their access status, open a private camera/voice preview, add a title, optionally link a published event, and explicitly start. Host-approved guests get their own private preview and choose camera/microphone settings before confirming **Join broadcast**. They can return to watching without leaving the room. There is no creator co-host matching or battle feature.
+Hosts check their access status, open a private camera/voice preview, add a title, optionally link a published event, and explicitly start. Host-approved guests get their own private preview and choose camera/microphone settings before confirming **Join with video** or **Join with audio**. They can return to watching without leaving the room. There is no creator co-host matching or battle feature.
 
 ## Connect your project
 
@@ -68,7 +68,7 @@ This branch currently uses Android SDK 36, Build Tools 36.0.0 (plus 35.0.0 for E
 
 1. On phone A, select **Go Live** and grant camera permission. Verify that the preview shows the rear camera, then test Flip. Enter a title, choose camera/voice mode and tap **Start broadcasting**. Grant microphone permission. The selected camera direction carries over to the broadcast.
 2. On phone B, open **Live** and tap A’s broadcast. Alternatively, open its shared Live link. Viewers enter without publishing audio/video. Confirm the linked event details are available through **View event**.
-3. On B, tap an empty seat (the **+** circles under the title) to request to join. Tap it again to cancel. On A, tap an empty seat or open Participants and accept. B sees a private guest preview, chooses microphone/camera settings, then confirms **Join broadcast**. Verify **Stay watching** releases the guest spot without publishing. Test invitation acceptance/decline, removal, chat mute and block too.
+3. On B, tap **Join Live**, an open guest tile, or a **+** circle on a solo broadcast to request to join. Tap it again to cancel. On A, tap an empty seat or open Participants and accept. B sees a private guest preview, chooses microphone/camera settings, then confirms **Join with video** or **Join with audio**. Verify **Stay watching** releases the guest spot without publishing. Test invitation acceptance/decline, removal, chat mute and block too.
 4. Test microphone mute, camera on/off, front/back flip, live chat, reactions, host ending, viewer leaving, and reconnection.
 5. Backgrounding disables local capture. Re-enable media explicitly when back in the app. Leaving the stage, removal and backgrounding unpublish and stop capture tracks. Leaving/unmounting disconnects and stops tracks/audio session.
 
@@ -76,11 +76,15 @@ Web testing uses browser WebRTC, with an **Enable sound** button if autoplay is 
 
 ## Broadcast screen
 
-The camera preview and solo broadcast fill the screen. Video uses cover scaling to fill the available canvas; landscape sources are cropped at the sides in portrait. Approved guests share a split-screen stage, with a grid for additional guests. Voice rooms use profile avatars when no camera is enabled.
+The camera preview and solo broadcast fill the screen. Video uses cover scaling to fill the available canvas; landscape sources are cropped at the sides in portrait. With approved guests, the main host fills the left panel from top to bottom. With one guest, host and guest share the stage at equal width and height (50/50); two or three guests stack on the right; four guests use a two-column grid. Only occupied video slots render, and the available space redistributes when guests join or leave. With two or more guests, the host remains larger than each guest on every participant’s screen. Chat floats over the video stage; only the compact header and bottom media/message controls reserve space. Turning off video keeps the guest’s tile and microphone active. Pending/reconnecting guests retain their position in approval order. Audio rooms use a three-column circle grid on black, with a host avatar, four guest seats, microphone indicators and speaking rings. There are no rectangular audio cards.
 
-Host details and the viewer count sit over the video at the top. Microphone, camera, flip and reaction controls float on the right. Comments overlay the lower part of the broadcast; the composer stays above the system safe area and adjusts for the keyboard. Comments can be hidden through the bottom **…** menu. That menu also contains comment visibility and host settings; sharing remains available beside the composer.
+Host details and the viewer count sit at the top. Solo video keeps floating media controls and overlaid comments. In shared video rooms, chat overlays the stage and publishers have labeled microphone/camera buttons above the message box. Audio rooms keep their header microphone controls and chat below the stage. Media controls remain visible while typing; the composer stays above the system safe area and adjusts for the keyboard. Comments can be hidden through the bottom **…** menu. That menu also contains comment visibility and host settings; sharing remains available beside the composer.
 
-Media controls reflect the SDK's current microphone/camera state. Re-enabling media clears a previous media error, and notices can be dismissed. Participant and media snapshots update on SDK events so newly approved guests render correctly with React Compiler enabled.
+The private preview must be confirmed before publishing controls appear. Video guests get microphone, camera and flip buttons; audio guests get a microphone button. The five sample cards connect to stable shared LiveKit rooms. Stage requests are automatically accepted there, followed by the same private preview and publishing confirmation. Opening the same card or `/live/sample_0` through `/live/sample_4` on another device joins the same room. The first connected tester coordinates room state; coordination transfers when they leave. Seeded hosts are avatar placeholders, while guest camera/audio tracks are real.
+
+Host controls include **Mute microphone**, separately from **Mute chat**. It stops the guest’s microphone without turning off their camera; only the guest can explicitly enable their microphone again. The stop request travels in the host’s validated data snapshot and remains development/client-enforced, subject to the limitations below.
+
+Media controls reflect the SDK's current microphone/camera state and disable while changing devices. Permission failures are independent: guests can still publish video if microphone permission fails, or join with audio when their camera is unavailable. If both requested devices fail, the private preview stays open for retry. Capture is checked again after permission prompts to handle removal, ending and backgrounding. Re-enabling media clears a previous media error, and notices can be dismissed. Participant and media snapshots update on SDK events so newly approved guests render correctly with React Compiler enabled.
 
 ## Testing-only authority and limits
 
@@ -88,7 +92,7 @@ The development token server still permits broad access. Directory owner tokens 
 
 Host snapshots include bounded chat history and are resent on join/reconnect. Request acknowledgements, deduplication, connection timeouts, host-loss handling and wall-clock expiry prevent most stale UI states. The shared directory enforces capacity for API-managed sessions and provides tap-to-watch discovery. It cannot prevent someone using the open LiveKit development token server from creating rooms outside the API. Chat history remains bounded in host memory; verified daily/eligibility checks and server-enforced guest permissions are not connected. Host departure ends the viewing session after a short reconnect window.
 
-Gifts and the coin wallet remain in the local demo; the real transport does not claim to synchronize or settle money. See [Gifts, coins and reports](#gifts-coins-and-reports). Production requires authenticated token issuance, server-side host/guest permissions, moderation, room discovery, eligibility/capacity checks and a verified wallet ledger.
+Sample-room gifts use the existing local test wallet and share gift messages over LiveKit. They do not settle money. Ordinary broadcasts still have gifts disabled. See [Gifts, coins and reports](#gifts-coins-and-reports). Production requires authenticated token issuance, server-side host/guest permissions, moderation, room discovery, eligibility/capacity checks and a verified wallet ledger.
 
 ## Verification
 
@@ -149,3 +153,20 @@ The gift sheet lists 24 gifts from 1 to 44,999 coins in a four-column grid. Tapp
 Coins are sold in RWF packages (70 for RWF 1,000 up to 7,000 for RWF 100,000) paid with MTN MoMo or Airtel Money. The number is validated as a Rwandan mobile number for the selected network. With `EXPO_PUBLIC_USE_LIVE_PAYMENTS_API=true` the app calls `POST /api/v1/live/coins/checkout` and polls `GET /api/v1/live/coins/payments/:id`, the same contract as the FindLove membership checkout; coins are credited only after the payment succeeds, once per payment ID. Without the flag, a test top-up credits coins without charging. The API payments module is not implemented, so the flag must stay off until those endpoints exist. The wallet is still stored on the device; a production wallet must move to the server ledger.
 
 Viewers can report a Live from **Live options → Report Live**: choose a reason, optionally add details, and receive a reference. `EXPO_PUBLIC_USE_LIVE_REPORTS_API=true` posts to `POST /api/v1/live/rooms/:id/reports`; otherwise reports are kept on the device. The API moderation module is not implemented yet.
+
+## Video and audio co-hosting verification — 4 November 2026
+
+- TypeScript and the Live domain/protocol tests pass. Added checks for approval-ordered tiles, exclusion of unapproved publishers, four-guest capacity, microphone moderation, independent device permissions, and capture revocation during permission prompts.
+- Four isolated browser clients connected to the development LiveKit project with synthetic camera/microphone sources. Verified viewer-only entry without capture, request → approval → private preview → video join, remote video playback, a second audio-only guest, camera off/on without losing a seat, host microphone mute, guest unmute, and leaving the stage while remaining a viewer. All captured guest tracks stopped after leaving the stage.
+- A separate audio room verified guest approval and joining without camera capture. No browser runtime exceptions were observed.
+- Mobile-sized screenshots confirmed the two-person split, host plus guest grid, and audio seating, with chat below the shared stage. The temporary verification route was removed. Physical Android/iOS camera switching, OS permission dialogs and performance still need a device check.
+
+## Stage layout and guest controls — 5 November 2026
+
+- Audio rooms now use a black canvas and three columns of circular avatars and open seats. Speaking halos and muted badges remain synchronized with LiveKit.
+- Labeled microphone and camera controls remain visible while composing a comment. In shared video rooms they sit directly above the message box, leaving more height for the broadcast; audio and solo rooms keep their header controls. Audio rooms show microphone controls only. Shared sample rooms use the same media controls and omit the repeated demo descriptions.
+- The main host has a full-height video panel beside an adaptive guest panel without empty video placeholders. Compact translucent name labels, a LIVE creator badge and microphone indicators follow the supplied reference.
+- Real LiveKit browser checks with synthetic devices passed: guest approval, remote video, camera toggles, host microphone mute, guest unmute, leaving the stage with capture cleanup, and audio-only joining. Controls stayed visible while typing and tappable at a 320 px viewport; the audio grid placed three seats in its first row. No browser runtime exceptions occurred. Physical phone layout and media controls still need a device check.
+- Follow-up browser layout checks at 320 px and 390 px confirmed the full-height host, adaptive guest layouts for one through four guests, no empty video slots or horizontal overflow, chat over the media, and reachable media controls while typing. The stage occupied over 68% of the viewport even for publishing guests, before the final header compaction. The temporary layout preview route was removed.
+
+Shared sample-room checks passed with isolated browser clients: real guest video/audio, camera and microphone toggles, shared chat/reactions/gift messages, coordinator handoff, and capture cleanup. The browser preview now stops late-arriving camera streams after cancellation. TypeScript and Live tests pass; physical-phone verification remains.

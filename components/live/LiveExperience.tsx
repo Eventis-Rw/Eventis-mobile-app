@@ -62,6 +62,7 @@ export default function LiveScreen() {
 }
 
 function LiveExperience({ user }: { user: User }) {
+  const demo = useLiveDemo(user.id);
   const {
     state,
     now,
@@ -70,7 +71,7 @@ function LiveExperience({ user }: { user: User }) {
     act,
     reset,
     retry,
-  } = useLiveDemo(user.id);
+  } = demo;
   const {
     events: ownedEvents,
     isLoading: eventsLoading,
@@ -137,6 +138,7 @@ function LiveExperience({ user }: { user: User }) {
   };
   const openRoom = (room: LiveRoom) =>
     void execute(async () => {
+      if (/^sample_[0-4]$/.test(room.id)) { setWatchId(room.id); return; }
       await act(person, { type: "join", roomId: room.id });
       setCloseSignal(0);
       setActiveId(room.id);
@@ -169,9 +171,9 @@ function LiveExperience({ user }: { user: User }) {
             <ActivityIndicator color={c.blue} />
           ) : (
             <View style={s.card}>
-              <Text style={s.label}>Demo previews couldn’t load</Text>
+              <Text style={s.label}>Live rooms couldn’t load</Text>
               <Text style={s.body}>{loadError}</Text>
-              <LiveButton label="Retry previews" onPress={retry} />
+              <LiveButton label="Try again" onPress={retry} />
               {resetConfirmed ? (
                 <LiveButton
                   danger
@@ -191,6 +193,7 @@ function LiveExperience({ user }: { user: User }) {
         </LiveDiscovery>
         {watchId ? (
           <LiveWatchEntry
+            wallet={demo}
             id={watchId}
             person={person}
             onClose={() => {
@@ -234,10 +237,6 @@ function LiveExperience({ user }: { user: User }) {
         onWatch={(room) => setWatchId(room.id)}
         onRoom={openRoom}
         onWallet={() => setPanel("wallet")}
-        onDemo={() => {
-          setResetConfirmed(false);
-          setPanel("test");
-        }}
       >
         {error ? (
           <Text accessibilityRole="alert" style={s.error}>
@@ -279,6 +278,7 @@ function LiveExperience({ user }: { user: User }) {
       </LiveDiscovery>
       {watchId ? (
         <LiveWatchEntry
+          wallet={demo}
           id={watchId}
           person={person}
           onClose={() => {
