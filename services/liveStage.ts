@@ -19,6 +19,7 @@ export function liveStageMembers(participants: Participant[], host: LivePerson, 
 }
 export type LiveStageMember = ReturnType<typeof liveStageMembers>[number];
 export type LiveStageActions = {
+  onLike: () => void;
   onEmpty: () => void;
   onMember: (person: LivePerson) => void;
   emptyLabel: string;

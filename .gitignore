@@ -34,3 +34,6 @@ GoogleService-Info.plist
 Thumbs.db
 npm-debug.log
 yarn-error.log
+
+# Locally packaged development builds
+artifacts/

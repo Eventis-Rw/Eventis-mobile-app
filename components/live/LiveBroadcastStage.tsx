@@ -27,13 +27,18 @@ function StageTile({ member, revision, compact, shared, demo, actions }: {
       <LiveSpeakingAvatar size={compact ? "small" : "large"} speaking={speaking}><LiveAvatar person={person} size={avatarSize} /></LiveSpeakingAvatar>
       {cameraPending ? <ActivityIndicator size="small" color={c.blue} accessibilityLabel="Loading camera" /> : !compact ? <Text style={styles.hint}>{!participant && !demo ? "Joining the stage…" : "Camera off"}</Text> : null}
     </View>}
+    <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button"
+      accessibilityLabel={`Like ${person.name}'s video`} onPress={actions.onLike} />
     {isHost && shared ? <View pointerEvents="none" style={styles.hostBadge}><Text style={styles.hostText}>LIVE creator</Text></View> : null}
-    {shared ? <View pointerEvents="none" style={styles.namePlate}>
-      <View style={styles.namePill}><Text numberOfLines={1} style={styles.name}>{person.name}{own ? " · You" : ""}</Text></View>
-      {speaking ? <LiveSpeakingBars speaking /> : <Ionicons name={microphone ? "mic" : "mic-off"} size={12} color={microphone ? "#FFF" : "#D8DBE4"} />}
+    {shared ? <View pointerEvents="box-none" style={styles.namePlate}>
+      <Pressable disabled={!canManage} accessibilityRole={canManage ? "button" : undefined}
+        accessibilityLabel={canManage ? own ? "Your stage controls" : `Manage ${person.name}` : person.name}
+        onPress={() => actions.onMember(person)} hitSlop={8} style={styles.namePill}>
+        <Text numberOfLines={1} style={styles.name}>{person.name}{own ? " · You" : ""}</Text>
+        {canManage ? <Ionicons name="chevron-down" size={10} color="#FFF" /> : null}
+      </Pressable>
+      <View pointerEvents="none">{speaking ? <LiveSpeakingBars speaking /> : <Ionicons name={microphone ? "mic" : "mic-off"} size={12} color={microphone ? "#FFF" : "#D8DBE4"} />}</View>
     </View> : null}
-    {canManage ? <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button"
-      accessibilityLabel={own ? "Your stage controls" : `Manage ${person.name}`} onPress={() => actions.onMember(person)} /> : null}
   </View>;
 }
 
@@ -104,8 +109,8 @@ const styles = StyleSheet.create({
   hostBadge: { position: "absolute", top: 4, left: 4, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 8, backgroundColor: "#0006" },
   hostText: { color: "#FFF", fontSize: 9, fontFamily: "Inter_500Medium" },
   namePlate: { position: "absolute", bottom: 5, left: 4, right: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 3 },
-  namePill: { flexShrink: 1, minWidth: 0, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 3, backgroundColor: "#0007" },
-  name: { color: "#FFF", fontSize: 10, fontFamily: "Inter_500Medium" },
+  namePill: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 3, backgroundColor: "#0007" },
+  name: { flexShrink: 1, color: "#FFF", fontSize: 10, fontFamily: "Inter_500Medium" },
   hint: { color: "#AAB4C7", fontSize: 10, fontFamily: "Inter_500Medium" },
   activeText: { color: c.blue },
   audioCanvas: { paddingHorizontal: 12, paddingTop: 28 },

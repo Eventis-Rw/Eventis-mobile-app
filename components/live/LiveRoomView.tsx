@@ -132,15 +132,13 @@ export function LiveRoomView({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
-  const [reaction, setReaction] = useState("");
+  const [reaction, setReaction] = useState<{ emoji: string } | null>(null);
   const animation = useRef(new Animated.Value(0)).current;
   const chat = useRef<ScrollView>(null);
   const lastGift = room.messages.filter((m) => m.kind === "gift").at(-1);
   useEffect(() => {
     if (!lastGift || Date.now() - lastGift.at > 5000) return;
-    setReaction(
-      LIVE_GIFTS.find((g) => lastGift.text.startsWith(g.emoji))?.emoji ?? "✨",
-    );
+    setReaction({ emoji: LIVE_GIFTS.find((g) => lastGift.text.startsWith(g.emoji))?.emoji ?? "✨" });
   }, [lastGift?.id]);
   useEffect(() => {
     if (!reaction) return;
@@ -150,7 +148,7 @@ export function LiveRoomView({
       duration: 1600,
       useNativeDriver: Platform.OS !== "web",
     }).start(({ finished }) => {
-      if (finished) setReaction("");
+      if (finished) setReaction(null);
     });
     return () => animation.stopAnimation();
   }, [reaction, animation]);
@@ -172,6 +170,13 @@ export function LiveRoomView({
       lock.current = false;
       setBusy(false);
     }
+  };
+  const like = () => {
+    if (ended || blocked || panel) return;
+    setReaction({ emoji: "❤️" });
+    void act(person, { type: "react", roomId: room.id }).catch((e) =>
+      setError(e instanceof Error ? e.message : "Couldn't send your like. Try again."),
+    );
   };
   const remaining = Math.max(0, Math.ceil((room.endsAt - now) / 1000));
   const received = state.transactions
@@ -250,6 +255,7 @@ export function LiveRoomView({
   const immersiveStage = room.mode === "video" && sharedStage;
   const stageActions: LiveStageActions = {
     ownId: person.id, isHost: host,
+    onLike: like,
     emptyLabel: host ? "Invite guest" : requested ? "Cancel request" : "Request to join",
     emptyDisabled: busy || guest || (!host && room.guests.length >= 4),
     onMember: p => setPanel(p.id === person.id && !host ? "stage" : "people"),
@@ -265,11 +271,9 @@ export function LiveRoomView({
         {broadcast ? (
           broadcast.stage(stageActions)
         ) : room.mode === "video" && room.cover && room.guests.length === 0 ? (
-          <ImageBackground
-            source={getEventImage(room.cover)}
-            style={{ flex: 1 }}
-            resizeMode="cover"
-          />
+          <Pressable accessibilityRole="button" accessibilityLabel="Like video" onPress={like} style={{ flex: 1 }}>
+            <ImageBackground source={getEventImage(room.cover)} style={{ flex: 1 }} resizeMode="cover" />
+          </Pressable>
         ) : (
           <LiveBroadcastStage participants={[]} revision={0} voice={{}} hostId={room.host.id}
             host={room.host} guests={room.guests} mode={room.mode} connected={false} actions={stageActions} demo />
@@ -369,22 +373,9 @@ export function LiveRoomView({
           />
         ) : null}
       </View>
-      {(!sharedStage || immersiveStage) && !typing ? (
-        <View
-          style={[ui.rail, { top: Math.max(headerHeight + 16, height * 0.32) }]}
-        >
-          {broadcast?.playbackControl}
-          <LiveOverlayAction
-            name="heart"
-            label="Send a reaction"
-            caption={String(room.reactions)}
-            disabled={busy}
-            onPress={() =>
-              void run({ type: "react", roomId: room.id }, person, () =>
-                setReaction("💙"),
-              )
-            }
-          />
+      {(!sharedStage || immersiveStage) && !typing && broadcast?.playbackControl ? (
+        <View style={[ui.rail, { top: Math.max(headerHeight + 16, height * 0.32) }]}>
+          {broadcast.playbackControl}
         </View>
       ) : null}
       {reaction ? (
@@ -408,7 +399,7 @@ export function LiveRoomView({
             },
           ]}
         >
-          {reaction}
+          {reaction.emoji}
         </Animated.Text>
       ) : null}
       <KeyboardAvoidingView
@@ -417,10 +408,9 @@ export function LiveRoomView({
         style={StyleSheet.absoluteFill}
       >
         <View pointerEvents="box-none" onLayout={event => setBottomHeight(event.nativeEvent.layout.height)} style={[ui.bottomAnchor, sharedStage && !immersiveStage && ui.sharedBottom]}>
-          {sharedStage && !immersiveStage && !typing ? <View style={ui.mediaToolbar}>{broadcast?.playbackControl}
-            <LiveOverlayAction name="heart-outline" label="Send a reaction" caption={String(room.reactions)} disabled={busy}
-              onPress={() => void run({ type: "react", roomId: room.id }, person, () => setReaction("💙"))} />
-          </View> : null}
+          {sharedStage && !immersiveStage && !typing && broadcast?.playbackControl ? (
+            <View style={ui.mediaToolbar}>{broadcast.playbackControl}</View>
+          ) : null}
           <LinearGradient
             pointerEvents="none"
             colors={["#0000", "#0008", "#000D"]}
@@ -429,7 +419,7 @@ export function LiveRoomView({
           />
           <View
             pointerEvents="box-none"
-            style={[ui.bottomContent, { paddingRight: (sharedStage && !immersiveStage) || typing ? 14 : 70 }, immersiveStage && { marginBottom: 28 }]}
+            style={[ui.bottomContent, { paddingRight: 14 }, immersiveStage && { marginBottom: 28 }]}
           >
             {room.eventId && !typing ? (
               <Pressable
@@ -602,9 +592,10 @@ export function LiveRoomView({
                   />
                 ) : null}
                 <LiveOverlayAction
-                  name="arrow-redo-outline"
-                  label="Share Live"
-                  onPress={share}
+                  name="heart"
+                  label="Like Live"
+                  caption={String(room.reactions)}
+                  onPress={like}
                 />
               </>
             ) : (
@@ -919,16 +910,10 @@ export function LiveRoomView({
                   setPanel(null);
                 }}
               />
-              {broadcast ? (
-                <>
-                  <LiveButton
-                    secondary
-                    icon="share-outline"
-                    label="Share Live"
-                    onPress={share}
-                  />
-                </>
-              ) : null}
+              <LiveButton secondary icon="share-outline" label="Share Live" onPress={() => {
+                setPanel(null);
+                share();
+              }} />
               {!host ? (
                 <LiveButton
                   secondary
