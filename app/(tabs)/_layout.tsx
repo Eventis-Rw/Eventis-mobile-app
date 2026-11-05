@@ -24,6 +24,11 @@ import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 // Live is switched off for now: the tab stays visible but greyed out and does nothing.
 const LIVE_ENABLED = false;
 
+/** Ionicons rejects the `null`/numeric members of ColorValue that tabBarIcon may pass. */
+function toIconColor(color: ColorValue): string | undefined {
+  return typeof color === "string" ? color : undefined;
+}
+
 interface TabIconProps {
   color: ColorValue;
   focused: boolean;
@@ -124,7 +129,7 @@ function TabIcon({
       <Ionicons
         name={focused ? activeIcon : inactiveIcon}
         size={label ? 22 : 24}
-        color={isDisabled ? colors.disabled : focused ? colors.primary : color}
+        color={isDisabled ? colors.disabled : focused ? colors.primary : toIconColor(color)}
       />
       {label ? (
         <Text
@@ -252,7 +257,7 @@ function LiveTabIcon({
       <Ionicons
         name={focused ? "videocam" : "videocam-outline"}
         size={22}
-        color={focused ? "#EF4444" : color}
+        color={focused ? "#EF4444" : toIconColor(color)}
       />
       <Text numberOfLines={1} style={[styles.iconLabel, { color: focused ? "#EF4444" : color }]}>Live</Text>
       {/* Sleek LIVE micro-badge with pulsing beacon */}

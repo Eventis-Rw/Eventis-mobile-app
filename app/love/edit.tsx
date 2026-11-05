@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useNavigation, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { usePreventRemove, useRouter } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
@@ -37,10 +37,9 @@ type EditValues = LoveProfileFormValues & LoveProfileExtrasValues & { ageRange?:
 export default function EditLoveProfileScreen() {
   const colors = useColors();
   const router = useRouter();
-  const navigation = useNavigation();
   const { user } = useAuth();
   const { myProfile, status, error, reload, save, accountType } = useMyLoveProfile();
-  const allowLeave = useRef(false);
+  const [allowLeave, setAllowLeave] = useState(false);
 
   const initial = useMemo<EditValues | null>(
     () =>
@@ -78,13 +77,10 @@ export default function EditLoveProfileScreen() {
 
   const isDirty = !!values && JSON.stringify(values) !== JSON.stringify(initial);
 
-  useEffect(() => {
-    return navigation.addListener("beforeRemove", (event) => {
-      if (allowLeave.current || !isDirty || saving) return;
-      event.preventDefault();
-      setPendingLeave(() => () => navigation.dispatch(event.data.action));
-    });
-  }, [navigation, isDirty, saving]);
+  // expo-router's navigation no longer emits "beforeRemove"; usePreventRemove is its replacement.
+  const disableLeaveGuard = usePreventRemove(isDirty && !saving && !allowLeave, ({ repeat }) => {
+    setPendingLeave(() => repeat);
+  });
 
   const errors = useMemo<LoveProfileFormErrors>(() => {
     if (!values) return {};
@@ -167,7 +163,8 @@ export default function EditLoveProfileScreen() {
         ageRange: values.ageRange,
       });
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      allowLeave.current = true;
+      setAllowLeave(true);
+      disableLeaveGuard();
       back();
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -276,7 +273,7 @@ export default function EditLoveProfileScreen() {
         onConfirm={() => {
           const leave = pendingLeave;
           setPendingLeave(null);
-          allowLeave.current = true;
+          setAllowLeave(true);
           leave?.();
         }}
         onClose={() => setPendingLeave(null)}
