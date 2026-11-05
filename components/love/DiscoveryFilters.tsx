@@ -3,6 +3,7 @@ import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import { formatAgeRange, isAnyAgeRange } from "@/utils/findLoveAgeRange";
 import type { DiscoveryFilters as Filters, GenderFilter } from "@/utils/findLoveDiscovery";
 
 const GENDERS: { value: GenderFilter; label: string }[] = [
@@ -11,13 +12,29 @@ const GENDERS: { value: GenderFilter; label: string }[] = [
   { value: "Man", label: "Men" },
 ];
 
-/** Gender filters for the Home grid. */
-export function DiscoveryFilters({ filters, onChange }: { filters: Filters; onChange: (next: Filters) => void }) {
+/** Gender filters and the age-range button for the Home grid. */
+export function DiscoveryFilters({
+  filters,
+  onChange,
+  onOpenAgeRange,
+}: {
+  filters: Filters;
+  onChange: (next: Filters) => void;
+  /** Opens the age-range sheet. */
+  onOpenAgeRange: () => void;
+}) {
+  const ageSet = !isAnyAgeRange(filters.ageRange);
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
       {GENDERS.map(({ value, label }) => (
         <Chip key={value} label={label} selected={filters.gender === value} onPress={() => onChange({ ...filters, gender: value })} />
       ))}
+      <Chip
+        label={ageSet ? `Age ${formatAgeRange(filters.ageRange)}` : "Any age"}
+        selected={ageSet}
+        onPress={onOpenAgeRange}
+        trailingIcon="chevron-down"
+      />
     </ScrollView>
   );
 }
@@ -27,11 +44,13 @@ function Chip({
   selected,
   onPress,
   icon,
+  trailingIcon,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
   icon?: React.ComponentProps<typeof Ionicons>["name"];
+  trailingIcon?: React.ComponentProps<typeof Ionicons>["name"];
 }) {
   const colors = useColors();
   return (
@@ -46,6 +65,7 @@ function Chip({
     >
       {icon ? <Ionicons name={icon} size={9} color={selected ? "#FFFFFF" : colors.success} /> : null}
       <Text style={[styles.chipText, { color: selected ? "#FFFFFF" : colors.foreground }]}>{label}</Text>
+      {trailingIcon ? <Ionicons name={trailingIcon} size={14} color={selected ? "#FFFFFF" : colors.mutedForeground} /> : null}
     </Pressable>
   );
 }

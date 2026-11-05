@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
+import { AgeRangePicker } from "@/components/love/AgeRangePicker";
 import { LoveProfileForm, Section, type LoveProfileFormErrors, type LoveProfileFormValues } from "@/components/love/LoveProfileForm";
 import {
   LoveProfileExtras,
@@ -19,6 +20,7 @@ import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
 import { describeError } from "@/services/organiserService";
 import { LoveProfileInputError } from "@/services/findLoveService";
+import type { LoveAgeRange } from "@/utils/findLoveAgeRange";
 import {
   ageOn,
   formatDateOfBirth,
@@ -29,7 +31,7 @@ import {
   validateLoveUsername,
 } from "@/utils/findLoveProfile";
 
-type EditValues = LoveProfileFormValues & LoveProfileExtrasValues;
+type EditValues = LoveProfileFormValues & LoveProfileExtrasValues & { ageRange?: LoveAgeRange };
 
 /** Edit the member's own FindLove profile. Date of birth is fixed after creation. */
 export default function EditLoveProfileScreen() {
@@ -54,6 +56,7 @@ export default function EditLoveProfileScreen() {
             relationshipGoal: myProfile.relationshipGoal,
             lookingFor: myProfile.lookingFor ?? "",
             neighborhood: myProfile.neighborhood,
+            ageRange: myProfile.ageRange,
           }
         : null,
     [myProfile],
@@ -65,6 +68,7 @@ export default function EditLoveProfileScreen() {
   const [serverErrors, setServerErrors] = useState<LoveProfileFormErrors>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [ageRangeError, setAgeRangeError] = useState<string | null>(null);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
 
   // The profile may finish loading after the first render (deep link or reload).
@@ -160,6 +164,7 @@ export default function EditLoveProfileScreen() {
         relationshipGoal: values.relationshipGoal,
         lookingFor: values.lookingFor,
         neighborhood: values.neighborhood,
+        ageRange: values.ageRange,
       });
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       allowLeave.current = true;
@@ -170,6 +175,8 @@ export default function EditLoveProfileScreen() {
         setServerErrors({ [err.field]: err.message });
       } else if (err instanceof LoveProfileInputError && ["bio", "interests", "relationshipGoal", "lookingFor", "neighborhood"].includes(err.field)) {
         setExtrasErrors({ [err.field]: err.message });
+      } else if (err instanceof LoveProfileInputError && err.field === "ageRange") {
+        setAgeRangeError(err.message);
       } else {
         setSaveError(describeError(err, "We couldn't save your changes. Please try again."));
       }
@@ -216,6 +223,22 @@ export default function EditLoveProfileScreen() {
           disabled={saving}
         />
 
+        <Section
+          title="Ages you'd like to meet"
+          hint="Home shows people in this range first; you can change it there for one search. Only you see it."
+        >
+          <AgeRangePicker
+            value={values.ageRange}
+            onChange={(ageRange) => {
+              setSaveError(null);
+              setAgeRangeError(null);
+              setValues((v) => v && { ...v, ageRange });
+            }}
+            disabled={saving}
+          />
+          {ageRangeError ? <InlineError message={ageRangeError} /> : null}
+        </Section>
+
         <MembershipSection
           isPrivate={accountType === "private"}
           awaitingPayment={myProfile.membership.type === "private" && myProfile.membership.status !== "active"}
@@ -223,7 +246,7 @@ export default function EditLoveProfileScreen() {
           onUpgrade={() => router.push({ pathname: "/love/membership", params: { from: "upgrade" } } as any)}
         />
 
-        <Section title="Age" hint="Other members see your age, not your date of birth. Contact support if it is wrong.">
+        <Section title="Your age" hint="Other members never see your age or date of birth. Contact support if it is wrong.">
           <View style={[styles.readOnly, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
             <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
             <Text style={[styles.readOnlyText, { color: colors.mutedForeground }]}>

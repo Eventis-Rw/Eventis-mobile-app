@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -14,6 +15,7 @@ import {
 
 import { LoveProfileCard } from "@/components/LoveProfileCard";
 import { Skeleton } from "@/components/SkeletonLoader";
+import { AgeRangeSheet } from "@/components/love/AgeRangePicker";
 import { DiscoveryFilters } from "@/components/love/DiscoveryFilters";
 import { useConnectionActions } from "@/components/love/ConnectionRequests";
 import { useLoveConnect } from "@/components/love/UpgradePrompt";
@@ -22,6 +24,8 @@ import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useLoveAgeRangeMatches } from "@/hooks/useLoveAgeRangeMatches";
+import { formatAgeRange } from "@/utils/findLoveAgeRange";
 import {
   activeFilterCount,
   defaultFiltersFor,
@@ -38,32 +42,48 @@ export default function HomeScreen() {
   const { profiles, isLoading, error, refreshProfiles, getConnectionStatus } = useLoveProfiles();
   const { connect, upgradePrompt } = useLoveConnect();
   const { accept } = useConnectionActions();
-  const { myProfile } = useMyLoveProfile();
+  const { myProfile, accountType } = useMyLoveProfile();
   const country = myProfile?.country;
   const interestedIn = myProfile?.interestedIn;
-  // The grid starts on the member's "Interested in" choice.
-  const defaultFilters = useMemo(() => defaultFiltersFor(interestedIn), [interestedIn]);
+  const savedAgeMin = myProfile?.ageRange?.min;
+  const savedAgeMax = myProfile?.ageRange?.max;
+  const savedAgeRange = useMemo(
+    () => (savedAgeMin !== undefined && savedAgeMax !== undefined ? { min: savedAgeMin, max: savedAgeMax } : undefined),
+    [savedAgeMin, savedAgeMax],
+  );
+  // The grid starts on the member's "Interested in" choice and saved age range.
+  const defaultFilters = useMemo(() => defaultFiltersFor(interestedIn, savedAgeRange), [interestedIn, savedAgeRange]);
   const place = countryName(country);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [ageSheetOpen, setAgeSheetOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const deferredQuery = useDeferredValue(query);
+  const ageSearch = useLoveAgeRangeMatches(country, filters.ageRange);
   // Compact cards: two per row on phones, more as the screen widens.
   const columns = width >= 960 ? 4 : width >= 600 ? 3 : 2;
   const horizontalPadding = width < 360 ? 12 : 16;
   const gridWidth = Math.min(width - horizontalPadding * 2, MAX_GRID_WIDTH);
   const cellWidth = (gridWidth - GRID_GAP * (columns - 1)) / columns;
 
-  const filteredProfiles = useMemo(
-    () => filterProfiles(profiles, { ...filters, query: deferredQuery }),
-    [profiles, filters, deferredQuery],
-  );
+  const filteredProfiles = useMemo(() => {
+    const shown = filterProfiles(profiles, { ...filters, query: deferredQuery });
+    // Age is matched on the server; only the ids it returned are shown.
+    if (!filters.ageRange) return shown;
+    return ageSearch.ids ? shown.filter((profile) => ageSearch.ids!.has(profile.id)) : [];
+  }, [profiles, filters, deferredQuery, ageSearch.ids]);
   const filtering = activeFilterCount(filters, defaultFilters) > 0 || !!query.trim();
+  const ageSearching = !!filters.ageRange && ageSearch.loading;
 
-  // The profile can load (or the choice change) after the screen mounts.
+  // The profile can load (or the choices change) after the screen mounts.
   useEffect(() => {
-    setFilters((current) => ({ ...current, gender: defaultFilters.gender }));
+    setFilters((current) => ({ ...current, gender: defaultFilters.gender, ageRange: defaultFilters.ageRange }));
   }, [defaultFilters]);
+
+  const refreshAll = () => {
+    void refreshProfiles();
+    ageSearch.retry();
+  };
 
   const clearFilters = () => {
     setQuery("");
@@ -73,6 +93,10 @@ export default function HomeScreen() {
   const toggleSearch = () => {
     if (searchOpen) setQuery("");
     setSearchOpen((open) => !open);
+  };
+
+  const openUpgrade = () => {
+    router.push({ pathname: "/love/membership", params: { from: "upgrade" } } as any);
   };
 
   const openNotifications = () => {
@@ -99,7 +123,15 @@ export default function HomeScreen() {
     </View>
   ), [accept, cellWidth, connect, getConnectionStatus, openChat, openProfile]);
 
-  const topBar = <HomeTopBar searchOpen={searchOpen} onSearch={toggleSearch} onNotifications={openNotifications} />;
+  const topBar = (
+    <HomeTopBar
+      searchOpen={searchOpen}
+      onSearch={toggleSearch}
+      onNotifications={openNotifications}
+      // Private members already have everything; only Public members see the upgrade.
+      onUpgrade={accountType === "private" ? undefined : openUpgrade}
+    />
+  );
 
   if (isLoading && profiles.length === 0) {
     return (
@@ -131,7 +163,7 @@ export default function HomeScreen() {
         contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => void refreshProfiles()} tintColor={colors.primary} />}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refreshAll} tintColor={colors.primary} />}
         ListHeaderComponent={
           <View style={styles.header}>
             {searchOpen ? (
@@ -156,7 +188,17 @@ export default function HomeScreen() {
               </View>
             ) : null}
 
-            <DiscoveryFilters filters={filters} onChange={setFilters} />
+            <DiscoveryFilters filters={filters} onChange={setFilters} onOpenAgeRange={() => setAgeSheetOpen(true)} />
+
+            {filters.ageRange && ageSearch.error ? (
+              <View style={[styles.errorBanner, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+                <Ionicons name="cloud-offline-outline" size={20} color={colors.warning} />
+                <Text style={[styles.errorText, { color: colors.mutedForeground }]}>{ageSearch.error}</Text>
+                <Pressable onPress={ageSearch.retry} hitSlop={8}>
+                  <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             {error ? (
               <View style={[styles.errorBanner, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
@@ -170,10 +212,17 @@ export default function HomeScreen() {
 
             <View style={styles.resultsRow}>
               <Text style={[styles.resultsTitle, { color: colors.foreground }]}>{filtering ? "Results" : place ? `People in ${place}` : "People to discover"}</Text>
+              {ageSearching ? <ActivityIndicator size="small" color={colors.primary} /> : null}
             </View>
           </View>
         }
         ListEmptyComponent={
+          // Don't say "no one" before the age search has answered.
+          ageSearching && !ageSearch.ids ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
           <View style={styles.emptyState}>
             <View style={[styles.emptyIcon, { backgroundColor: colors.secondary }]}>
               <Ionicons name="heart-dislike-outline" size={32} color={colors.primary} />
@@ -182,25 +231,54 @@ export default function HomeScreen() {
             <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
               {filtering
                 ? "Try another username, interest, or filter."
-                : `No one${place ? ` in ${place}` : ""} is on FindLove yet. Check back soon.`}
+                : filters.ageRange
+                  ? `No one aged ${formatAgeRange(filters.ageRange)} here yet. Try a wider age range.`
+                  : `No one${place ? ` in ${place}` : ""} is on FindLove yet. Check back soon.`}
             </Text>
             {filtering ? (
               <Pressable onPress={clearFilters}>
                 <Text style={[styles.resetText, { color: colors.primary }]}>Clear filters</Text>
               </Pressable>
+            ) : filters.ageRange ? (
+              <Pressable onPress={() => setAgeSheetOpen(true)}>
+                <Text style={[styles.resetText, { color: colors.primary }]}>Change age range</Text>
+              </Pressable>
             ) : null}
           </View>
+          )
         }
+      />
+      <AgeRangeSheet
+        visible={ageSheetOpen}
+        value={filters.ageRange}
+        saved={savedAgeRange}
+        onApply={(ageRange) => {
+          setAgeSheetOpen(false);
+          setFilters((current) => ({ ...current, ageRange }));
+        }}
+        onClose={() => setAgeSheetOpen(false)}
       />
       {upgradePrompt}
     </View>
   );
 }
 
-/** FindLove brand on the left; search, then notifications, on the right. */
-function HomeTopBar({ searchOpen, onSearch, onNotifications }: { searchOpen: boolean; onSearch: () => void; onNotifications: () => void }) {
+/** FindLove brand on the left; search, notifications and (for Public members) Upgrade to Private on the right. */
+function HomeTopBar({
+  searchOpen,
+  onSearch,
+  onNotifications,
+  onUpgrade,
+}: {
+  searchOpen: boolean;
+  onSearch: () => void;
+  onNotifications: () => void;
+  onUpgrade?: () => void;
+}) {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const compact = width < 400;
   return (
     <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
       <View style={styles.brand}>
@@ -226,6 +304,18 @@ function HomeTopBar({ searchOpen, onSearch, onNotifications }: { searchOpen: boo
       >
         <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
       </Pressable>
+      {onUpgrade ? (
+        <Pressable
+          onPress={onUpgrade}
+          hitSlop={6}
+          style={({ pressed }) => [styles.upgrade, { opacity: pressed ? 0.8 : 1 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Upgrade to Private"
+        >
+          <Ionicons name="diamond" size={14} color="#1A1300" />
+          <Text style={styles.upgradeText} numberOfLines={1}>{compact ? "Private" : "Upgrade to Private"}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -236,7 +326,9 @@ const MAX_GRID_WIDTH = 1080;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingBottom: 6 },
-  brand: { flex: 1, flexDirection: "row", alignItems: "center", gap: 7 },
+  brand: { flex: 1, flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 7 },
+  upgrade: { flexDirection: "row", alignItems: "center", gap: 5, height: 40, paddingHorizontal: 12, borderRadius: 20, backgroundColor: "#D4A017" },
+  upgradeText: { fontSize: 12, color: "#1A1300", fontFamily: "Inter_700Bold" },
   brandText: { fontSize: 22, letterSpacing: -0.6, fontFamily: "Inter_700Bold" },
   topIcon: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   listContent: { flexGrow: 1, paddingTop: 4, paddingBottom: 24 },
