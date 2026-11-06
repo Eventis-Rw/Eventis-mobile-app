@@ -1,8 +1,9 @@
+import { usePreventRemove } from "expo-router/react-navigation";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { useNavigation, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
@@ -34,7 +35,7 @@ export default function DiscoveryPreferencesScreen() {
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
-  const allowLeave = useRef(false);
+  const [allowLeave, setAllowLeave] = useState(false);
 
   // Seed the form once the saved preferences arrive.
   useEffect(() => {
@@ -53,13 +54,12 @@ export default function DiscoveryPreferencesScreen() {
       [...categories].sort().join("|") !== [...saved.categories].sort().join("|"));
   const locationError = validateMaxLength(location, PROFILE_LIMITS.location);
 
-  useEffect(() => {
-    return navigation.addListener("beforeRemove", (event) => {
-      if (allowLeave.current || !isDirty || saving) return;
-      event.preventDefault();
-      setPendingLeave(() => () => navigation.dispatch(event.data.action));
-    });
-  }, [navigation, isDirty, saving]);
+  usePreventRemove(isDirty && !saving && !allowLeave, (options) => {
+    const repeat = "repeat" in options ? options.repeat : undefined;
+    setPendingLeave(() => typeof repeat === "function"
+      ? () => repeat()
+      : () => navigation.dispatch(options.data.action));
+  });
 
   const toggle = (category: string) => {
     setError(null);
@@ -97,7 +97,7 @@ export default function DiscoveryPreferencesScreen() {
     try {
       await discovery.save({ categories, location });
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      allowLeave.current = true;
+      setAllowLeave(true);
       router.back();
     } catch (err) {
       setError(err instanceof Error ? err.message : "We couldn't save your preferences.");
@@ -237,7 +237,7 @@ export default function DiscoveryPreferencesScreen() {
         onConfirm={() => {
           const leave = pendingLeave;
           setPendingLeave(null);
-          allowLeave.current = true;
+          setAllowLeave(true);
           leave?.();
         }}
         onClose={() => setPendingLeave(null)}

@@ -1,8 +1,9 @@
+import { usePreventRemove } from "expo-router/react-navigation";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { type ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -127,8 +128,8 @@ export default function EditProfileScreen() {
   const { categories: eventCategories } = useEvents();
   const { accountType, isPublisher } = useAccountCapabilities();
   const isBusiness = accountType === "business" && !!user?.organisation;
-  const scrollRef = useRef<ScrollView>(null);
-  const allowLeave = useRef(false);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [allowLeave, setAllowLeave] = useState(false);
 
   const [initial, setInitial] = useState<FormValues | undefined>(() =>
     user && !isPublisher ? initialValues(user) : undefined,
@@ -209,13 +210,12 @@ export default function EditProfileScreen() {
   const isDirty = !!values && JSON.stringify(values) !== JSON.stringify(initial);
 
   // Ask before throwing away edits (back button, swipe or hardware back).
-  useEffect(() => {
-    return navigation.addListener("beforeRemove", (event) => {
-      if (allowLeave.current || !isDirty || saving) return;
-      event.preventDefault();
-      setPendingLeave(() => () => navigation.dispatch(event.data.action));
-    });
-  }, [navigation, isDirty, saving]);
+  usePreventRemove(isDirty && !saving && !allowLeave, (options) => {
+    const repeat = "repeat" in options ? options.repeat : undefined;
+    setPendingLeave(() => typeof repeat === "function"
+      ? () => repeat()
+      : () => navigation.dispatch(options.data.action));
+  });
 
   if (!user) {
     return (
@@ -346,7 +346,7 @@ export default function EditProfileScreen() {
       }
 
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      allowLeave.current = true;
+      setAllowLeave(true);
       router.back();
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -655,7 +655,7 @@ export default function EditProfileScreen() {
         onConfirm={() => {
           const leave = pendingLeave;
           setPendingLeave(null);
-          allowLeave.current = true;
+          setAllowLeave(true);
           leave?.();
         }}
         onClose={() => setPendingLeave(null)}

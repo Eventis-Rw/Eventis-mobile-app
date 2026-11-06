@@ -4,6 +4,8 @@ import type {
   LiveWatchSession,
 } from "./liveDirectoryService";
 import {
+  createLiveState,
+  LIVE_GIFTS,
   readLiveState,
   type LiveAction,
   type LivePerson,
@@ -27,6 +29,7 @@ export type BroadcastSession = {
   listing?: LiveListing;
   controlToken?: string;
   profile?: LivePerson;
+  sample?: { id: string; host: LivePerson };
 };
 export function createBroadcastSession(
   title: string,
@@ -98,6 +101,17 @@ export function watchSession(
     profile,
   };
 }
+export function sampleBroadcastSession(id: string, profile: LivePerson, nonce: string): BroadcastSession {
+  const room = createLiveState().rooms.find(r => r.id === id);
+  if (!room) throw new Error("This Live is unavailable.");
+  return { code: `eventis-sample-v1-${id}`, identity: `viewer-${nonce}`, hostId: room.host.id,
+    title: room.title, mode: room.mode, hosting: false, profile, sample: { id, host: room.host } };
+}
+export function liveCoordinator(people: { identity: string; joinedAt?: Date }[]): string | undefined {
+  return [...people].filter(p => p.identity).sort((a, b) =>
+    (a.joinedAt?.getTime() ?? Infinity) - (b.joinedAt?.getTime() ?? Infinity) || a.identity.localeCompare(b.identity)
+  )[0]?.identity;
+}
 export function roomState(room: LiveRoom): LiveState {
   return {
     version: 1,
@@ -117,7 +131,7 @@ export function initialBroadcastRoom(
     id: session.code,
     title: session.title,
     mode: session.mode,
-    host: { ...(session.listing?.host ?? person), id: session.hostId },
+    host: { ...(session.sample?.host ?? session.listing?.host ?? person), id: session.hostId },
     ...(session.listing?.event
       ? {
           eventId: session.listing.event.id,
@@ -142,10 +156,14 @@ export function initialBroadcastRoom(
 export function parseGuestAction(
   value: unknown,
   roomId: string,
+  sample = false,
 ): LiveAction | null {
   if (!value || typeof value !== "object") return null;
   const a = value as Record<string, unknown>;
   if (a.roomId !== roomId) return null;
+  if (sample && a.type === "gift" && LIVE_GIFTS.some(g => g.id === a.giftId)
+      && typeof a.transactionId === "string" && a.transactionId.length > 0 && a.transactionId.length <= 160)
+    return { type: "gift", roomId, giftId: String(a.giftId), transactionId: a.transactionId };
   if (a.type === "message")
     return typeof a.text === "string" && a.text.length <= 240
       ? { type: "message", roomId, text: a.text }
@@ -177,6 +195,7 @@ export function serializeBroadcastRoom(room: LiveRoom): LiveRoom {
     host: compact(room.host),
     audience: [],
     guests: room.guests.map(compact),
+    microphoneMutes: Object.fromEntries(room.guests.filter(p => room.microphoneMutes?.[p.id]).map(p => [p.id, room.microphoneMutes![p.id]])),
     requests: room.requests.slice(0, 20).map(compact),
     invitations: room.invitations.slice(0, 20).map(compact),
     messages: room.messages
@@ -188,8 +207,9 @@ export function parseHostSnapshot(
   value: unknown,
   senderId: string,
   session: BroadcastSession,
+  coordinatorId?: string,
 ): LiveRoom | null {
-  if (senderId !== session.hostId) return null;
+  if (senderId !== (session.sample ? coordinatorId : session.hostId)) return null;
   try {
     const parsed = readLiveState(JSON.stringify(roomState(value as LiveRoom)))
       .rooms[0];

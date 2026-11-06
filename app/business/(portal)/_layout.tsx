@@ -59,7 +59,7 @@ export default function OrganiserPortalLayout() {
             tabBarButtonTestID: `organiser-tab-${tab.name}`,
             tabBarIcon: ({ color, focused }) => (
               <View style={[styles.iconWrap, focused && { backgroundColor: palette.blueSoft }]}>
-                <Feather name={tab.icon} size={20} color={color} />
+                <Feather name={tab.icon} size={20} color={typeof color === "string" ? color : palette.muted} />
               </View>
             ),
           }}

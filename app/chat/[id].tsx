@@ -10,7 +10,7 @@ import {
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import React, {
+import React, { type ComponentRef,
   useCallback,
   useEffect,
   useMemo,
@@ -299,12 +299,12 @@ export default function ConversationScreen() {
     contact?.isInAddressBook === false ? contact.phone : contact?.name;
   const allMessages = chat.messagesByConversation[id] ?? [];
   const list = useRef<FlatList<ChatMessage>>(null);
-  const menuButton = useRef<View>(null);
+  const menuButton = useRef<ComponentRef<typeof View>>(null);
   const jumpRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jumpAttempts = useRef(0);
   const nearBottom = useRef(true);
   const [showLatest, setShowLatest] = useState(false);
-  const input = useRef<TextInput>(null);
+  const input = useRef<ComponentRef<typeof TextInput>>(null);
   const [composer, setComposer] = useState("");
   const [composerSelection, setComposerSelection] = useState({
     start: 0,

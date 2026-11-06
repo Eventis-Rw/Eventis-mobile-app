@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { type ComponentRef, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -26,7 +26,7 @@ export default function ChatScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const chat = useChat();
-  const menuButton = useRef<View>(null);
+  const menuButton = useRef<ComponentRef<typeof View>>(null);
   const appleHeader = Platform.OS !== "android";
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [options, setOptions] = useState<ChatConversation | null>(null);

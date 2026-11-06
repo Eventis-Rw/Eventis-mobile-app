@@ -6,7 +6,7 @@ import { publishLocalStories, type StoryDraft } from "@/services/storyService";
 import { persistStoryMedia } from "@/services/storyMedia";
 import { StoryVideo } from "@/components/StoryVideo";
 import { useStories } from "@/context/StoriesContext";
-import React, { useEffect, useRef, useState } from "react";
+import React, { type ComponentRef, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Image, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions,
@@ -64,7 +64,7 @@ export default function CreateStoryScreen() {
   const { refresh, openStories } = useStories();
   const { width, height } = useWindowDimensions();
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
-  const textInputRef = useRef<TextInput>(null);
+  const textInputRef = useRef<ComponentRef<typeof TextInput>>(null);
   const nextLayerId = useRef(0);
   const [editing, setEditing] = useState(false);
   const [image, setImage] = useState<ImageSourcePropType | undefined>();
@@ -205,7 +205,7 @@ export default function CreateStoryScreen() {
       }
       const drafts: StoryDraft[] = [];
       for (const canvas of canvases) {
-        const imageUri = typeof canvas.image === "object" && !Array.isArray(canvas.image) ? canvas.image?.uri : undefined;
+        const imageUri = typeof canvas.image === "object" && canvas.image !== null && "uri" in canvas.image ? canvas.image.uri : undefined;
         const mediaUri = canvas.videoUri || imageUri;
         const durableUri = mediaUri ? await persistStoryMedia(mediaUri) : undefined;
         drafts.push({ organisationId: user.organisation?.id, organizerName: organisationName, organizerAvatar: user.organisation?.logoUrl || user.avatarUrl || "",

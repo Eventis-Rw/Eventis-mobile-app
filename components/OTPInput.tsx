@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { type ComponentRef, useCallback, useRef, useState } from "react";
 import {
   Platform,
   StyleSheet,
@@ -25,7 +25,7 @@ export function OTPInput({ length = OTP_LENGTH, onComplete, error }: OTPInputPro
   const colors = useColors();
   const [otp, setOtp] = useState<string[]>(Array(length).fill(""));
   const [focused, setFocused] = useState(-1);
-  const inputs = useRef<(TextInput | null)[]>([]);
+  const inputs = useRef<(ComponentRef<typeof TextInput> | null)[]>([]);
   const shakeValue = useSharedValue(0);
 
   const shakeStyle = useAnimatedStyle(() => ({

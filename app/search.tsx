@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { type ComponentRef, useCallback, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Platform,
@@ -48,8 +48,8 @@ export default function SearchScreen() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [sort, setSort] = useState<SortOption>("relevance");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
-  const inputRef = useRef<TextInput>(null);
-  const categoryScrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const categoryScrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const categoryLayouts = useRef<Record<string, { x: number; width: number }>>({});
 
   const handleSelectCategory = useCallback(

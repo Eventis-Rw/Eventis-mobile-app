@@ -323,7 +323,7 @@ export default function ChatSearchScreen() {
                     : "Search by a saved name, phone number or words in a message."}
                 </Text>
               </View>
-            ) : null
+            ) : undefined
           }
           ListFooterComponent={
             phoneQuery ? (
@@ -401,7 +401,7 @@ export default function ChatSearchScreen() {
                   />
                 ) : null}
               </View>
-            ) : null
+            ) : undefined
           }
         />
       </View>

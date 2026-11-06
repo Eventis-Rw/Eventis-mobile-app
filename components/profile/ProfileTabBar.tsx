@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { type ComponentRef, useEffect, useRef } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutRectangle } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
@@ -13,7 +13,7 @@ interface ProfileTabBarProps {
 /** Horizontally scrolling tabs; keeps the active tab in view on narrow screens. */
 export function ProfileTabBar({ tabs, active, onChange }: ProfileTabBarProps) {
   const colors = useColors();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const layouts = useRef<Partial<Record<ProfileTab, LayoutRectangle>>>({});
 
   useEffect(() => {

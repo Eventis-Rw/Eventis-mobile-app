@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { type ComponentRef, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -39,7 +39,7 @@ export default function EditOrganisationScreen() {
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const creating = mode === "create";
   const { user, setupOrganisation, updateOrganisation } = useAuth();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const org = creating ? undefined : user?.organisation;
 
   const [values, setValues] = useState<OrganisationFormValues>(() =>

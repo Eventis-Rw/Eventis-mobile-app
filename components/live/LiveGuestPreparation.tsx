@@ -196,7 +196,7 @@ export function LiveGuestPreparation({
               >
                 <Ionicons
                   name={
-                    option.key === "camera" ? "videocam-outline" : "mic-outline"
+                    option.key === "camera" ? option.value ? "videocam-outline" : "videocam-off-outline" : option.value ? "mic-outline" : "mic-off-outline"
                   }
                   size={22}
                   color={option.value ? c.blue : c.muted}
@@ -207,6 +207,7 @@ export function LiveGuestPreparation({
               </Pressable>
             ))}
           </View>
+          {mode === "video" && camera && !ready && !joining ? <Text style={s.body}>Camera not ready? Turn Camera off to join with audio.</Text> : null}
           {error ? (
             <Text accessibilityRole="alert" style={s.error}>
               {error}
@@ -215,7 +216,7 @@ export function LiveGuestPreparation({
           {joining ? <ActivityIndicator color={c.blue} /> : null}
           <LiveButton
             tone="live"
-            label={joining ? "Joining…" : "Join broadcast"}
+            label={joining ? "Joining…" : camera ? "Join with video" : microphone ? "Join with audio" : "Join with mic off"}
             disabled={joining || (camera && !ready)}
             onPress={() => {
               setError("");

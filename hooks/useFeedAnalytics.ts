@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useFocusEffect } from "expo-router";
-import type { ViewToken } from "react-native";
+import type { FlatListProps } from "react-native";
 import type { Event } from "@/constants/events";
 import type { AnalyticsSource } from "@/services/analyticsService";
 import { useAnalytics } from "@/context/AnalyticsContext";
@@ -23,7 +23,7 @@ export function useFeedAnalytics(source: AnalyticsSource, covered = false) {
   }, []);
   useEffect(() => { update(); return () => tracker.current?.dispose(); }, [focused, foreground, covered, source, update]);
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50, minimumViewTime: 0 }).current;
-  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<Event>[] }) => {
+  const onViewableItemsChanged = useCallback(({ viewableItems }: Parameters<NonNullable<FlatListProps<Event>["onViewableItemsChanged"]>>[0]) => {
     visible.current = viewableItems.filter((token) => token.isViewable).map((token) => token.item);
     update();
   }, [update]);

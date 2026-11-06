@@ -21,6 +21,8 @@ pnpm web
 
 Check TypeScript with `pnpm typecheck`.
 
+**New to the team?** Follow [docs/team-setup.md](docs/team-setup.md). It walks through Developer options, connecting your phone over USB or Wi-Fi, installing the Eventis APK and running the app step by step.
+
 The project currently pins Expo 57.0.25 and matching package patches that pass pnpm's
 minimum release age policy. `pnpm-workspace.yaml` contains only two dependency
 overrides for that reason; this is still a single-package app. Expo Doctor may report
