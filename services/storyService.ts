@@ -19,6 +19,8 @@ export type PublishedStory = {
   overlays: StoryOverlay[];
   createdAt: number;
   expiresAt: number;
+  viewsCount?: number;
+  source?: "api" | "local";
 };
 const key = (userId: string) => `@eventis_stories_v1:${userId}`;
 const DAY = 24 * 60 * 60 * 1000;

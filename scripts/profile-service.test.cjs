@@ -6,6 +6,7 @@ const ts = require("typescript");
 
 // Exercise the real modules against an in-memory storage adapter; no RN runtime required.
 process.env.NODE_ENV = "test";
+process.env.EXPO_PUBLIC_USE_EVENTS_API = "false";
 let stored = new Map();
 const storage = {
   getItem: async (key) => stored.get(key) ?? null,
@@ -50,6 +51,7 @@ const customer = load("utils/customerProfile.ts", (name) => {
 
 const publisher = load("services/publisherService.ts", (name) => {
   if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
+  if (name === "@/services/eventApi") return { USE_EVENTS_API: false };
   if (name === "@/utils/apiClient") return apiStub;
   if (name === "@/services/profileService") return profile;
 });

@@ -115,8 +115,14 @@ export function PhoneInput({
           placeholder={placeholder}
           placeholderTextColor={colors.mutedForeground}
           value={digits}
-          onChangeText={(text) => onChangeText(text.replace(/\D/g, "").slice(0, maxDigits))}
-          maxLength={maxDigits}
+          onChangeText={(text) => {
+            const countryDigits = selectedCountry.code.replace(/\D/g, "");
+            let next = text.replace(/\D/g, "");
+            // Accept a pasted or typed country prefix such as +250 and drop a leading trunk zero.
+            if (next.length > maxDigits && next.startsWith(countryDigits)) next = next.slice(countryDigits.length);
+            onChangeText(next.replace(/^0+/, "").slice(0, maxDigits));
+          }}
+          maxLength={maxDigits + selectedCountry.code.length}
           keyboardType="phone-pad"
           autoCapitalize="none"
           autoCorrect={false}

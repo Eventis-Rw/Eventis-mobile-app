@@ -53,6 +53,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
   const { user, toggleSaveEvent } = useAuth();
   const scale = useSharedValue(1);
   const isSaved = user?.savedEvents.includes(event.id) ?? false;
+  const [saveCount, setSaveCount] = useState(event.savesCount ?? 0);
   const saving = useRef(false);
   const postSurface =
     scheme === "dark" ? "rgba(16, 22, 44, 0.72)" : "rgba(255, 255, 255, 0.78)";
@@ -87,7 +88,10 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
       saving.current = true;
       try {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        if (await toggleSaveEvent(event.id)) trackEvent(event, isSaved ? "unsave" : "save", source);
+        if (await toggleSaveEvent(event.id)) {
+          setSaveCount((count) => Math.max(0, count + (isSaved ? -1 : 1)));
+          trackEvent(event, isSaved ? "unsave" : "save", source);
+        }
       } finally { saving.current = false; }
     },
     [toggleSaveEvent, event, isSaved, source, trackEvent]
@@ -113,6 +117,9 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
   const shareCount = localActivity.filter((record) => record.type === "share").length;
   const localViewCount = viewsCount;
   const savesCount = localActivity.filter((record) => record.type === "save").length;
+  useEffect(() => {
+    setSaveCount(event.savesCount ?? 0);
+  }, [event.savesCount]);
   const reached = new Set(localActivity.filter((record) => record.type === "feed_view").map((record) => record.viewerId));
   const engaged = new Set(localActivity.filter((record) => ["share", "save", "link_copy"].includes(record.type) && reached.has(record.viewerId)).map((record) => record.viewerId));
   const overlayOpen = showShareModal || showOptionsModal || showInsightsModal;
@@ -1249,7 +1256,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
           />
         </View>
 
-        {/* Action bar: shares with live count, and saved without count */}
+        {/* Action bar: views, shares and saves with counts */}
         <View style={styles.instaActionBar}>
           {/* Left: Interactive Share with count */}
           <View style={styles.instaLeftActions}>
@@ -1271,18 +1278,21 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
             </Pressable>
           </View>
 
-          {/* Right: Save Post action without count (hidden) */}
+          {/* Right: Save Post action with count */}
           <Pressable
             style={({ pressed }) => [styles.instaActionPill, pressed && { opacity: 0.7 }]}
             onPress={handleSave}
             accessibilityRole="button"
-            accessibilityLabel={isSaved ? "Saved post" : "Save post"}
+            accessibilityLabel={`${isSaved ? "Saved post" : "Save post"}, ${saveCount} ${saveCount === 1 ? "save" : "saves"}`}
           >
             <Ionicons
               name={isSaved ? "bookmark" : "bookmark-outline"}
               size={21}
               color={isSaved ? colors.primary : colors.foreground}
             />
+            <Text style={[styles.instaActionCount, { color: isSaved ? colors.primary : colors.foreground }]}>
+              {formatCount(saveCount)}
+            </Text>
           </Pressable>
         </View>
 

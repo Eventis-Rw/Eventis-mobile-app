@@ -1,13 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, AppState, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Animated, AppState, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEvents } from "@/context/EventsContext";
 import { StoryCanvas } from "@/components/StoryCanvas";
 import { StoryVideo } from "@/components/StoryVideo";
 import { StoryAvatar } from "@/components/StoryAvatar";
 import { isStoryAvailable, storyKey, type PublishedStory, type StoryCollection } from "@/services/storyService";
+import { describeStatusError, fetchStatusViewers, type StatusViewer } from "@/services/statusService";
 import { resolveStoryIndex } from "@/utils/storyPlayback";
 import { useAnalytics } from "@/context/AnalyticsContext";
 import type { AnalyticsType } from "@/services/analyticsService";
@@ -77,6 +78,11 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
   const [deleting, setDeleting] = useState(false);
   const [ended, setEnded] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [viewersOpen, setViewersOpen] = useState(false);
+  const [viewers, setViewers] = useState<StatusViewer[]>([]);
+  const [viewsCount, setViewsCount] = useState(story.viewsCount ?? 0);
+  const [viewersLoading, setViewersLoading] = useState(false);
+  const [viewersError, setViewersError] = useState("");
   const progress = useRef(new Animated.Value(0)).current;
   const drag = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(0)).current;
@@ -85,8 +91,22 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
   const swiping = useRef(false);
   const advanced = useRef(false);
   const exitSent = useRef(false);
-  const paused = holding || manualPause || !foreground || confirmDelete || failed;
+  const paused = holding || manualPause || !foreground || confirmDelete || viewersOpen || failed;
   const duration = Math.max(1000, Math.min(15000, story.durationMs ?? 5000));
+  const openViewers = useCallback(async () => {
+    setViewersOpen(true);
+    setViewersError("");
+    setViewersLoading(true);
+    try {
+      const response = await fetchStatusViewers(story.id);
+      setViewers(response.viewers);
+      setViewsCount(response.views_count);
+    } catch (error) {
+      setViewersError(describeStatusError(error, "We couldn't load this story's viewers."));
+    } finally {
+      setViewersLoading(false);
+    }
+  }, [story.id]);
   const closeViewer = useCallback(() => {
     if (ready && !failed && !advanced.current && !exitSent.current) { exitSent.current = true; trackStory("story_exit"); }
     onClose();
@@ -116,8 +136,8 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
     };
   }, [fade]);
   useEffect(() => {
-    if (ready && !paused && !failed && isStoryAvailable(story)) onViewed(story);
-  }, [ready, paused, failed, story, onViewed]);
+    if (!paused && !failed && isStoryAvailable(story)) onViewed(story);
+  }, [paused, failed, story, onViewed]);
   useEffect(() => {
     if (ready && !paused && !failed && isStoryAvailable(story)) trackStory("story_view");
   }, [ready, paused, failed, story, trackStory]);
@@ -211,10 +231,24 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
         <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
           {own ? <View style={styles.actions}>
             <Pressable style={styles.button} onPress={() => { onClose(); router.push("/business/create-story"); }} accessibilityRole="button"><Ionicons name="add" color="white" size={20} /><Text style={styles.name}>Add to story</Text></Pressable>
+            <Pressable style={styles.button} onPress={() => void openViewers()} accessibilityRole="button" accessibilityLabel={`${viewsCount} story views`}><Ionicons name="eye-outline" color="white" size={20} /><Text style={styles.name}>{viewsCount}</Text></Pressable>
             <Pressable style={styles.control} onPress={() => setConfirmDelete(true)} accessibilityRole="button" accessibilityLabel="Delete story"><Ionicons name="trash-outline" color="white" size={22} /></Pressable>
           </View> : linkedEvent ? <Pressable style={styles.button} accessibilityRole="button" onPress={() => { trackStory("story_event_click"); onClose(); router.push({ pathname: "/event/[id]", params: { id: linkedEvent.id, source: "stories" } }); }}><Text style={styles.name}>View event</Text><Ionicons name="arrow-forward" size={18} color="white" /></Pressable>
             : story.eventId ? <Text style={styles.time}>{eventsLoading ? "Loading event…" : "Event no longer available"}</Text> : null}
         </View>
+        {viewersOpen ? <View style={styles.confirm}><View style={[styles.confirmCard, styles.viewersCard]}>
+          <View style={styles.viewersHeader}><View style={styles.flex}><Text style={styles.name}>Story viewers</Text><Text style={styles.time}>{viewsCount} {viewsCount === 1 ? "view" : "views"} · only you can see this list</Text></View>
+            <Pressable style={styles.control} onPress={() => setViewersOpen(false)} accessibilityRole="button" accessibilityLabel="Close viewers"><Ionicons name="close" color="white" size={24} /></Pressable></View>
+          {viewersLoading ? <View style={styles.viewersState}><ActivityIndicator color="white" /><Text style={styles.time}>Loading viewers…</Text></View> : null}
+          {!viewersLoading && viewersError ? <View style={styles.viewersState}><Text style={styles.time}>{viewersError}</Text><Pressable style={styles.button} onPress={() => void openViewers()} accessibilityRole="button"><Text style={styles.name}>Try again</Text></Pressable></View> : null}
+          {!viewersLoading && !viewersError && !viewers.length ? <View style={styles.viewersState}><Ionicons name="eye-outline" color="#C7CED9" size={28} /><Text style={styles.name}>No viewers yet</Text><Text style={styles.time}>People who view this story will appear here.</Text></View> : null}
+          {!viewersLoading && !viewersError && viewers.length ? <ScrollView style={styles.viewerList} contentContainerStyle={styles.viewerListContent} showsVerticalScrollIndicator={false}>
+            {viewers.map((viewer) => <View key={viewer.id} style={styles.viewerRow}>
+              <StoryAvatar name={viewer.name} uri={viewer.avatar_url ?? ""} size={38} />
+              <View style={styles.flex}><Text style={styles.name} numberOfLines={1}>{viewer.name}</Text><Text style={styles.time}>{viewedAtLabel(viewer.viewed_at)}</Text></View>
+            </View>)}
+          </ScrollView> : null}
+        </View></View> : null}
         {confirmDelete ? <View style={styles.confirm}><View style={styles.confirmCard}>
           <Text style={styles.name}>Delete this story?</Text><Text style={styles.time}>It will be removed from your active stories.</Text>
           {deleteError ? <Text style={styles.time}>{deleteError}</Text> : null}
@@ -228,8 +262,18 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
     </View>
   );
 }
+function viewedAtLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Viewed recently";
+  const age = Math.max(0, Date.now() - date.getTime());
+  if (age < 60000) return "Viewed just now";
+  if (age < 3600000) return `Viewed ${Math.floor(age / 60000)}m ago`;
+  if (age < 86400000) return `Viewed ${Math.floor(age / 3600000)}h ago`;
+  return `Viewed ${date.toLocaleDateString(undefined, { day: "numeric", month: "short" })}`;
+}
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#000" }, screen: { flex: 1, backgroundColor: "#080B10" },
+  root: { flex: 1, backgroundColor: "#000" }, screen: { flex: 1, backgroundColor: "#080B10" }, flex: { flex: 1, minWidth: 0 },
   media: { ...StyleSheet.absoluteFill, justifyContent: "center", alignItems: "center" },
   gesture: { position: "absolute", left: 0, right: 0, flexDirection: "row" },
   top: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: 12, backgroundColor: "rgba(0,0,0,0.3)" },
@@ -244,5 +288,11 @@ const styles = StyleSheet.create({
   failure: { position: "absolute", top: "35%", left: 20, right: 20, backgroundColor: "#111827", borderRadius: 20, padding: 22, alignItems: "center", gap: 14 },
   confirm: { ...StyleSheet.absoluteFill, backgroundColor: "#000B", alignItems: "center", justifyContent: "center", padding: 24 },
   confirmCard: { backgroundColor: "#151C29", padding: 24, borderRadius: 22, gap: 18 },
+  viewersCard: { width: "100%", maxWidth: 420, maxHeight: "72%", padding: 18 },
+  viewersHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  viewersState: { alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 26 },
+  viewerList: { flexGrow: 0 },
+  viewerListContent: { gap: 4 },
+  viewerRow: { flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 9 },
 });
 

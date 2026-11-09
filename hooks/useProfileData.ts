@@ -42,10 +42,14 @@ export function useProfileData() {
 
   const publisherName = organisation?.name ?? (accountType === "individual" ? user?.username : undefined);
   const publishedEvents = useMemo<Event[]>(() => {
-    if (!isPublisher || !publisherName) return [];
-    const name = publisherName.trim().toLowerCase();
-    return events.filter((e) => e.organizer.trim().toLowerCase() === name);
-  }, [events, isPublisher, publisherName]);
+    if (!isPublisher || !user) return [];
+    const name = publisherName?.trim().toLowerCase();
+    return events.filter((event) =>
+      event.ownerId
+        ? event.ownerId === user.id
+        : Boolean(name && event.organizer.trim().toLowerCase() === name),
+    );
+  }, [events, isPublisher, publisherName, user]);
 
   const refresh = useCallback(async () => {
     await Promise.all([refreshBookings(), refreshEvents()]);
