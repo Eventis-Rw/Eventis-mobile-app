@@ -71,12 +71,9 @@ export function BookingsProvider({ children }: { children: React.ReactNode }) {
     if (!token) return;
     setIsLoading(true);
     try {
-      const data = await api.get<{ bookings: Booking[] }>("/bookings");
-      setBookings(data.bookings);
-      await saveLocal(data.bookings);
-      lastFetch.current = Date.now();
-    } catch {
+      // The backend has no bookings endpoint yet, so bookings stay on-device.
       await loadLocal();
+      lastFetch.current = Date.now();
     } finally {
       setIsLoading(false);
     }

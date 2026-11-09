@@ -38,6 +38,7 @@ export interface Event {
   reviewCount: number;
   /** Legacy supplied total; cards use measured detail views until server counting is defined. */
   viewCount?: number;
+  savesCount?: number;
   /** Organizer notes (dress code, entry rules, what to bring), one per item. Not in the events API yet. */
   instructions?: string[];
 }

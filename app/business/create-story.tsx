@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Asset } from "expo-asset";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { publishLocalStories, type StoryDraft } from "@/services/storyService";
-import { persistStoryMedia } from "@/services/storyMedia";
+import { describeStatusError, publishStatus, type StatusCreateInput, type StatusMediaAsset, type StatusMediaType } from "@/services/statusService";
 import { StoryVideo } from "@/components/StoryVideo";
 import { useStories } from "@/context/StoriesContext";
 import React, { useEffect, useRef, useState } from "react";
@@ -37,7 +37,7 @@ const TOOLS = [
   { id: "layout", label: "Layout", icon: "crop-outline" },
 ] as const;
 type Tool = (typeof TOOLS)[number]["id"];
-type DraftCanvas = { image?: ImageSourcePropType; videoUri?: string; backgroundIndex: number; fit: "cover" | "contain"; overlays: StoryOverlay[] };
+type DraftCanvas = { image?: ImageSourcePropType; videoUri?: string; mediaFileName?: string; mediaMimeType?: string; backgroundIndex: number; fit: "cover" | "contain"; overlays: StoryOverlay[] };
 
 function Choice({ label, selected, onPress, disabled = false }: { label: string; selected?: boolean; onPress: () => void; disabled?: boolean }) {
   const palette = useOrganiserPalette();
@@ -51,6 +51,22 @@ function Choice({ label, selected, onPress, disabled = false }: { label: string;
       <Text style={[styles.choiceText, { color: selected ? palette.accent : palette.text }]}>{label}</Text>
     </Pressable>
   );
+}
+
+
+async function resolveCanvasMedia(canvas: DraftCanvas, mediaType: StatusMediaType, index: number): Promise<StatusMediaAsset | undefined> {
+  if (mediaType === "text") return undefined;
+  const imageUri = canvas.image && typeof canvas.image === "object" && !Array.isArray(canvas.image)
+    ? (canvas.image as { uri?: string }).uri
+    : undefined;
+  const uri = canvas.videoUri || imageUri;
+  if (uri) return { uri, fileName: canvas.mediaFileName, mimeType: canvas.mediaMimeType };
+  if (mediaType === "image" && typeof canvas.image === "number") {
+    const asset = Asset.fromModule(canvas.image);
+    if (!asset.localUri) await asset.downloadAsync();
+    return { uri: asset.localUri ?? asset.uri, fileName: `${asset.name}.${asset.type}` };
+  }
+  return undefined;
 }
 
 export default function CreateStoryScreen() {
@@ -69,6 +85,8 @@ export default function CreateStoryScreen() {
   const [editing, setEditing] = useState(false);
   const [image, setImage] = useState<ImageSourcePropType | undefined>();
   const [videoUri, setVideoUri] = useState<string>();
+  const [mediaFileName, setMediaFileName] = useState<string>();
+  const [mediaMimeType, setMediaMimeType] = useState<string>();
   const [batch, setBatch] = useState<DraftCanvas[]>([]);
   const [draftIndex, setDraftIndex] = useState(0);
   const [backgroundIndex, setBackgroundIndex] = useState(0);
@@ -83,9 +101,11 @@ export default function CreateStoryScreen() {
   const selected = overlays.find((layer) => layer.id === selectedId);
   const background = STORY_BACKGROUNDS[backgroundIndex];
   const hasContent = Boolean(image || videoUri) || overlays.some((layer) => layer.text.trim());
-  const snapshot = (): DraftCanvas => ({ image, videoUri, backgroundIndex, fit, overlays });
+  const snapshot = (): DraftCanvas => ({ image, videoUri, mediaFileName, mediaMimeType, backgroundIndex, fit, overlays });
   const loadDraft = (draft: DraftCanvas) => {
-    setImage(draft.image); setVideoUri(draft.videoUri); setBackgroundIndex(draft.backgroundIndex);
+    setImage(draft.image); setVideoUri(draft.videoUri);
+    setMediaFileName(draft.mediaFileName); setMediaMimeType(draft.mediaMimeType);
+    setBackgroundIndex(draft.backgroundIndex);
     setFit(draft.fit); setOverlays(draft.overlays); setSelectedId(undefined); setActiveTool(undefined);
   };
   const selectDraft = (index: number) => {
@@ -155,12 +175,16 @@ export default function CreateStoryScreen() {
         }
       }
       const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images", "videos"], quality: 0.85, allowsEditing: false,
-        allowsMultipleSelection: !camera, selectionLimit: 10, orderedSelection: true, videoMaxDuration: 60 };
+        allowsMultipleSelection: !camera, selectionLimit: 10, orderedSelection: true, videoMaxDuration: 60,
+        preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible };
       const result = camera ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
       if (!result.canceled && result.assets[0]) {
         const additions: DraftCanvas[] = result.assets.map((asset) => ({
           image: asset.type === "video" ? undefined : { uri: asset.uri },
-          videoUri: asset.type === "video" ? asset.uri : undefined, backgroundIndex: 0, fit: "contain", overlays: [],
+          videoUri: asset.type === "video" ? asset.uri : undefined,
+          mediaFileName: asset.fileName ?? undefined,
+          mediaMimeType: asset.mimeType ?? undefined,
+          backgroundIndex: 0, fit: "contain", overlays: [],
         }));
         const current = batch.length ? batch.map((draft, index) => index === draftIndex ? snapshot() : draft) : hasContent ? [snapshot()] : [];
         setBatch([...current, ...additions]);
@@ -181,6 +205,8 @@ export default function CreateStoryScreen() {
     setBatch([]);
     setDraftIndex(0);
     setVideoUri(undefined);
+    setMediaFileName(undefined);
+    setMediaMimeType(undefined);
     setImage(template.image);
     setOverlays([{ id: `layer-${++nextLayerId.current}`, kind: "text", text: template.message, x: 0.5, y: 0.83, color: "#FFFFFF", style: "label", size: 21 }]);
     setSelectedId(undefined);
@@ -194,32 +220,44 @@ export default function CreateStoryScreen() {
     if (!user) { setPickError("Sign in to publish your story."); return; }
     publishLock.current = true;
     setPublishing(true);
+    let publishedCount = 0;
+    let total = 0;
     setPickError(undefined);
     Keyboard.dismiss();
     try {
       const canvases = batch.length ? batch.map((draft, index) => index === draftIndex ? snapshot() : draft) : [snapshot()];
+      total = canvases.length;
       const emptyIndex = canvases.findIndex((canvas) => !canvas.image && !canvas.videoUri && !canvas.overlays.some((layer) => layer.text.trim()));
       if (emptyIndex >= 0) {
         setPickError(`Story ${emptyIndex + 1} is empty. Add media or text, or remove it.`);
         return;
       }
-      const drafts: StoryDraft[] = [];
-      for (const canvas of canvases) {
-        const imageUri = typeof canvas.image === "object" && !Array.isArray(canvas.image) ? canvas.image?.uri : undefined;
-        const mediaUri = canvas.videoUri || imageUri;
-        const durableUri = mediaUri ? await persistStoryMedia(mediaUri) : undefined;
-        drafts.push({ organisationId: user.organisation?.id, organizerName: organisationName, organizerAvatar: user.organisation?.logoUrl || user.avatarUrl || "",
-          storyImage: canvas.videoUri ? undefined : durableUri ? { uri: durableUri } : canvas.image,
-          mediaUrl: durableUri, mediaType: canvas.videoUri ? "video" : canvas.image ? "image" : "text",
-          background: STORY_BACKGROUNDS[canvas.backgroundIndex].color, fit: canvas.fit, overlays: canvas.overlays.filter((layer) => layer.text.trim()) });
+      const drafts: StatusCreateInput[] = [];
+      for (const [index, canvas] of canvases.entries()) {
+        const overlays = canvas.overlays.filter((layer) => layer.text.trim());
+        const mediaType: StatusMediaType = canvas.videoUri ? "video" : canvas.image ? "image" : "text";
+        drafts.push({
+          mediaType,
+          media: await resolveCanvasMedia(canvas, mediaType, index),
+          caption: overlays.map((layer) => layer.text.trim()).join("\n").slice(0, 1000) || undefined,
+          background: STORY_BACKGROUNDS[canvas.backgroundIndex].color,
+          fit: canvas.fit,
+          overlays,
+        });
       }
-      await publishLocalStories(user.id, drafts);
+      for (const draft of drafts) {
+        await publishStatus(draft);
+        publishedCount += 1;
+      }
       await refresh();
       setPreviewing(false);
       setPublished(true);
-    } catch {
+    } catch (error) {
       setPreviewing(false);
-      setPickError("Your story could not be saved. Your design is still here — please try publishing again.");
+      const message = describeStatusError(error, "Your status could not be published. Your design is still here — please try again.");
+      setPickError(publishedCount > 0 && publishedCount < total
+        ? `${publishedCount} of ${total} statuses published. ${message}`
+        : message);
     } finally {
       publishLock.current = false;
       setPublishing(false);
@@ -232,7 +270,7 @@ export default function CreateStoryScreen() {
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 28, gap: 18 }}>
         <Ionicons name="checkmark-circle-outline" size={56} color={palette.accent} />
         <Text style={[styles.heading, { color: palette.text }]}>Your story is ready to view</Text>
-        <Text style={[styles.description, { color: palette.muted, textAlign: "center" }]}>Saved to your home stories for 24 hours. During the demo, stories are visible on this device.</Text>
+        <Text style={[styles.description, { color: palette.muted, textAlign: "center" }]}>Published to your status feed for 24 hours. Your audience can see it at the top of their feed.</Text>
         <Pressable onPress={() => { if (user) openStories(user.id, true); }} accessibilityRole="button" style={[styles.shareButton, { flex: 0, paddingHorizontal: 24, backgroundColor: palette.blue }]}><Text style={styles.shareText}>View your stories</Text><Ionicons name="arrow-forward" size={20} color="#FFFFFF" /></Pressable>
         <Pressable onPress={() => router.replace("/business/dashboard")} accessibilityRole="button"><Text style={[styles.choiceText, { color: palette.accent }]}>Back to dashboard</Text></Pressable>
       </View>
@@ -337,7 +375,7 @@ export default function CreateStoryScreen() {
                 <Text style={[styles.optionTitle, { color: palette.text }]}>Frame your story</Text>
                 <View style={styles.styleRow}><Choice label="Fit media" selected={fit === "contain"} onPress={() => setFit("contain")} disabled={!image && !videoUri} /><Choice label="Fill screen" selected={fit === "cover"} onPress={() => setFit("cover")} disabled={!image && !videoUri} /></View>
                 <Text style={[styles.smallText, { color: palette.muted }]}>Fit media keeps your whole photo or video visible.</Text>
-                {image || videoUri ? <Choice label="Remove media" onPress={() => { setImage(undefined); setVideoUri(undefined); }} /> : null}
+                {image || videoUri ? <Choice label="Remove media" onPress={() => { setImage(undefined); setVideoUri(undefined); setMediaFileName(undefined); setMediaMimeType(undefined); }} /> : null}
               </View>
             ) : null}
             {selected ? (

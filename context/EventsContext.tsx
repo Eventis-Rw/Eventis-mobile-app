@@ -12,7 +12,7 @@ import {
   type Event,
   type EventCategory,
 } from "@/constants/events";
-import { api } from "@/utils/apiClient";
+import { useAuth } from "@/context/AuthContext";
 import { fetchEvents } from "@/utils/eventsService";
 
 interface ApiCategory {
@@ -40,29 +40,22 @@ interface EventsContextValue {
 const EventsContext = createContext<EventsContextValue | null>(null);
 
 export function EventsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
-  const [categories, setCategories] = useState<string[]>(CATEGORIES);
+  const categories = CATEGORIES;
   const [activeCategory, setActiveCategory] = useState<EventCategory>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadCategories = useCallback(async () => {
-    try {
-      const data = await api.get<ApiCategory[]>("/api/v1/categories");
-      if (data.length) {
-        setCategories(["All", ...data.map((category) => category.name)]);
-      }
-    } catch {
-      // Categories are optional; the built-in list keeps filtering usable.
-      setCategories(CATEGORIES);
-    }
-  }, []);
-
   const refreshEvents = useCallback(async () => {
+    if (!user) {
+      setEvents([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
-    loadCategories();
     try {
       setEvents(await fetchEvents());
     } catch (e) {
@@ -70,7 +63,7 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [loadCategories]);
+  }, [user]);
 
   useEffect(() => {
     refreshEvents();

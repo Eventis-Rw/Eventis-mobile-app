@@ -675,6 +675,7 @@ export function AnalyticsTab({ insights, events }: { insights: InsightsState; ev
         {totals && analytics?.events.length ? (
           <View style={styles.metricGrid}>
             <Metric icon="eye-outline" label="Event views" value={compact(totals.views)} />
+            <Metric icon="bookmark-outline" label="Saves" value={compact(totals.saves)} />
             <Metric icon="open-outline" label="Website clicks" value={compact(totals.websiteClicks)} />
             <Metric icon="trending-up-outline" label="Click-through" value={percent(totals.clickThroughRate)} />
             <Metric
@@ -703,7 +704,7 @@ export function AnalyticsTab({ insights, events }: { insights: InsightsState; ev
                   {e.title}
                 </Text>
                 <Text style={[styles.eventMeta, { color: colors.mutedForeground }]}>
-                  {compact(e.views)} views · {compact(e.websiteClicks)} clicks · {e.attendees}/{e.capacity} attending
+                  {compact(e.views)} views · {compact(e.saves)} saves · {compact(e.websiteClicks)} clicks · {e.attendees}/{e.capacity} attending
                 </Text>
                 <View style={[styles.bar, { backgroundColor: colors.border }]}>
                   <View

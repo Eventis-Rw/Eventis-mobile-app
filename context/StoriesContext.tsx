@@ -2,11 +2,11 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AppState, Platform } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import { StoryViewer } from "@/components/StoryViewer";
-import { makeDemoStories, RESET_STORY_VIEWS_ON_RELOAD } from "@/constants/demoStories";
-import { buildStorySession, hydrateStoryViews } from "@/utils/storyPlayback";
-import { resolveStoryMedia } from "@/services/storyMedia";
-import { deleteLocalStory, getDemoStoriesCreatedAt, getStoryFeed, getViewedStories, groupStories, persistStoryView, storyKey, subscribeStories,
+import { buildStorySession } from "@/utils/storyPlayback";
+import { deleteStatus, fetchStatusStories, recordStatusView } from "@/services/statusService";
+import { getViewedStories, groupStories, persistStoryView, storyKey, subscribeStories,
   type PublishedStory, type StoryCollection, type ViewedStories } from "@/services/storyService";
+import { getToken } from "@/utils/apiClient";
 
 type Session = NonNullable<ReturnType<typeof buildStorySession>>;
 type StoriesState = {
@@ -34,7 +34,6 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
   const pending = useRef(new Map<string, PublishedStory>());
   const request = useRef(0);
   const mounted = useRef(true);
-  const demoEpoch = useRef(Date.now());
   const refresh = useCallback(async () => {
     const version = ++request.current;
     try {
@@ -42,11 +41,12 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
         await persistStoryView(viewerId, story);
         pending.current.delete(id);
       }
-      const [local, savedViews, epoch] = await Promise.all([getStoryFeed(), getViewedStories(viewerId), getDemoStoriesCreatedAt()]);
-      const resolved = await resolveStoryMedia(local);
+      const [savedViews, token] = await Promise.all([getViewedStories(viewerId), getToken()]);
+      const useStatusApi = token !== null && !token.startsWith("demo_token_");
+      const remote = useStatusApi ? await fetchStatusStories() : [];
       if (!mounted.current || version !== request.current) return;
-      setItems([...resolved, ...(process.env.EXPO_PUBLIC_USE_EVENTS_API === "true" ? [] : makeDemoStories(RESET_STORY_VIEWS_ON_RELOAD ? demoEpoch.current : epoch))]);
-      setViewed(hydrateStoryViews(savedViews, optimistic.current, ownId, RESET_STORY_VIEWS_ON_RELOAD));
+      setItems(remote);
+      setViewed({ ...savedViews, ...optimistic.current });
       setNow(Date.now());
       setError(null);
     } catch {
@@ -54,7 +54,7 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
     } finally {
       if (mounted.current && version === request.current) setLoading(false);
     }
-  }, [viewerId, ownId]);
+  }, [viewerId]);
 
   useEffect(() => {
     mounted.current = true;
@@ -104,6 +104,7 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
     void persistStoryView(viewerId, story).then(() => pending.current.delete(id)).catch(() => {
       if (mounted.current) setError("Watched status couldn't sync. Tap to retry.");
     });
+    if (story.source === "api") void recordStatusView(story.id).catch(() => {});
   }, [viewerId]);
   const openStories = useCallback((ownerId: string, ownOnly = false) => {
     setNow(Date.now());
@@ -111,8 +112,8 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
   }, [items, viewed, ownId]);
   const close = useCallback(() => setSession(null), []);
   const remove = useCallback(async (story: PublishedStory) => {
-    if (story.ownerId !== ownId) return;
-    await deleteLocalStory(ownId, story.id);
+    if (story.ownerId !== ownId || story.source !== "api") return;
+    await deleteStatus(story.id);
     setItems((previous) => previous.filter((item) => storyKey(item) !== storyKey(story)));
   }, [ownId]);
   const viewerOpen = session !== null;

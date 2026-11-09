@@ -27,7 +27,7 @@ export default function OTPScreen() {
     phone?: string;
     fullName?: string;
   }>();
-  const { verifyOTP, clearOTPContext, signInWithPhoneSession, user } = useAuth();
+  const { verifyOTP, clearOTPContext, signInWithPhoneSession, resendSignupOTP, user } = useAuth();
   const isCompleting = useRef(false);
   const [error, setError] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -42,12 +42,17 @@ export default function OTPScreen() {
     }
   }, [countdown]);
 
-  const handleResend = useCallback(() => {
+  const handleResend = useCallback(async () => {
     if (!canResend) return;
-    setCountdown(60);
-    setCanResend(false);
     setError(false);
-  }, [canResend]);
+    try {
+      if (purpose === "register" && !DEMO_AUTH) await resendSignupOTP();
+      setCountdown(60);
+      setCanResend(false);
+    } catch {
+      setError(true);
+    }
+  }, [canResend, purpose, resendSignupOTP]);
 
   const handleComplete = useCallback(
     async (code: string) => {

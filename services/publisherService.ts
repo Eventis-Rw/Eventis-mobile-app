@@ -1,6 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { Event, EventCategory } from "@/constants/events";
+import {
+  createApiEvent,
+  getApiEvent,
+  listApiEvents,
+  mapApiEvent,
+  updateApiEvent,
+  USE_EVENTS_API,
+} from "@/services/eventApi";
+import { fetchEventAnalytics } from "@/services/eventAnalyticsService";
 import { USE_PROFILE_API } from "@/services/profileService";
 import { api } from "@/utils/apiClient";
 
@@ -8,11 +17,9 @@ import { api } from "@/utils/apiClient";
  * Publisher tools for individual posters and businesses: their own events
  * (create, edit, pause, delete), performance analytics and paid promotions.
  *
- * BACKEND STATUS: the events API is read-only and has no owner filter, and
- * there are no analytics or promotion modules. Until they ship, this service
- * keeps a local demo store shared by all accounts on the device, so events a
- * publisher creates also appear in discovery (see `fetchEvents`). The same
- * EXPO_PUBLIC_USE_PROFILE_API flag switches to the proposed endpoints below.
+ * The published event API is used for discovery and create/view/update flows.
+ * The backend currently has no owner-events listing, analytics, or promotion
+ * endpoints; those adjacent publisher features retain their existing demo behavior.
  */
 
 export type PublisherEventStatus = "published" | "paused";
@@ -79,6 +86,7 @@ export interface EventPerformance {
   eventId: string;
   title: string;
   views: number;
+  saves: number;
   websiteClicks: number;
   attendees: number;
   capacity: number;
@@ -89,6 +97,7 @@ export interface PublisherAnalytics {
   isSample: boolean;
   totals: {
     views: number;
+    saves: number;
     websiteClicks: number;
     /** websiteClicks / views, 0–1. */
     clickThroughRate: number;
@@ -221,14 +230,18 @@ function seedOf(id: string) {
 
 /** Demo only: every published event in the local store, for public discovery. */
 export async function fetchDemoPublishedEvents(): Promise<PublisherEvent[]> {
-  if (USE_PROFILE_API) return [];
+  if (USE_EVENTS_API || USE_PROFILE_API) return [];
   const all = await readJson<PublisherEvent[]>(EVENTS_KEY, []);
   return all.filter((e) => e.status === "published");
 }
 
-// INTEGRATION POINT: GET /api/v1/organisers/me/events -> { events: PublisherEvent[] }
-// Includes paused and past events; replaces matching by organiser name.
 export async function fetchPublisherEvents(userId: string): Promise<PublisherEvent[]> {
+  if (USE_EVENTS_API) {
+    const records = await listApiEvents();
+    return records
+      .filter((record) => record.poster_id === userId)
+      .map((record) => toPublisherEvent(record));
+  }
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
     const all = await readJson<PublisherEvent[]>(EVENTS_KEY, []);
@@ -239,11 +252,14 @@ export async function fetchPublisherEvents(userId: string): Promise<PublisherEve
 }
 
 export async function fetchPublisherEvent(userId: string, eventId: string): Promise<PublisherEvent | undefined> {
+  if (USE_EVENTS_API) {
+    const record = await getApiEvent(eventId);
+    return record.poster_id === userId ? toPublisherEvent(record) : undefined;
+  }
   const events = await fetchPublisherEvents(userId);
   return events.find((e) => e.id === eventId);
 }
 
-// INTEGRATION POINT: POST /api/v1/events -> { event: PublisherEvent }
 export async function createPublisherEvent(
   userId: string,
   organizerName: string,
@@ -251,6 +267,9 @@ export async function createPublisherEvent(
 ): Promise<PublisherEvent> {
   const problem = validateEventInput(input);
   if (problem) throw new Error(problem);
+  if (USE_EVENTS_API) {
+    return toPublisherEvent(await createApiEvent(input), organizerName);
+  }
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
     const all = await readJson<PublisherEvent[]>(EVENTS_KEY, []);
@@ -277,7 +296,6 @@ export async function createPublisherEvent(
   return resp.event;
 }
 
-// INTEGRATION POINT: PATCH /api/v1/events/:id -> { event: PublisherEvent }
 export async function updatePublisherEvent(
   userId: string,
   eventId: string,
@@ -285,12 +303,27 @@ export async function updatePublisherEvent(
 ): Promise<PublisherEvent> {
   const problem = validateEventInput(input);
   if (problem) throw new Error(problem);
+  if (USE_EVENTS_API) {
+    return toPublisherEvent(await updateApiEvent(eventId, input));
+  }
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
     return mutateDemoEvent(userId, eventId, (e) => ({ ...e, ...toEventFields(input) }));
   }
   const resp = await api.patch<{ event: PublisherEvent }>(`/api/v1/events/${encodeURIComponent(eventId)}`, input);
   return resp.event;
+}
+
+function toPublisherEvent(
+  record: Awaited<ReturnType<typeof getApiEvent>>,
+  organizer = "Event organiser",
+): PublisherEvent {
+  return {
+    ...mapApiEvent(record, organizer),
+    ownerId: record.poster_id,
+    status: record.status === "published" ? "published" : "paused",
+    createdAt: record.created_at,
+  };
 }
 
 // INTEGRATION POINT: PATCH /api/v1/events/:id/status { status } -> { event: PublisherEvent }
@@ -354,6 +387,7 @@ export function summariseAnalytics(
 ): PublisherAnalytics {
   const sum = (pick: (e: EventPerformance) => number) => events.reduce((total, e) => total + pick(e), 0);
   const views = sum((e) => e.views);
+  const saves = sum((e) => e.saves);
   const websiteClicks = sum((e) => e.websiteClicks);
   const attendees = sum((e) => e.attendees);
   const capacity = sum((e) => e.capacity);
@@ -361,6 +395,7 @@ export function summariseAnalytics(
     isSample,
     totals: {
       views,
+      saves,
       websiteClicks,
       clickThroughRate: views ? websiteClicks / views : 0,
       attendees,
@@ -387,6 +422,7 @@ export async function fetchPublisherAnalytics(
         eventId: e.id,
         title: e.title,
         views,
+        saves: seed % 48,
         websiteClicks: e.organizerWebsite ? Math.round(views * (0.02 + (seed % 6) / 100)) : 0,
         attendees: e.attendees,
         capacity: e.capacity,
@@ -399,7 +435,21 @@ export async function fetchPublisherAnalytics(
     );
     return summariseAnalytics(performance, banners, true);
   }
-  return api.get<PublisherAnalytics>("/api/v1/organisers/me/analytics");
+  const overview = await fetchEventAnalytics(30);
+  const stats = new Map(overview.events.map((row) => [row.eventId, row] as const));
+  const performance = events.map((event) => {
+    const row = stats.get(event.id);
+    return {
+      eventId: event.id,
+      title: event.title,
+      views: row?.viewsCount ?? event.viewCount ?? 0,
+      saves: row?.saves ?? 0,
+      websiteClicks: row?.counts.WEBSITE_CLICK ?? 0,
+      attendees: event.attendees,
+      capacity: event.capacity,
+    };
+  });
+  return summariseAnalytics(performance, { impressions: 0, clicks: 0 }, false);
 }
 
 // ---------------------------------------------------------------------------

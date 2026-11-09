@@ -18,6 +18,7 @@ import { Logo } from "@/components/Logo";
 import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
 import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { ApiError } from "@/utils/apiClient";
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -35,16 +36,24 @@ export default function LoginScreen() {
 
   const handleSubmit = async () => {
     if (loading) return;
-    const cleaned = phone.replace(/\D/g, "");
+    const countryDigits = selectedCountry.code.replace(/\D/g, "");
+    let cleaned = phone.replace(/\D/g, "");
+    if (cleaned.startsWith(countryDigits) && cleaned.length > 9) cleaned = cleaned.slice(countryDigits.length);
     setError("");
     setPinError("");
     if (cleaned.length < 7) { setError("Please enter a valid phone number"); return; }
     if (!/^\d{5}$/.test(pin)) { setPinError("Enter exactly 5 digits"); return; }
     setLoading(true);
     try {
-      await login({ phone: `${selectedCountry.code}${cleaned}`, pin });
+      await login({ phone: `${selectedCountry.code}${cleaned.replace(/^0+/, "")}`, pin });
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not sign in. Please try again.");
+      if (error instanceof ApiError && error.status === 401) {
+        setError("Incorrect phone number or PIN. Please check and try again.");
+      } else if (error instanceof ApiError && error.status === 429) {
+        setError("Too many attempts. Please wait a moment and try again.");
+      } else {
+        setError(error instanceof Error ? error.message : "Could not sign in. Please try again.");
+      }
     } finally { setLoading(false); }
   };
 

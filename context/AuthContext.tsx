@@ -24,7 +24,15 @@ import {
 import { clearLocalProfileData } from "@/services/profileService";
 import { deleteAccountAnalytics } from "@/services/analyticsService";
 import { requestAccountDeletion } from "@/services/securityService";
-import { api, ApiError, clearToken, getToken, setToken } from "@/utils/apiClient";
+import {
+  api,
+  ApiError,
+  clearToken,
+  getRefreshToken,
+  getToken,
+  setAuthTokens,
+  setToken,
+} from "@/utils/apiClient";
 
 /**
  * customer   – books and attends events.
@@ -62,6 +70,86 @@ export interface User {
   organisation?: Organisation;
 }
 
+interface ApiUser {
+  id: string;
+  phone: string;
+  displayName?: string | null;
+  firstName?: string | null;
+  username?: string | null;
+  email?: string | null;
+  avatarUrl?: string | null;
+  accountType?: string | null;
+  roles?: string[];
+  bio?: string | null;
+  location?: string | null;
+  createdAt?: string;
+}
+
+interface ApiAuthSession {
+  user: ApiUser;
+  tokens: { accessToken: string; refreshToken: string };
+}
+
+function mapApiUser(remote: ApiUser, cached?: User): User {
+  const previous = cached?.id === remote.id ? cached : undefined;
+  const hasPublisherRole = remote.roles?.includes("organizer_owner") ?? false;
+  const isPublisher = remote.accountType === "POSTER" || hasPublisherRole;
+  const createdAt = remote.createdAt ? new Date(remote.createdAt) : undefined;
+  const accountType: AccountType = isPublisher
+    ? previous?.accountType === "business"
+      ? "business"
+      : "individual"
+    : "customer";
+
+  return {
+    ...previous,
+    id: remote.id,
+    username:
+      remote.displayName ??
+      remote.firstName ??
+      remote.username ??
+      previous?.username ??
+      remote.phone,
+    email: remote.email !== undefined ? remote.email ?? "" : previous?.email ?? "",
+    phone: remote.phone,
+    avatarUrl: remote.avatarUrl ?? previous?.avatarUrl,
+    isPhoneVerified: true,
+    isBusinessAccount: hasPublisherRole || previous?.isBusinessAccount === true,
+    accountType,
+    bio: remote.bio !== undefined ? remote.bio ?? undefined : previous?.bio,
+    location: remote.location !== undefined ? remote.location ?? undefined : previous?.location,
+    savedEvents: previous?.savedEvents ?? [],
+    joinedDate:
+      createdAt && !Number.isNaN(createdAt.getTime())
+        ? createdAt.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+        : previous?.joinedDate ?? new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+  };
+}
+
+interface SavedEventsPage {
+  items: { eventId: string }[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
+async function fetchSavedEventIds(): Promise<string[]> {
+  const limit = 100;
+  const ids: string[] = [];
+  let page = 1;
+
+  for (;;) {
+    const result = await api.get<SavedEventsPage>(
+      `/api/v1/me/saved-events?page=${page}&limit=${limit}`,
+    );
+    ids.push(...result.items.map((item) => item.eventId));
+    if (result.items.length === 0 || page * result.limit >= result.total) break;
+    page += 1;
+  }
+
+  return ids;
+}
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
@@ -70,6 +158,7 @@ interface AuthContextType {
   pendingOTPContext: { purpose: "register" | "payment" | "chat"; eventId?: string } | null;
   login: (input: LoginInput) => Promise<void>;
   register: (data: SignupInput) => Promise<void>;
+  resendSignupOTP: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
   exploreDemo: () => Promise<void>;
   logout: () => Promise<void>;
@@ -152,22 +241,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     purpose: "register" | "payment" | "chat";
     eventId?: string;
   } | null>(null);
+  const [pendingSignup, setPendingSignup] = useState<SignupInput | null>(null);
 
   useEffect(() => {
     (async () => {
+      let cachedUser: User | null = null;
       try {
         const onboardingState =
           (await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY)) ??
           (await AsyncStorage.getItem(ONBOARDING_KEY));
         setHasCompletedOnboarding(onboardingState === "true");
         const cached = await AsyncStorage.getItem(USER_CACHE_KEY);
-        if (cached) {
-          setUser(normaliseOrganisationState(JSON.parse(cached) as User));
-        } else {
-          setUser(null);
+        if (cached) cachedUser = JSON.parse(cached) as User;
+      } catch {
+        cachedUser = null;
+      }
+
+      try {
+        const token = await getToken();
+        if (
+          cachedUser &&
+          !cachedUser.isDemo &&
+          (!token || token.startsWith("demo_token_"))
+        ) {
+          await AsyncStorage.removeItem(USER_CACHE_KEY);
+          cachedUser = null;
         }
-      } catch {}
-      setIsLoading(false);
+        if (token && !token.startsWith("demo_token_")) {
+          const remote = await api.get<ApiUser>("/api/v1/auth/me");
+          const mapped = mapApiUser(remote, cachedUser ?? undefined);
+          cachedUser = {
+            ...mapped,
+            savedEvents: await fetchSavedEventIds().catch(() => mapped.savedEvents),
+          };
+          await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(cachedUser));
+        }
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          await clearToken();
+          await AsyncStorage.removeItem(USER_CACHE_KEY);
+          cachedUser = null;
+        }
+      } finally {
+        setUser(cachedUser ? normaliseOrganisationState(cachedUser) : null);
+        setIsLoading(false);
+      }
     })();
   }, []);
 
@@ -198,28 +316,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (regData: SignupInput) => {
       if (!/^\d{5}$/.test(regData.pin)) throw new Error("Enter a 5 digit PIN.");
       if (DEMO_AUTH) return;
-      const data = await api.post<{ token: string; user: User }>("/auth/register", regData);
-      await setToken(data.token);
-      await persistUser(data.user);
+      await api.post("/api/v1/auth/signup", {
+        phone: regData.phone,
+        username: regData.username,
+        accountType: "CUSTOMER",
+        pin: regData.pin,
+      });
+      setPendingSignup(regData);
     },
-    [persistUser]
+    []
   );
+  const resendSignupOTP = useCallback(async () => {
+    if (DEMO_AUTH) return;
+    if (!pendingSignup) throw new Error("Start account creation again to request a new code.");
+    await api.post("/api/v1/auth/signup/send-otp", {
+      phone: pendingSignup.phone,
+      username: pendingSignup.username,
+      accountType: "CUSTOMER",
+      pin: pendingSignup.pin,
+    });
+  }, [pendingSignup]);
   const completeOnboarding = useCallback(async () => {
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setHasCompletedOnboarding(true);
   }, []);
   const logout = useCallback(async () => {
+    const token = await getToken();
+    const refreshToken = await getRefreshToken();
+    if (user && !user.isDemo && token && !token.startsWith("demo_token_") && refreshToken) {
+      await api.post<void>("/api/v1/auth/logout", { refreshToken });
+    }
     await clearToken();
     await AsyncStorage.multiRemove([USER_CACHE_KEY, BOOKINGS_CACHE_KEY]);
     await AsyncStorage.multiSet([[ONBOARDING_KEY, "true"], [ONBOARDING_COMPLETE_KEY, "true"]]);
     setHasCompletedOnboarding(true);
+    setPendingSignup(null);
     setUser(null);
-    void Promise.race([
-      api.post("/auth/logout").catch(() => undefined),
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-    ]);
-  }, []);
+  }, [user]);
 
   const deleteAccount = useCallback(
     async (deletionToken: string, confirmation: string) => {
@@ -260,6 +394,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         joinedDate: new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" }),
       };
 
+      await clearToken();
       await setToken("demo_token_" + Date.now());
       await persistUser(newUser);
     },
@@ -272,24 +407,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signInWithPhoneSession(input.phone);
       return;
     }
-    const data = await api.post<{ token: string; user: User }>("/auth/login", input);
-    await setToken(data.token);
-    await persistUser(data.user);
-  }, [persistUser, signInWithPhoneSession]);
+    const data = await api.post<ApiAuthSession>("/api/v1/auth/login", input);
+    await setAuthTokens(data.tokens.accessToken, data.tokens.refreshToken);
+    try {
+      const nextUser = mapApiUser(data.user, user ?? undefined);
+      const savedEvents = await fetchSavedEventIds().catch(() => nextUser.savedEvents);
+      await persistUser({ ...nextUser, savedEvents });
+    } catch (error) {
+      await clearToken();
+      throw error;
+    }
+  }, [persistUser, signInWithPhoneSession, user]);
 
   const verifyOTP = useCallback(
     async (code: string, phone?: string, fullName?: string): Promise<boolean> => {
       if (code.length !== 6 || !/^\d{6}$/.test(code)) return false;
-      try {
-        const data = await api.post<{ user: User }>("/auth/verify-otp", { code });
-        await persistUser(data.user);
-        setPendingOTPContext(null);
+      if (DEMO_AUTH) {
+        await signInWithPhoneSession(phone ?? "", fullName);
+        setPendingSignup(null);
         return true;
-      } catch {
-        return false;
       }
+      if (!phone) throw new Error("Phone number is required to verify this account.");
+      const data = await api.post<ApiAuthSession>("/api/v1/auth/signup/verify-otp", { phone, code });
+      await setAuthTokens(data.tokens.accessToken, data.tokens.refreshToken);
+      try {
+        const nextUser = mapApiUser(data.user, user ?? undefined);
+        const savedEvents = await fetchSavedEventIds().catch(() => nextUser.savedEvents);
+        await persistUser({ ...nextUser, savedEvents });
+      } catch (error) {
+        await clearToken();
+        throw error;
+      }
+      setPendingSignup(null);
+      setPendingOTPContext(null);
+      return true;
     },
-    [persistUser]
+    [persistUser, signInWithPhoneSession, user]
   );
 
   const requestOTP = useCallback(
@@ -315,14 +468,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await persistUser(updated);
       if (user.isDemo) return true;
       try {
+        const path = `/api/v1/events/${encodeURIComponent(eventId)}/save`;
         if (isSaved) {
-          await api.delete<{ savedEvents: string[] }>(
-            `/users/me/saved-events/${eventId}`
-          );
+          await api.delete<{ eventId: string; saved: boolean }>(path);
         } else {
-          await api.post<{ savedEvents: string[] }>(
-            `/users/me/saved-events/${eventId}`
-          );
+          await api.post<{ eventId: string; saved: boolean }>(path);
         }
       } catch {
         await persistUser(user);
@@ -345,8 +495,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       // INTEGRATION POINT: a new photo is a local file URI; upload it through the
       // presigned upload endpoint and send the returned URL once that exists.
-      const resp = await api.put<{ user: User }>("/users/me", data);
-      await persistUser(resp.user);
+      if (
+        data.phone !== undefined &&
+        data.phone.replace(/\D/g, "") !== (user.phone ?? "").replace(/\D/g, "")
+      ) {
+        throw new Error("Phone numbers cannot be changed through profile editing.");
+      }
+
+      const fields: Record<string, string> = {};
+      if (data.username !== undefined) fields.displayName = data.username;
+      if ("email" in data) fields.email = data.email ?? "null";
+      if ("bio" in data) fields.bio = data.bio ?? "null";
+      if ("location" in data) fields.location = data.location ?? "null";
+
+      const form = new FormData();
+      for (const [key, value] of Object.entries(fields)) form.append(key, value);
+
+      const avatarUri = data.avatarUrl;
+      if (avatarUri !== undefined && avatarUri !== user.avatarUrl) {
+        if (!/^(file|content|blob):/i.test(avatarUri)) {
+          throw new Error("Choose a profile photo from this device to upload it.");
+        }
+        const image = await fetch(avatarUri);
+        if (!image.ok) throw new Error("We couldn't read the selected profile photo.");
+        form.append("avatar_image", await image.blob(), "avatar.jpg");
+      }
+
+      if (Object.keys(fields).length === 0 && !form.has("avatar_image")) {
+        throw new Error("There are no supported profile changes to save.");
+      }
+
+      const resp = await api.patchForm<ApiUser>("/api/v1/users/me", form);
+      await persistUser(mapApiUser(resp, user));
     },
     [user, persistUser]
   );
@@ -470,6 +650,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         pendingOTPContext,
         login,
         register,
+        resendSignupOTP,
         completeOnboarding,
         exploreDemo,
         logout,

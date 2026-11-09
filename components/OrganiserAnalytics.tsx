@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensio
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAnalytics } from "@/context/AnalyticsContext";
+import { useEventAnalytics } from "@/hooks/useEventAnalytics";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { summarizeLocalAnalytics } from "@/utils/localAnalytics";
 
@@ -19,6 +20,20 @@ export function OrganiserAnalytics({ ownerId, events }: { ownerId: string; event
   const { width, fontScale } = useWindowDimensions();
   const narrow = width < 350 || fontScale > 1.25;
   const data = useMemo(() => summarizeLocalAnalytics(records, events, ownerId, days), [records, events, ownerId, days]);
+  const live = useEventAnalytics(days);
+  const liveStats = useMemo(() => new Map((live.overview?.events ?? []).map((event) => [event.eventId, event] as const)), [live.overview]);
+  const topEvents = useMemo(() => events.map((event) => {
+    const local = data.topEvents.find((row) => row.id === event.id);
+    const stats = liveStats.get(event.id);
+    return {
+      ...event,
+      views: stats?.viewsCount ?? local?.views ?? 0,
+      saves: stats?.saves ?? local?.saves ?? 0,
+      impressions: local?.impressions ?? 0,
+      reach: local?.reach ?? 0,
+      shares: local?.shares ?? 0,
+    };
+  }).sort((a, b) => b.views - a.views || b.impressions - a.impressions || a.title.localeCompare(b.title)), [events, data.topEvents, liveStats]);
   const max = Math.max(1, ...data.daily.map((day) => day.views));
   const surface = { backgroundColor: palette.surface, borderColor: palette.line };
   const heading = { color: palette.text };
@@ -32,13 +47,14 @@ export function OrganiserAnalytics({ ownerId, events }: { ownerId: string; event
     <View style={styles.heading}><View style={styles.flex}><Text accessibilityRole="header" style={[styles.title, heading]}>Your audience, in focus</Text><Text style={[styles.body, muted]}>Activity across your events and stories.</Text></View></View>
     <View style={styles.periods}>{([7, 30] as const).map((period) => <Pressable key={period} onPress={() => setDays(period)} accessibilityRole="button" accessibilityState={{ selected: period === days }}
       style={[styles.period, { backgroundColor: period === days ? palette.blue : palette.surfaceRaised }]}><Text style={[styles.periodText, { color: period === days ? "white" : palette.muted }]}>Last {period} days</Text></Pressable>)}</View>
-    <View style={[styles.notice, { backgroundColor: palette.blueSoft }]}><Ionicons name="phone-portrait-outline" size={18} color={palette.accent} /><Text style={[styles.noticeText, { color: palette.accent }]}>Device-local activity · all your organisations. These are recorded interactions on this device, not your total audience. Cross-device reporting will need the backend.</Text></View>
+    <View style={[styles.notice, { backgroundColor: palette.blueSoft }]}><Ionicons name="cloud-done-outline" size={18} color={palette.accent} /><Text style={[styles.noticeText, { color: palette.accent }]}>Event views and saves come from Eventis across devices. Feed, story and engagement breakdowns below are recorded on this device.</Text></View>
+    {live.error ? <Pressable onPress={() => void live.refresh()} accessibilityRole="button" style={[styles.panel, surface]}><Text style={[styles.body, { color: palette.danger }]}>{live.error}</Text><Text style={{ color: palette.accent }}>Retry Eventis totals</Text></Pressable> : null}
     {loading ? <ActivityIndicator accessibilityLabel="Loading analytics" color={palette.accent} /> : error ? <Pressable onPress={() => void refresh()} accessibilityRole="button" style={[styles.panel, surface]}><Text style={[styles.body, { color: palette.danger }]}>{error}</Text><Text style={{ color: palette.accent }}>Retry analytics</Text></Pressable> : <>
       {!data.hasActivity ? <View style={[styles.panel, surface]}><Text style={[styles.panelTitle, heading]}>Ready for your first insights</Text><Text style={[styles.body, muted]}>Activity will appear as other accounts view and interact with your content on this device. Your own previews are excluded.</Text></View> : null}
       <View style={styles.grid}>
-        {metric("Event views", number(data.views), "Details open for at least 1 second")}
-        {metric("Impressions", number(data.impressions), "Feed card 50% visible for 1 second")}
-        {metric("Feed reach", number(data.reach), "Unique accounts / guest browsers in the feed")}
+        {metric("Event views", live.isLoading && !live.overview ? "—" : number(live.overview?.eventViews ?? 0), "All-time detail views from Eventis")}
+        {metric("Saves", live.isLoading && !live.overview ? "—" : number(live.overview?.savedEvents ?? 0), "People who saved your events")}
+        {metric("Feed reach", number(data.reach), "Unique accounts / guest browsers in the feed on this device")}
         {metric("Engagement rate", percent(data.engagementRate), "Reached viewers who saved, shared or copied a link")}
       </View>
       <View style={[styles.panel, surface]}>
@@ -65,11 +81,11 @@ export function OrganiserAnalytics({ ownerId, events }: { ownerId: string; event
       <View style={[styles.panel, surface]}><Text accessibilityRole="header" style={[styles.panelTitle, heading]}>Discovery sources</Text><Text style={[styles.caption, muted]}>Impressions / event views</Text>
         {data.sources.map((source) => row(SOURCE_LABELS[source.source], `${number(source.impressions)} / ${number(source.views)}`))}
       </View>
-      <View style={[styles.panel, surface]}><Text accessibilityRole="header" style={[styles.panelTitle, heading]}>Event performance</Text><Text style={[styles.caption, muted]}>Ranked by event views, then feed impressions.</Text>
-        {!data.topEvents.length ? <Text style={[styles.body, muted]}>Publish an event to see its performance here.</Text> : (showAllEvents ? data.topEvents : data.topEvents.slice(0, 3)).map((event, index) => <Pressable key={event.id} onPress={() => router.push({ pathname: "/business/event/[id]", params: { id: event.id } })} accessibilityRole="button" accessibilityLabel={`Manage ${event.title}`} style={[styles.breakdown, { borderTopColor: palette.line }]}>
-          <Text style={[styles.rowValue, heading]}>{index + 1}. {event.title}</Text><Text style={[styles.caption, muted]}>{event.views} views · {event.impressions} impressions · {event.reach} feed reach · {event.saves} saves · {event.shares} shares</Text>
+      <View style={[styles.panel, surface]}><Text accessibilityRole="header" style={[styles.panelTitle, heading]}>Event performance</Text><Text style={[styles.caption, muted]}>Eventis views and saves, ranked by views. Impressions and feed reach are device-local.</Text>
+        {!topEvents.length ? <Text style={[styles.body, muted]}>Publish an event to see its performance here.</Text> : (showAllEvents ? topEvents : topEvents.slice(0, 3)).map((event, index) => <Pressable key={event.id} onPress={() => router.push({ pathname: "/business/event/[id]", params: { id: event.id } })} accessibilityRole="button" accessibilityLabel={`Manage ${event.title}`} style={[styles.breakdown, { borderTopColor: palette.line }]}>
+          <Text style={[styles.rowValue, heading]}>{index + 1}. {event.title}</Text><Text style={[styles.caption, muted]}>{event.views} views · {event.saves} saves · {event.impressions} impressions · {event.reach} feed reach · {event.shares} shares</Text>
         </Pressable>)}
-        {data.topEvents.length > 3 ? <Pressable onPress={() => setShowAllEvents((value) => !value)} accessibilityRole="button" accessibilityState={{ expanded: showAllEvents }} style={styles.expand}><Text style={{ color: palette.accent }}>{showAllEvents ? "Show fewer events" : "View all event results"}</Text></Pressable> : null}
+        {topEvents.length > 3 ? <Pressable onPress={() => setShowAllEvents((value) => !value)} accessibilityRole="button" accessibilityState={{ expanded: showAllEvents }} style={styles.expand}><Text style={{ color: palette.accent }}>{showAllEvents ? "Show fewer events" : "View all event results"}</Text></Pressable> : null}
       </View>
       <View style={[styles.panel, surface]}><View style={styles.heading}><Ionicons name="lock-closed-outline" size={18} color={palette.muted} /><Text style={[styles.panelTitle, heading]}>Bookings & revenue</Text></View>
         {row("Reservations", "Unavailable")}{row("Ticket sales", "Unavailable")}{row("Revenue", "Unavailable")}{row("Attendance / fill rate", "Unavailable")}

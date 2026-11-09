@@ -54,7 +54,7 @@ export default function RegisterScreen() {
     if (loading || !validate()) return;
     setLoading(true);
     setSubmitError("");
-    const input = { phone: `${selectedCountry.code}${phone.replace(/\D/g, "")}`, username: fullName.trim(), pin };
+    const input = { phone: `${selectedCountry.code}${phone.replace(/\D/g, "").replace(/^0+/, "")}`, username: fullName.trim(), pin };
     try {
       await register(input);
       router.push({ pathname: "/auth/otp", params: { purpose: "register", phone: input.phone, fullName: input.username } });

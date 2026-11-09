@@ -34,7 +34,7 @@ The backend is a separate project: [Eventis-api](https://github.com/Eventis-Rw/E
 EXPO_PUBLIC_API_URL=http://192.168.1.10:3000
 ```
 
-Use your computer's LAN address for a physical phone. Without this variable, the app uses `localhost:3000` on web and iOS simulators, or `10.0.2.2:3000` on the Android emulator. Events come from built-in mock data by default, so the app can be previewed without the API. Set `EXPO_PUBLIC_USE_EVENTS_API=true` to load them from the API instead.
+Use your computer's LAN address for a physical phone. Without this variable, the app uses `localhost:3000` on web and iOS simulators, or `10.0.2.2:3000` on the Android emulator. Events come from built-in mock data by default, so the app can be previewed without the API. Set `EXPO_PUBLIC_USE_EVENTS_API=true` to load them from the API instead. Authentication uses the API by default; set `EXPO_PUBLIC_DEMO_AUTH=true` to opt into local demo authentication.
 
 ## Project layout
 

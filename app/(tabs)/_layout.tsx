@@ -21,6 +21,8 @@ import { useColors } from "@/hooks/useColors";
 import { useChat } from "@/context/ChatContext";
 import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 
+const USE_NATIVE_DRIVER = Platform.OS !== "web";
+
 interface TabIconProps {
   color: ColorValue;
   focused: boolean;
@@ -51,13 +53,13 @@ function TabIcon({
         Animated.timing(scaleAnim, {
           toValue: 1.14,
           duration: 100,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
           friction: 4,
           tension: 40,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
       ]).start();
     }
@@ -157,25 +159,25 @@ function LiveTabIcon({
             toValue: 2.2,
             duration: 1300,
             easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
           Animated.timing(pulseOpacity, {
             toValue: 0,
             duration: 1300,
             easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
         ]),
         Animated.parallel([
           Animated.timing(pulseAnim, {
             toValue: 1,
             duration: 0,
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
           Animated.timing(pulseOpacity, {
             toValue: 0.7,
             duration: 200,
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
         ]),
       ])
@@ -190,13 +192,13 @@ function LiveTabIcon({
         Animated.timing(scaleAnim, {
           toValue: 1.14,
           duration: 100,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
         Animated.spring(scaleAnim, {
           toValue: 1,
           friction: 4,
           tension: 40,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
       ]).start();
     }
@@ -235,6 +237,14 @@ function LiveTabIcon({
     </Animated.View>
   );
 }
+
+// `href: null` hides a tab, but this Expo Router version then redirects any
+// navigation to it back to the home tab. Keep the routes reachable and only
+// remove their tab-bar button.
+const HIDDEN_TAB_OPTIONS = {
+  tabBarButton: () => null,
+  tabBarItemStyle: { display: "none" as const },
+};
 
 function TabLayout() {
   const router = useRouter();
@@ -384,7 +394,7 @@ function TabLayout() {
             ),
           }}
         />
-        <Tabs.Screen name="tickets" options={{ href: null }} />
+        <Tabs.Screen name="tickets" options={HIDDEN_TAB_OPTIONS} />
         <Tabs.Screen
           name="live"
           options={{
@@ -394,18 +404,8 @@ function TabLayout() {
             ),
           }}
         />
-        <Tabs.Screen
-          name="settings"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            href: null,
-          }}
-        />
+        <Tabs.Screen name="settings" options={HIDDEN_TAB_OPTIONS} />
+        <Tabs.Screen name="profile" options={HIDDEN_TAB_OPTIONS} />
       </Tabs>
 
       {/* Become an organizer to create post modal */}

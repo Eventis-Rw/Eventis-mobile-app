@@ -6,6 +6,7 @@ import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleShe
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { OrganiserPortalHeader } from "@/components/OrganiserPortalHeader";
 import { getEventImage } from "@/constants/eventImages";
+import { useEventAnalytics } from "@/hooks/useEventAnalytics";
 import { useOrganiserEvents } from "@/hooks/useOrganiserEvents";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
@@ -18,6 +19,7 @@ export default function OrganiserEventsScreen() {
   const palette = useOrganiserPalette();
   const router = useRouter();
   const { events, isLoading, hasLoaded, error, refresh } = useOrganiserEvents();
+  const analytics = useEventAnalytics(30);
   const { width, fontScale } = useWindowDimensions();
   const compact = width < 370 || fontScale > 1.2;
   const create = () => router.push("/business/create-event");
@@ -40,8 +42,12 @@ export default function OrganiserEventsScreen() {
           <Text style={[styles.description, { color: palette.muted, textAlign: "center" }]}>{error ?? "Add the date, venue and public details. Your event will appear here when published."}</Text>
           <Pressable onPress={error ? () => void refresh() : create} accessibilityRole="button" style={[styles.create, { backgroundColor: palette.blue }]}><Text style={styles.createText}>{error ? "Try again" : "Start event"}</Text></Pressable>
         </View>}
-      ListFooterComponent={error && events.length ? <Pressable onPress={() => void refresh()} accessibilityRole="button" style={styles.state}><Text style={[styles.description, { color: palette.danger }]}>{error} Tap to retry.</Text></Pressable> : null}
-      renderItem={({ item: event }) => <View style={[styles.card, compact && styles.stack, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+      ListFooterComponent={error && events.length ? <Pressable onPress={() => void refresh()} accessibilityRole="button" style={styles.state}><Text style={[styles.description, { color: palette.danger }]}>{error} Tap to retry.</Text></Pressable> : undefined}
+      renderItem={({ item: event }) => {
+        const stats = analytics.stats.get(event.id);
+        const views = stats?.viewsCount ?? event.viewCount ?? 0;
+        const saves = stats?.saves ?? 0;
+        return <View style={[styles.card, compact && styles.stack, { backgroundColor: palette.surface, borderColor: palette.line }]}>
         <View style={[styles.imageWrap, compact && styles.imageWide]}><Image source={getEventImage(event.image)} style={styles.image} accessibilityLabel={`${event.title} poster`} /></View>
         <View style={styles.copy}>
           <View style={styles.topLine}><View style={[styles.status, { backgroundColor: palette.blueSoft }]}><Text style={[styles.statusText, { color: palette.accent }]}>{event.status === "paused" ? "Paused" : "Published"}</Text></View>
@@ -49,12 +55,15 @@ export default function OrganiserEventsScreen() {
           </View>
           <Text style={[styles.eventTitle, { color: palette.text }]}>{event.title}</Text>
           <View style={styles.meta}><Ionicons name="calendar-outline" size={14} color={palette.muted} /><Text style={[styles.metaText, { color: palette.muted }]}>{formatDate(event.date)}</Text></View>
+          <View style={styles.stats}><View style={styles.stat}><Ionicons name="eye-outline" size={15} color={palette.accent} /><Text style={[styles.statValue, { color: palette.text }]}>{views.toLocaleString()}</Text><Text style={[styles.statLabel, { color: palette.muted }]}>views</Text></View>
+            <View style={styles.stat}><Ionicons name="bookmark-outline" size={15} color={palette.accent} /><Text style={[styles.statValue, { color: palette.text }]}>{saves.toLocaleString()}</Text><Text style={[styles.statLabel, { color: palette.muted }]}>saves</Text></View></View>
           <View style={styles.actions}>
             <Pressable onPress={() => router.push({ pathname: "/business/create-event", params: { id: event.id } })} accessibilityRole="button" accessibilityLabel={`Edit ${event.title}`} style={[styles.action, { backgroundColor: palette.blue }]}><Ionicons name="create-outline" size={15} color="white" /><Text style={styles.createText}>Edit</Text></Pressable>
             <Pressable onPress={() => router.push({ pathname: "/business/event/[id]", params: { id: event.id } })} accessibilityRole="button" style={[styles.action, { borderColor: palette.line, borderWidth: 1 }]}><Text style={[styles.actionText, { color: palette.text }]}>Manage</Text></Pressable>
           </View>
         </View>
-      </View>} />
+      </View>;
+      }} />
   </View>;
 }
 
@@ -67,5 +76,6 @@ const styles = StyleSheet.create({
   imageWrap: { width: 104, overflow: "hidden" }, imageWide: { width: "100%", height: 160 }, image: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", resizeMode: "cover" },
   copy: { flex: 1, minHeight: 174, padding: 13 }, topLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 }, status: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 }, statusText: { fontSize: 11, fontFamily: "Inter_700Bold" }, more: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   eventTitle: { fontSize: 16, lineHeight: 22, fontFamily: "Inter_700Bold", marginTop: 8 }, meta: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 7 }, metaText: { flexShrink: 1, fontSize: 12 },
+  stats: { flexDirection: "row", gap: 18, marginTop: 10 }, stat: { flexDirection: "row", alignItems: "center", gap: 5 }, statValue: { fontSize: 13, fontFamily: "Inter_700Bold" }, statLabel: { fontSize: 12 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 }, action: { minHeight: 44, borderRadius: 11, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 }, actionText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });
