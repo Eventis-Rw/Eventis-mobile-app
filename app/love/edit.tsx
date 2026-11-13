@@ -29,6 +29,7 @@ import {
   validateLoveInterestedIn,
   validateLoveUsername,
 } from "@/utils/findLoveProfile";
+import { subscribeBeforeRemove } from "@/utils/beforeRemove";
 
 type EditValues = LoveProfileFormValues & LoveProfileExtrasValues;
 

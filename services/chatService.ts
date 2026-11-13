@@ -14,6 +14,8 @@ export interface ChatContact {
   lastName?: string;
   isInAddressBook?: boolean;
   deviceContactId?: string;
+  /** Present after the server creates an invitation that can be shared. */
+  inviteUrl?: string;
 }
 
 export interface ChatContactUpdate {
@@ -46,6 +48,12 @@ export interface ChatMessage {
   imageUri?: string;
   audioUri?: string;
   audioDurationMs?: number;
+  videoUri?: string;
+  videoDurationMs?: number;
+  attachmentName?: string;
+  attachmentMimeType?: string;
+  attachmentWidth?: number;
+  attachmentHeight?: number;
 }
 
 export interface SendMessageOptions {
@@ -54,13 +62,20 @@ export interface SendMessageOptions {
   imageUri?: string;
   audioUri?: string;
   audioDurationMs?: number;
+  videoUri?: string;
+  videoDurationMs?: number;
+  attachmentName?: string;
+  attachmentMimeType?: string;
+  attachmentWidth?: number;
+  attachmentHeight?: number;
 }
 
 export function chatMessagePreview(
-  message: Pick<ChatMessage, "text" | "imageUri" | "audioUri">,
+  message: Pick<ChatMessage, "text" | "imageUri" | "audioUri" | "videoUri">,
 ) {
   if (message.text) return message.text;
   if (message.audioUri) return "Voice message";
+  if (message.videoUri) return "Video";
   if (message.imageUri) return "Photo";
   return "Message";
 }
@@ -71,7 +86,7 @@ export interface ChatReport {
   messageId?: string;
   reason: string;
   createdAt: string;
-  status: "saved_locally";
+  status: "saved_locally" | "submitted";
 }
 
 export interface ChatSnapshot {
@@ -117,6 +132,10 @@ export interface ChatService {
   ): Promise<ChatContact>;
   lookupPhone(phone: string): Promise<PhoneLookupResult>;
   markConversationRead(conversationId: string): Promise<void>;
+  syncContacts(
+    contacts: Array<{ name?: string; phoneNumber: string }>,
+  ): Promise<ChatContact[]>;
+  acceptInvitation(token: string): Promise<ChatConversation>;
 }
 
 interface StoredChatState extends ChatSnapshot {
@@ -420,7 +439,12 @@ export class MockChatService implements ChatService {
       state.contacts.find((item) => item.id === conversation.contactId)?.blocked
     )
       throw new Error("Unblock this contact to send a message.");
-    if (!text.trim() && !options?.imageUri && !options?.audioUri)
+    if (
+      !text.trim() &&
+      !options?.imageUri &&
+      !options?.audioUri &&
+      !options?.videoUri
+    )
       throw new Error("Enter a message.");
 
     const message: ChatMessage = {
@@ -672,6 +696,46 @@ export class MockChatService implements ChatService {
       item.id === conversationId ? { ...item, unreadCount: 0 } : item,
     );
     await this.persist({ ...state, conversations });
+  }
+
+  async syncContacts(
+    contacts: Array<{ name?: string; phoneNumber: string }>,
+  ): Promise<ChatContact[]> {
+    const state = await this.getState();
+    const known = new Set(state.contacts.map((item) => normalizePhone(item.phone)));
+    const added: ChatContact[] = [];
+    for (const input of contacts) {
+      const phone = input.phoneNumber.trim();
+      const normalized = normalizePhone(phone);
+      if (!normalized || known.has(normalized)) continue;
+      const parts = (input.name ?? "").trim().split(/\s+/).filter(Boolean);
+      const firstName = parts[0] ?? "Contact";
+      const lastName = parts.slice(1).join(" ");
+      added.push({
+        id: localId("contact"),
+        name: input.name?.trim() || phone,
+        phone,
+        avatarUrl: "",
+        headline: "Saved in your contacts",
+        isEventisUser: false,
+        firstName,
+        lastName,
+        isInAddressBook: true,
+      });
+      known.add(normalized);
+    }
+    if (added.length)
+      await this.persist({
+        ...state,
+        contacts: [...state.contacts, ...added],
+      });
+    return added.map((contact) => ({ ...contact }));
+  }
+
+  async acceptInvitation(): Promise<ChatConversation> {
+    throw new Error(
+      "Invitations can only be accepted with a signed-in Eventis account.",
+    );
   }
 }
 

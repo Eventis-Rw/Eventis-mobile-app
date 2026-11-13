@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { KeyboardAwareScrollView } from "@/components/KeyboardCompat";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { PinInput } from "@/components/PinInput";

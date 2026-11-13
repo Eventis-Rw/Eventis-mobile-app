@@ -17,8 +17,9 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+
+import { KeyboardProvider } from "@/components/KeyboardCompat";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -32,6 +33,8 @@ import { FindLoveChatProvider } from "@/context/FindLoveChatContext";
 import { FindLoveDemoProvider } from "@/context/FindLoveDemoContext";
 import { LoveProfilesProvider } from "@/context/LoveProfilesContext";
 import { MyLoveProfileProvider } from "@/context/MyLoveProfileContext";
+import { NotificationsProvider } from "@/context/NotificationsContext";
+import { NotificationPopupHost } from "@/components/NotificationPopup";
 import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 import { useColors } from "@/hooks/useColors";
 
@@ -63,6 +66,7 @@ function RootLayoutNav() {
   useEffect(() => {
     if (isLoading) return;
     const inAuthGroup = segments[0] === "auth";
+    const inInvite = segments[0] === "invite";
     const inSplash =
       !segments[0] ||
       (segments[0] as string) === "presentation-splash" ||
@@ -70,7 +74,7 @@ function RootLayoutNav() {
 
     if (isAuthenticated && inAuthGroup) {
       router.replace("/(tabs)" as any);
-    } else if (!isAuthenticated && !inAuthGroup && !inSplash) {
+    } else if (!isAuthenticated && !inAuthGroup && !inSplash && !inInvite) {
       router.replace("/auth/login" as any);
     }
   }, [isAuthenticated, isLoading, segments, router]);
@@ -95,6 +99,7 @@ function RootLayoutNav() {
       />
       <Stack.Screen name="love" options={{ animation: "fade" }} />
       <Stack.Screen name="chat" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="invite/[token]" options={{ animation: "fade" }} />
       <Stack.Screen
         name="booking/[id]"
         options={{ presentation: "modal", animation: "slide_from_bottom" }}
@@ -175,19 +180,24 @@ function ThemedAppSurface() {
               preserveEdgeToEdge
             >
               <AuthProvider>
-                <ChatProvider>
-                  <EventsProvider>
-                    <AnalyticsProvider>
-                      <FindLoveProviders>
-                        <BookingsProvider>
-                          <StoriesProvider>
-                            <RootLayoutNav />
-                          </StoriesProvider>
-                        </BookingsProvider>
-                      </FindLoveProviders>
-                    </AnalyticsProvider>
-                  </EventsProvider>
-                </ChatProvider>
+                <NotificationsProvider>
+                  <ChatProvider>
+                    <EventsProvider>
+                      <AnalyticsProvider>
+                        <FindLoveProviders>
+                          <BookingsProvider>
+                            <StoriesProvider>
+                              <View style={{ flex: 1 }}>
+                                <RootLayoutNav />
+                                <NotificationPopupHost />
+                              </View>
+                            </StoriesProvider>
+                          </BookingsProvider>
+                        </FindLoveProviders>
+                      </AnalyticsProvider>
+                    </EventsProvider>
+                  </ChatProvider>
+                </NotificationsProvider>
               </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>

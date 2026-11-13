@@ -112,10 +112,14 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
   const captionCanExpand = event.description.trim().length > 110;
 
   const localActivity = records.filter((record) => record.entityType === "event" && record.entityId === event.id);
-  // Legacy mock viewCount values were not qualified detail opens. Use measured activity only.
-  const viewsCount = localActivity.filter((record) => record.type === "detail_view").length;
+  const localViewCount = localActivity.filter((record) => record.type === "detail_view").length;
+  // API-backed events carry the server's qualified view total, so the count is the
+  // same on every device. Mock/demo events have no server total and fall back to
+  // detail opens measured on this device.
+  const viewsCount = event.ownerId
+    ? Math.max(event.viewCount ?? 0, localViewCount)
+    : localViewCount;
   const shareCount = localActivity.filter((record) => record.type === "share").length;
-  const localViewCount = viewsCount;
   const savesCount = localActivity.filter((record) => record.type === "save").length;
   useEffect(() => {
     setSaveCount(event.savesCount ?? 0);

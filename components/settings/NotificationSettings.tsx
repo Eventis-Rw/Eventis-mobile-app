@@ -24,7 +24,7 @@ export function NotificationSettings({ capabilities }: { capabilities: AccountCa
 
   const toggles: ToggleDef[] = [
     {
-      key: "bookingUpdates",
+      key: "eventUpdates",
       icon: "ticket-outline",
       label: "Bookings & tickets",
       sublabel: "Confirmations, changes and reminders before your events",

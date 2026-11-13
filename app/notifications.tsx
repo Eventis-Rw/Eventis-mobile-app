@@ -1,10 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
-  Image,
   Platform,
   Pressable,
   RefreshControl,
@@ -14,8 +13,10 @@ import {
 } from "react-native";
 
 import { GlassSurface } from "@/components/GlassSurface";
+import { useNotificationsOptional } from "@/context/NotificationsContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { USE_PROFILE_API } from "@/services/profileService";
 
 export type NotificationCategory = "all" | "events" | "activity" | "organizers";
 
@@ -30,11 +31,9 @@ export interface AppNotification {
   iconColor: string;
   iconBg: string;
   eventId?: string;
-  avatarUrl?: string;
-  actionUrl?: string;
 }
 
-const INITIAL_NOTIFICATIONS: AppNotification[] = [
+const DEMO_NOTIFICATIONS: AppNotification[] = [
   {
     id: "notif_1",
     category: "events",
@@ -69,8 +68,6 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
     iconName: "sparkles",
     iconColor: "#F59E0B",
     iconBg: "rgba(245, 158, 11, 0.16)",
-    avatarUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=160&auto=format&fit=crop&q=80",
-    eventId: "evt_3",
   },
   {
     id: "notif_4",
@@ -82,45 +79,6 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
     iconName: "paper-plane",
     iconColor: "#8B5CF6",
     iconBg: "rgba(139, 92, 246, 0.16)",
-    avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80",
-    eventId: "evt_4",
-  },
-  {
-    id: "notif_5",
-    category: "events",
-    title: "Flash Sale: 20% Off",
-    message: "Early bird tickets for Afro Beats Night are ending tonight! Use promo code AFRO20 before midnight.",
-    timeAgo: "1d ago",
-    isRead: true,
-    iconName: "flash",
-    iconColor: "#EC4899",
-    iconBg: "rgba(236, 72, 153, 0.16)",
-    eventId: "evt_6",
-  },
-  {
-    id: "notif_6",
-    category: "activity",
-    title: "Saved Event Update",
-    message: "Rwanda Tech Expo announced 6 new keynote speakers from Silicon Valley and Nairobi.",
-    timeAgo: "1d ago",
-    isRead: true,
-    iconName: "bookmark",
-    iconColor: "#3B82F6",
-    iconBg: "rgba(59, 130, 246, 0.16)",
-    eventId: "evt_5",
-  },
-  {
-    id: "notif_7",
-    category: "organizers",
-    title: "Venue Upgrade Announcement",
-    message: "Kigali Fashion Week main runway has been upgraded to Camp Kigali Arena due to popular demand.",
-    timeAgo: "2d ago",
-    isRead: true,
-    iconName: "megaphone",
-    iconColor: "#14B8A6",
-    iconBg: "rgba(20, 184, 166, 0.16)",
-    avatarUrl: "https://images.unsplash.com/photo-1509631179647-0177331693ae?w=160&auto=format&fit=crop&q=80",
-    eventId: "evt_7",
   },
 ];
 
@@ -131,18 +89,75 @@ const CATEGORY_TABS: { label: string; value: NotificationCategory }[] = [
   { label: "Organizers", value: "organizers" },
 ];
 
+function timeAgo(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const diff = Math.max(0, Date.now() - t);
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+function mapBackendCategory(cat: string): "events" | "activity" | "organizers" {
+  const c = String(cat || "").toUpperCase();
+  if (c === "EVENTS") return "events";
+  if (c === "ORGANIZERS") return "organizers";
+  return "activity";
+}
+
+function iconFor(cat: "events" | "activity" | "organizers", type?: string): { name: React.ComponentProps<typeof Ionicons>["name"]; color: string; bg: string } {
+  const t = String(type || "").toUpperCase();
+  if (cat === "events" || t.includes("TICKET") || t.includes("BOOKING")) return { name: "ticket", color: "#10B981", bg: "rgba(16,185,129,0.16)" };
+  if (cat === "organizers") return { name: "megaphone", color: "#F59E0B", bg: "rgba(245,158,11,0.16)" };
+  if (t.includes("REMINDER")) return { name: "calendar", color: "#6E96FF", bg: "rgba(110,150,255,0.16)" };
+  return { name: "notifications", color: "#8B5CF6", bg: "rgba(139,92,246,0.16)" };
+}
+
 export default function NotificationsScreen() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
+  const ctx = useNotificationsOptional();
 
-  const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
+  const apiMode = !!ctx && USE_PROFILE_API;
   const [selectedCategory, setSelectedCategory] = useState<NotificationCategory>("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [demo, setDemo] = useState<AppNotification[]>(DEMO_NOTIFICATIONS);
+
+  useFocusEffect(useCallback(() => {
+    if (apiMode) void ctx?.refresh();
+  }, [apiMode, ctx]));
+
+  const apiNotifications: AppNotification[] = useMemo(() => {
+    if (!apiMode || !ctx) return [];
+    return (ctx.notifications || []).map((n) => {
+      const category = mapBackendCategory(n.category);
+      const icon = iconFor(category, n.type);
+      const eventId = typeof n.data?.eventId === "string" ? n.data.eventId : typeof n.data?.event_id === "string" ? n.data.event_id : undefined;
+      return {
+        id: n.id,
+        category,
+        title: n.title || "Notification",
+        message: n.body || "",
+        timeAgo: timeAgo(n.createdAt),
+        isRead: !!n.readAt,
+        iconName: icon.name,
+        iconColor: icon.color,
+        iconBg: icon.bg,
+        eventId,
+      };
+    });
+  }, [apiMode, ctx]);
+
+  const notifications = apiMode ? apiNotifications : demo;
 
   const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.isRead).length,
-    [notifications]
+    () => apiMode ? (ctx?.unreadCount ?? 0) : notifications.filter((n) => !n.isRead).length,
+    [apiMode, ctx?.unreadCount, notifications]
   );
 
   const filteredNotifications = useMemo(() => {
@@ -151,40 +166,33 @@ export default function NotificationsScreen() {
   }, [notifications, selectedCategory]);
 
   const handleMarkAllRead = useCallback(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-  }, []);
-
-  const handleClearAll = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setNotifications([]);
-  }, []);
+    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    if (apiMode) void ctx?.markAllRead();
+    else setDemo((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  }, [apiMode, ctx]);
 
   const handlePressNotification = useCallback(
     (item: AppNotification) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      // Mark as read
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
-      );
-
-      // Navigate if event associated
-      if (item.eventId) {
-        router.push(`/event/${item.eventId}`);
-      }
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      if (apiMode) void ctx?.markRead(item.id);
+      else setDemo((prev) => prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)));
+      if (item.eventId) router.push(`/event/${item.eventId}` as any);
     },
-    [router]
+    [apiMode, ctx, router]
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setRefreshing(false);
-  }, []);
+    try {
+      if (apiMode) await ctx?.refresh();
+      else await new Promise((r) => setTimeout(r, 500));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [apiMode, ctx]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Fixed Glassmorphic Header */}
       <GlassSurface
         style={[
           styles.header,
@@ -206,9 +214,7 @@ export default function NotificationsScreen() {
           </Pressable>
 
           <View style={styles.titleWrap}>
-            <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-              Notifications
-            </Text>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notifications</Text>
             {unreadCount > 0 && (
               <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
                 <Text style={styles.unreadBadgeText}>{unreadCount} new</Text>
@@ -227,32 +233,19 @@ export default function NotificationsScreen() {
                 <Ionicons name="checkmark-done" size={15} color={colors.primary} />
                 <Text style={[styles.markReadText, { color: colors.primary }]}>Mark read</Text>
               </Pressable>
-            ) : notifications.length > 0 ? (
-              <Pressable
-                onPress={handleClearAll}
-                style={[styles.clearBtn, { borderColor: colors.border }]}
-                accessibilityRole="button"
-                accessibilityLabel="Clear all notifications"
-              >
-                <Text style={[styles.clearText, { color: colors.mutedForeground }]}>Clear</Text>
-              </Pressable>
             ) : null}
           </View>
         </View>
 
-        {/* Category Filter Pills */}
         <View style={styles.categoryRow}>
           {CATEGORY_TABS.map((tab) => {
             const isSelected = selectedCategory === tab.value;
-            const count =
-              tab.value === "all"
-                ? notifications.length
-                : notifications.filter((n) => n.category === tab.value).length;
+            const count = tab.value === "all" ? notifications.length : notifications.filter((n) => n.category === tab.value).length;
             return (
               <Pressable
                 key={tab.value}
                 onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                   setSelectedCategory(tab.value);
                 }}
                 style={[
@@ -264,33 +257,10 @@ export default function NotificationsScreen() {
                 accessibilityRole="tab"
                 accessibilityState={{ selected: isSelected }}
               >
-                <Text
-                  style={[
-                    styles.categoryPillText,
-                    { color: isSelected ? "#FFFFFF" : colors.mutedForeground },
-                  ]}
-                >
-                  {tab.label}
-                </Text>
+                <Text style={[styles.categoryPillText, { color: isSelected ? "#FFFFFF" : colors.mutedForeground }]}>{tab.label}</Text>
                 {count > 0 && (
-                  <View
-                    style={[
-                      styles.categoryCountBadge,
-                      {
-                        backgroundColor: isSelected
-                          ? "rgba(255, 255, 255, 0.25)"
-                          : `${colors.mutedForeground}20`,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryCountText,
-                        { color: isSelected ? "#FFFFFF" : colors.mutedForeground },
-                      ]}
-                    >
-                      {count}
-                    </Text>
+                  <View style={[styles.categoryCountBadge, { backgroundColor: isSelected ? "rgba(255,255,255,0.25)" : `${colors.mutedForeground}20` }]}>
+                    <Text style={[styles.categoryCountText, { color: isSelected ? "#FFFFFF" : colors.mutedForeground }]}>{count}</Text>
                   </View>
                 )}
               </Pressable>
@@ -299,25 +269,15 @@ export default function NotificationsScreen() {
         </View>
       </GlassSurface>
 
-      {/* Notifications List */}
       <FlatList
         data={filteredNotifications}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.listContent,
-          {
-            paddingTop: insets.top + 120,
-            paddingBottom: insets.bottom + 24,
-          },
+          { paddingTop: insets.top + 120, paddingBottom: insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => handlePressNotification(item)}
@@ -329,66 +289,29 @@ export default function NotificationsScreen() {
               },
             ]}
           >
-            {/* Left: Icon or Avatar */}
             <View style={styles.notifLeftWrap}>
-              {item.avatarUrl ? (
-                <View style={styles.avatarWithIconWrap}>
-                  <Image source={{ uri: item.avatarUrl }} style={styles.notifAvatar} />
-                  <View style={[styles.avatarMiniBadge, { backgroundColor: item.iconBg }]}>
-                    <Ionicons name={item.iconName} size={11} color={item.iconColor} />
-                  </View>
-                </View>
-              ) : (
-                <View style={[styles.notifIconWrap, { backgroundColor: item.iconBg }]}>
-                  <Ionicons name={item.iconName} size={20} color={item.iconColor} />
-                </View>
-              )}
+              <View style={[styles.notifIconWrap, { backgroundColor: item.iconBg }]}>
+                <Ionicons name={item.iconName} size={20} color={item.iconColor} />
+              </View>
             </View>
-
-            {/* Center: Details */}
             <View style={styles.notifCenterCol}>
               <View style={styles.notifTopRow}>
-                <Text
-                  style={[
-                    styles.notifTitle,
-                    {
-                      color: colors.foreground,
-                      fontFamily: item.isRead ? "Inter_600SemiBold" : "Inter_700Bold",
-                    },
-                  ]}
-                  numberOfLines={1}
-                >
+                <Text style={[styles.notifTitle, { color: colors.foreground, fontFamily: item.isRead ? "Inter_600SemiBold" : "Inter_700Bold" }]} numberOfLines={1}>
                   {item.title}
                 </Text>
-                <Text style={[styles.notifTime, { color: colors.mutedForeground }]}>
-                  {item.timeAgo}
-                </Text>
+                <Text style={[styles.notifTime, { color: colors.mutedForeground }]}>{item.timeAgo}</Text>
               </View>
-
-              <Text
-                style={[
-                  styles.notifMessage,
-                  { color: item.isRead ? colors.mutedForeground : colors.foreground },
-                ]}
-                numberOfLines={3}
-              >
+              <Text style={[styles.notifMessage, { color: item.isRead ? colors.mutedForeground : colors.foreground }]} numberOfLines={3}>
                 {item.message}
               </Text>
-
               {item.eventId && (
                 <View style={styles.viewEventRow}>
-                  <Text style={[styles.viewEventLink, { color: colors.primary }]}>
-                    View event details
-                  </Text>
+                  <Text style={[styles.viewEventLink, { color: colors.primary }]}>View event details</Text>
                   <Ionicons name="arrow-forward" size={12} color={colors.primary} />
                 </View>
               )}
             </View>
-
-            {/* Right: Unread indicator */}
-            {!item.isRead && (
-              <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
-            )}
+            {!item.isRead && <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />}
           </Pressable>
         )}
         ListEmptyComponent={
@@ -396,16 +319,13 @@ export default function NotificationsScreen() {
             <View style={[styles.emptyIconCircle, { backgroundColor: `${colors.primary}18` }]}>
               <Ionicons name="notifications-off-outline" size={38} color={colors.primary} />
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-              No notifications yet
-            </Text>
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No notifications yet</Text>
             <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
-              You're completely caught up! Upcoming event reminders, live story moments, and ticket updates will appear right here.
+              {apiMode
+                ? "You're all caught up. New updates will appear here and as a pop-up when they arrive."
+                : "You're all caught up. Connect to the live API to receive real notifications here."}
             </Text>
-            <Pressable
-              style={[styles.emptyCtaBtn, { backgroundColor: colors.primary }]}
-              onPress={() => router.push("/(tabs)" as any)}
-            >
+            <Pressable style={[styles.emptyCtaBtn, { backgroundColor: colors.primary }]} onPress={() => router.push("/(tabs)" as any)}>
               <Ionicons name="compass" size={16} color="#FFFFFF" />
               <Text style={styles.emptyCtaBtnText}>Browse Events</Text>
             </Pressable>
@@ -417,223 +337,41 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
+  root: { flex: 1 },
   header: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    position: "absolute", top: 0, left: 0, right: 0, zIndex: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingBottom: 12,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  titleWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-  },
-  unreadBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  unreadBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
-  },
-  headerRightActions: {
-    minWidth: 70,
-    alignItems: "flex-end",
-  },
-  markReadBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  markReadText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  clearBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  clearText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  categoryRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  categoryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  categoryPillText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  categoryCountBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
-  },
-  categoryCountText: {
-    fontSize: 10,
-    fontFamily: "Inter_700Bold",
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  notifCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 12,
-  },
-  notifLeftWrap: {
-    paddingTop: 2,
-  },
-  notifIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarWithIconWrap: {
-    position: "relative",
-  },
-  notifAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  avatarMiniBadge: {
-    position: "absolute",
-    bottom: -2,
-    right: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: "#0D1020",
-  },
-  notifCenterCol: {
-    flex: 1,
-    gap: 4,
-  },
-  notifTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  notifTitle: {
-    fontSize: 14,
-    flex: 1,
-  },
-  notifTime: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-  },
-  notifMessage: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 18,
-  },
-  viewEventRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 4,
-  },
-  viewEventLink: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 6,
-  },
-  emptyContainer: {
-    alignItems: "center",
-    paddingTop: 80,
-    paddingHorizontal: 24,
-    gap: 12,
-  },
-  emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    lineHeight: 19,
-    maxWidth: 300,
-  },
-  emptyCtaBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 11,
-    borderRadius: 999,
-    marginTop: 10,
-  },
-  emptyCtaBtnText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  backBtn: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  titleWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerTitle: { fontSize: 20, fontFamily: "Inter_700Bold" },
+  unreadBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
+  unreadBadgeText: { color: "#FFFFFF", fontSize: 11, fontFamily: "Inter_700Bold" },
+  headerRightActions: { minWidth: 70, alignItems: "flex-end" },
+  markReadBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
+  markReadText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  categoryRow: { flexDirection: "row", gap: 8 },
+  categoryPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  categoryPillText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  categoryCountBadge: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 8 },
+  categoryCountText: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  listContent: { paddingHorizontal: 16, gap: 10 },
+  notifCard: { flexDirection: "row", alignItems: "flex-start", padding: 14, borderRadius: 16, borderWidth: 1, gap: 12 },
+  notifLeftWrap: { paddingTop: 2 },
+  notifIconWrap: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  notifCenterCol: { flex: 1, gap: 4 },
+  notifTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  notifTitle: { fontSize: 14, flex: 1 },
+  notifTime: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  notifMessage: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
+  viewEventRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  viewEventLink: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
+  emptyContainer: { alignItems: "center", paddingTop: 80, paddingHorizontal: 24, gap: 12 },
+  emptyIconCircle: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  emptyTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  emptySubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 19, maxWidth: 300 },
+  emptyCtaBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 999, marginTop: 10 },
+  emptyCtaBtnText: { color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

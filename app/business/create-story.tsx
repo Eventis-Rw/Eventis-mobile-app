@@ -12,7 +12,7 @@ import {
   ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions,
   type ImageSourcePropType,
 } from "react-native";
-import { KeyboardAwareScrollView, KeyboardStickyView, useKeyboardState } from "react-native-keyboard-controller";
+import { KeyboardAwareScrollView, KeyboardStickyView, useKeyboardState } from "@/components/KeyboardCompat";
 
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { STORY_BACKGROUNDS, StoryCanvas, type StoryOverlay } from "@/components/StoryCanvas";

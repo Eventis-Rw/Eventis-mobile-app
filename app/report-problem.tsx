@@ -36,6 +36,7 @@ import {
   type ProblemReportReceipt,
   type ReportCategory,
 } from "@/services/supportService";
+import { subscribeBeforeRemove } from "@/utils/beforeRemove";
 
 /** Report a problem: category, description, contact email, optional reference and screenshot. */
 export default function ReportProblemScreen() {

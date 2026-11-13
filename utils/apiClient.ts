@@ -15,6 +15,11 @@ function getApiBase(): string {
 
 export const API_BASE = getApiBase();
 
+/** How long any single HTTP request may take before the client gives up. */
+const REQUEST_TIMEOUT_MS = 15_000;
+/** Uploads can be several MiB, so give media transfers more time. */
+const UPLOAD_TIMEOUT_MS = 60_000;
+
 export async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);
 }
@@ -59,11 +64,15 @@ async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = await getRefreshToken();
   if (!refreshToken) return null;
 
-  const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
-  });
+  const response = await fetchWithToken(
+    "/api/v1/auth/refresh",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    },
+    null,
+  );
   if (!response.ok) {
     if (response.status === 401) await clearToken();
     throw await toApiError(response);
@@ -81,6 +90,12 @@ function refreshOnce(): Promise<string | null> {
     });
   }
   return refreshInProgress;
+}
+
+export async function refreshSession(): Promise<string> {
+  const token = await refreshOnce();
+  if (!token) throw new Error("Your session expired. Please sign in again.");
+  return token;
 }
 
 function isAuthEndpoint(path: string): boolean {
@@ -120,6 +135,7 @@ async function fetchWithToken(
   path: string,
   options: RequestInit,
   token: string | null,
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<Response> {
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const hasJsonBody = options.body !== undefined && options.body !== null && !isFormData;
@@ -128,20 +144,36 @@ async function fetchWithToken(
     ...(options.headers as Record<string, string> | undefined),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(`${API_BASE}${path}`, { ...options, headers });
-  } catch {
+    return await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("The server took too long to respond. Please try again.");
+    }
     throw new Error("Can't reach the server. Check your internet connection and try again.");
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<T> {
   let token = await getToken();
-  let response = await fetchWithToken(path, options, token);
+  let response = await fetchWithToken(path, options, token, timeoutMs);
 
   if (response.status === 401 && token && !isAuthEndpoint(path)) {
     token = await refreshOnce();
-    if (token) response = await fetchWithToken(path, options, token);
+    if (token) response = await fetchWithToken(path, options, token, timeoutMs);
   }
 
   if (!response.ok) throw await toApiError(response);
@@ -154,11 +186,14 @@ export const api = {
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }),
   /** Multipart upload, e.g. photos. */
-  postForm: <T>(path: string, form: FormData) => request<T>(path, { method: "POST", body: form }),
+  postForm: <T>(path: string, form: FormData) =>
+    request<T>(path, { method: "POST", body: form }, UPLOAD_TIMEOUT_MS),
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: body === undefined ? undefined : JSON.stringify(body) }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body === undefined ? undefined : JSON.stringify(body) }),
-  patchForm: <T>(path: string, form: FormData) => request<T>(path, { method: "PATCH", body: form }),
-  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  patchForm: <T>(path: string, form: FormData) =>
+    request<T>(path, { method: "PATCH", body: form }, UPLOAD_TIMEOUT_MS),
+  delete: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: "DELETE", body: body === undefined ? undefined : JSON.stringify(body) }),
 };
