@@ -5,7 +5,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
-  ViewToken,
+  ListViewToken,
 } from "react-native";
 
 import { EventCard } from "./EventCard";
@@ -38,8 +38,8 @@ export function BannerCarousel({ events, loading = false, inset = 20 }: BannerCa
   );
 
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0 && viewableItems[0].index !== null) {
+    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
+      if (viewableItems.length > 0 && typeof viewableItems[0].index === "number") {
         setActiveIndex(viewableItems[0].index);
       }
     },

@@ -41,7 +41,7 @@ export default function OrganisationSetupScreen() {
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const { user, setupOrganisation } = useAuth();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
   const [values, setValues] = useState<OrganisationFormValues>(() =>
     organisationFormValues({ name: user?.businessName, website: user?.businessWebsite }),

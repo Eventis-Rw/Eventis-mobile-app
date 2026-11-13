@@ -41,7 +41,7 @@ export type ProfileFeature = keyof typeof PROFILE_FEATURES;
 export interface NotificationPreferences {
   eventRecommendations: boolean;
   categoryUpdates: boolean;
-  bookingUpdates: boolean;
+  eventUpdates: boolean;
   savedOrganiserUpdates: boolean;
   promotional: boolean;
 }
@@ -49,10 +49,47 @@ export interface NotificationPreferences {
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   eventRecommendations: true,
   categoryUpdates: true,
-  bookingUpdates: true,
+  eventUpdates: true,
   savedOrganiserUpdates: true,
   promotional: false,
 };
+
+type ApiNotificationPreferences = {
+  eventRecommendations?: boolean;
+  categoryUpdates?: boolean;
+  eventUpdates?: boolean;
+  bookingUpdates?: boolean;
+  savedOrganiserUpdates?: boolean;
+  promotional?: boolean;
+};
+
+function normalizeNotificationPreferences(
+  prefs: ApiNotificationPreferences | null | undefined,
+): NotificationPreferences {
+  const merged = { ...DEFAULT_NOTIFICATION_PREFERENCES, ...(prefs ?? {}) };
+  if (prefs?.eventUpdates === undefined && typeof prefs?.bookingUpdates === "boolean") {
+    merged.eventUpdates = prefs.bookingUpdates;
+  }
+  return {
+    eventRecommendations: !!merged.eventRecommendations,
+    categoryUpdates: !!merged.categoryUpdates,
+    eventUpdates: !!merged.eventUpdates,
+    savedOrganiserUpdates: !!merged.savedOrganiserUpdates,
+    promotional: !!merged.promotional,
+  };
+}
+
+function toApiNotificationPreferences(
+  patch: Partial<NotificationPreferences>,
+): Record<string, boolean> {
+  const body: Record<string, boolean> = {};
+  if (patch.eventRecommendations !== undefined) body.eventRecommendations = patch.eventRecommendations;
+  if (patch.categoryUpdates !== undefined) body.categoryUpdates = patch.categoryUpdates;
+  if (patch.eventUpdates !== undefined) body.eventUpdates = patch.eventUpdates;
+  if (patch.savedOrganiserUpdates !== undefined) body.savedOrganiserUpdates = patch.savedOrganiserUpdates;
+  if (patch.promotional !== undefined) body.promotional = patch.promotional;
+  return body;
+}
 
 export interface DiscoveryPreferences {
   /** Event category names, matching `Event.category`. */
@@ -265,17 +302,16 @@ function baseRequirements(phoneVerified: boolean): VerificationRequirement[] {
 // Notification preferences
 // ---------------------------------------------------------------------------
 
-// INTEGRATION POINT: GET /api/v1/users/me/notification-preferences -> NotificationPreferences
 export async function fetchNotificationPreferences(userId: string): Promise<NotificationPreferences> {
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
-    const stored = await readLocal<Partial<NotificationPreferences>>(userId, "notifications", {});
-    return { ...DEFAULT_NOTIFICATION_PREFERENCES, ...stored };
+    const stored = await readLocal<ApiNotificationPreferences>(userId, "notifications", {});
+    return normalizeNotificationPreferences(stored);
   }
-  return api.get<NotificationPreferences>("/api/v1/users/me/notification-preferences");
+  const data = await api.get<ApiNotificationPreferences>("/api/v1/me/notification-preferences");
+  return normalizeNotificationPreferences(data);
 }
 
-// INTEGRATION POINT: PATCH /api/v1/users/me/notification-preferences -> NotificationPreferences
 export async function updateNotificationPreferences(
   userId: string,
   patch: Partial<NotificationPreferences>,
@@ -283,9 +319,13 @@ export async function updateNotificationPreferences(
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
     const current = await fetchNotificationPreferences(userId);
-    return writeLocal(userId, "notifications", { ...current, ...patch });
+    return writeLocal(userId, "notifications", normalizeNotificationPreferences({ ...current, ...patch }));
   }
-  return api.patch<NotificationPreferences>("/api/v1/users/me/notification-preferences", patch);
+  const data = await api.patch<ApiNotificationPreferences>(
+    "/api/v1/me/notification-preferences",
+    toApiNotificationPreferences(patch),
+  );
+  return normalizeNotificationPreferences(data);
 }
 
 // ---------------------------------------------------------------------------

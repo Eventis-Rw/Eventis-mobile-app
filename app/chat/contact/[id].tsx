@@ -88,8 +88,8 @@ export default function ContactDetails() {
           </Text>
           <Text style={[styles.subtitle, { color: colors.primary }]}>
             {contact.isEventisUser
-              ? "Eventis contact · demo"
-              : "Not on Eventis · demo"}
+              ? "Eventis contact"
+              : "Not on Eventis yet"}
           </Text>
         </View>
         <View
@@ -182,33 +182,38 @@ export default function ContactDetails() {
                 },
               ]}
             >
-              {contact.invited ? "Invitation saved" : "Invite to Eventis"}
+              {contact.invited ? "Invitation ready to share" : "Invite to Eventis"}
             </Text>
           </Pressable>
         )}
-        <Pressable
-          onPress={() => setAction("block")}
-          accessibilityRole="button"
-          style={styles.row}
-        >
-          <Ionicons name="ban-outline" size={21} color={colors.destructive} />
-          <Text style={[styles.rowLabel, { color: colors.destructive }]}>
-            {contact.blocked ? "Unblock contact" : "Block contact"}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setAction("report")}
-          accessibilityRole="button"
-          style={styles.row}
-        >
-          <Ionicons name="flag-outline" size={21} color={colors.destructive} />
-          <Text style={[styles.rowLabel, { color: colors.destructive }]}>
-            Report contact
-          </Text>
-        </Pressable>
+        {contact.isEventisUser || chat.isDemoMode ? (
+          <>
+            <Pressable
+              onPress={() => setAction("block")}
+              accessibilityRole="button"
+              style={styles.row}
+            >
+              <Ionicons name="ban-outline" size={21} color={colors.destructive} />
+              <Text style={[styles.rowLabel, { color: colors.destructive }]}>
+                {contact.blocked ? "Unblock contact" : "Block contact"}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setAction("report")}
+              accessibilityRole="button"
+              style={styles.row}
+            >
+              <Ionicons name="flag-outline" size={21} color={colors.destructive} />
+              <Text style={[styles.rowLabel, { color: colors.destructive }]}>
+                Report contact
+              </Text>
+            </Pressable>
+          </>
+        ) : null}
         <Text style={[styles.disclaimer, { color: colors.mutedForeground }]}>
-          Local demo: blocking applies on this device. Reports are saved locally
-          and are not submitted to a moderation team.
+          {chat.isDemoMode
+            ? "Local demo: blocking applies on this device. Reports are saved locally and are not submitted to a moderation team."
+            : "Blocking and reports are handled by Eventis moderation."}
         </Text>
         {notice ? (
           <Text
@@ -235,7 +240,9 @@ export default function ContactDetails() {
         description={
           contact.blocked
             ? "You will be able to message this contact again."
-            : "You will not be able to send or simulate receiving messages from this contact on this device."
+            : chat.isDemoMode
+              ? "You will not be able to send or simulate receiving messages from this contact on this device."
+              : "You will not be able to message or call this contact."
         }
         confirmLabel={contact.blocked ? "Unblock" : "Block"}
         destructive={!contact.blocked}
@@ -248,7 +255,11 @@ export default function ContactDetails() {
       <ChatActionSheet
         visible={action === "report"}
         title="Why are you reporting?"
-        subtitle="Choose a reason. This demo saves the report locally only."
+        subtitle={
+          chat.isDemoMode
+            ? "Choose a reason. This demo saves the report locally only."
+            : "Choose a reason. Your report is sent to Eventis moderation."
+        }
         actions={["Spam", "Harassment", "Inappropriate content", "Other"].map(
           (reason) => ({
             label: reason,
@@ -256,7 +267,11 @@ export default function ContactDetails() {
             onPress: () =>
               void run(async () => {
                 await chat.reportContact(id, reason);
-                setNotice("Report saved locally — not submitted");
+                setNotice(
+                  chat.isDemoMode
+                    ? "Report saved locally — not submitted"
+                    : "Report submitted to Eventis moderation",
+                );
               }),
           }),
         )}

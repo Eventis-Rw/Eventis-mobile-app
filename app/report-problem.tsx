@@ -35,6 +35,7 @@ import {
   type ProblemReportReceipt,
   type ReportCategory,
 } from "@/services/supportService";
+import { subscribeBeforeRemove } from "@/utils/beforeRemove";
 
 /** Report a problem: category, description, contact email, optional reference and screenshot. */
 export default function ReportProblemScreen() {
@@ -45,7 +46,7 @@ export default function ReportProblemScreen() {
   const { user } = useAuth();
   // `?reference=` prefills a booking or ticket code when opened from one.
   const params = useLocalSearchParams<{ reference?: string; category?: string }>();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const allowLeave = useRef(false);
 
   const initialCategory = REPORT_CATEGORIES.some((c) => c.key === params.category) ? (params.category as ReportCategory) : "";
@@ -78,7 +79,7 @@ export default function ReportProblemScreen() {
   const isDirty = !receipt && (!!description.trim() || !!screenshotUri || category !== initialCategory);
 
   useEffect(() => {
-    return navigation.addListener("beforeRemove", (event) => {
+    return subscribeBeforeRemove(navigation, (event) => {
       if (allowLeave.current || !isDirty || submitting) return;
       event.preventDefault();
       setPendingLeave(() => () => navigation.dispatch(event.data.action));

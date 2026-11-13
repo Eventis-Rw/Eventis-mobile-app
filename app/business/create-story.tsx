@@ -12,7 +12,7 @@ import {
   ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions,
   type ImageSourcePropType,
 } from "react-native";
-import { KeyboardAwareScrollView, KeyboardStickyView, useKeyboardState } from "react-native-keyboard-controller";
+import { KeyboardAwareScrollView, KeyboardStickyView, useKeyboardState } from "@/components/KeyboardCompat";
 
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { STORY_BACKGROUNDS, StoryCanvas, type StoryOverlay } from "@/components/StoryCanvas";
@@ -80,7 +80,7 @@ export default function CreateStoryScreen() {
   const { refresh, openStories } = useStories();
   const { width, height } = useWindowDimensions();
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
-  const textInputRef = useRef<TextInput>(null);
+  const textInputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const nextLayerId = useRef(0);
   const [editing, setEditing] = useState(false);
   const [image, setImage] = useState<ImageSourcePropType | undefined>();

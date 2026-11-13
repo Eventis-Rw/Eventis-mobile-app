@@ -13,7 +13,7 @@ interface ProfileTabBarProps {
 /** Horizontally scrolling tabs; keeps the active tab in view on narrow screens. */
 export function ProfileTabBar({ tabs, active, onChange }: ProfileTabBarProps) {
   const colors = useColors();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const layouts = useRef<Partial<Record<ProfileTab, LayoutRectangle>>>({});
 
   useEffect(() => {

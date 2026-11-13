@@ -39,7 +39,7 @@ export default function EditOrganisationScreen() {
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const creating = mode === "create";
   const { user, setupOrganisation, updateOrganisation } = useAuth();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const org = creating ? undefined : user?.organisation;
 
   const [values, setValues] = useState<OrganisationFormValues>(() =>

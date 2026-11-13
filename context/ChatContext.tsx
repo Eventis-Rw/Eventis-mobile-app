@@ -1,3 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Contacts from "expo-contacts";
+import { useRouter } from "expo-router";
 import React, {
   createContext,
   useCallback,
@@ -7,17 +10,49 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { AppState, Platform, Share } from "react-native";
+import { io, type Socket } from "socket.io-client";
 
+import { useAuth } from "@/context/AuthContext";
+import { createApiChatService } from "@/services/apiChatService";
 import {
   chatMessagePreview,
   chatService,
+  serializeChatService,
   type ChatContact,
   type ChatConversation,
   type ChatContactUpdate,
   type ChatMessage,
+  type ChatService,
   type PhoneLookupResult,
   type SendMessageOptions,
 } from "@/services/chatService";
+import { API_BASE, getToken } from "@/utils/apiClient";
+
+const PENDING_INVITE_KEY = "@eventis_pending_invite";
+const REALTIME_SYNC_EVENTS = [
+  "chat:message:updated",
+  "chat:message:deleted",
+  "chat:receipts:read",
+  "chat:receipts:delivered",
+] as const;
+
+interface IncomingRealtimeMessage {
+  conversationId?: string;
+  senderId?: string;
+  service?: string;
+  type?: string;
+  content?: string | null;
+}
+
+function realtimePreview(payload: IncomingRealtimeMessage) {
+  const content = payload.content?.trim();
+  if (content) return content;
+  if (payload.type === "IMAGE") return "Photo";
+  if (payload.type === "VOICE") return "Voice message";
+  if (payload.type === "FILE") return "Attachment";
+  return "New message";
+}
 
 interface ChatContextValue {
   contacts: ChatContact[];
@@ -26,6 +61,7 @@ interface ChatContextValue {
   messagesByConversation: Record<string, ChatMessage[]>;
   isLoading: boolean;
   error: string | null;
+  isDemoMode: boolean;
   refresh: () => Promise<void>;
   getContact: (contactId: string) => ChatContact | undefined;
   getConversation: (conversationId: string) => ChatConversation | undefined;
@@ -66,6 +102,8 @@ interface ChatContextValue {
   ) => Promise<ChatContact>;
   lookupPhone: (phone: string) => Promise<PhoneLookupResult>;
   markConversationRead: (conversationId: string) => Promise<void>;
+  syncDeviceContacts: () => Promise<number>;
+  acceptInvitation: (token: string) => Promise<ChatConversation>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -78,6 +116,19 @@ function sortConversations(conversations: ChatConversation[]) {
 }
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const router = useRouter();
+  const isDemoMode = !user || Boolean(user.isDemo);
+  const service = useMemo<ChatService>(() => {
+    if (user && !user.isDemo) {
+      return serializeChatService(createApiChatService(() => user.id));
+    }
+    return chatService;
+  }, [user?.id, user?.isDemo]);
+  const serviceRef = useRef(service);
+  useEffect(() => {
+    serviceRef.current = service;
+  }, [service]);
   const [contacts, setContacts] = useState<ChatContact[]>([]);
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [allMessages, setAllMessages] = useState<ChatMessage[]>([]);
@@ -94,6 +145,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     text: string;
   } | null>(null);
   const activeConversation = useRef<string | null>(null);
+  const conversationsRef = useRef<ChatConversation[]>(conversations);
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
   const setActiveConversation = useCallback((id: string | null) => {
     activeConversation.current = id;
   }, []);
@@ -102,20 +157,27 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const snapshot = await chatService.load();
+      const snapshot = await serviceRef.current.load();
       setContacts(snapshot.contacts);
       setConversations(snapshot.conversations);
       setAllMessages(snapshot.messages);
-    } catch {
-      setError("Your demo conversations could not be loaded.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Your conversations could not be loaded.",
+      );
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    setIsLoading(true);
+    setMessagesByConversation({});
+    setAllMessages([]);
     void refresh();
-  }, [refresh]);
+  }, [service, refresh]);
 
   const getContact = useCallback(
     (contactId: string) => contacts.find((contact) => contact.id === contactId),
@@ -130,7 +192,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const loadMessages = useCallback(async (conversationId: string) => {
     try {
-      const messages = await chatService.getMessages(conversationId);
+      const messages = await serviceRef.current.getMessages(conversationId);
       setError(null);
       setMessagesByConversation((current) => ({
         ...current,
@@ -143,7 +205,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const startConversation = useCallback(async (contactId: string) => {
-    const conversation = await chatService.startConversation(contactId);
+    const conversation = await serviceRef.current.startConversation(contactId);
     setConversations((current) =>
       current.some((item) => item.id === conversation.id)
         ? current
@@ -186,7 +248,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         ),
       );
       try {
-        const message = await chatService.sendMessage(
+        const message = await serviceRef.current.sendMessage(
           conversationId,
           text,
           options,
@@ -214,21 +276,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const editMessage = useCallback(
     async (conversationId: string, messageId: string, text: string) => {
-      await chatService.editMessage(conversationId, messageId, text);
+      await serviceRef.current.editMessage(conversationId, messageId, text);
       await Promise.all([loadMessages(conversationId), refresh()]);
     },
     [loadMessages, refresh],
   );
   const deleteMessage = useCallback(
     async (conversationId: string, messageId: string) => {
-      await chatService.deleteMessage(conversationId, messageId);
+      await serviceRef.current.deleteMessage(conversationId, messageId);
       await Promise.all([loadMessages(conversationId), refresh()]);
     },
     [loadMessages, refresh],
   );
   const clearConversation = useCallback(
     async (conversationId: string, remove = false) => {
-      await chatService.clearConversation(conversationId, remove);
+      await serviceRef.current.clearConversation(conversationId, remove);
       setMessagesByConversation((current) => ({
         ...current,
         [conversationId]: [],
@@ -239,21 +301,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   );
   const setMuted = useCallback(
     async (conversationId: string, muted: boolean) => {
-      await chatService.setMuted(conversationId, muted);
+      await serviceRef.current.setMuted(conversationId, muted);
       await refresh();
     },
     [refresh],
   );
   const setBlocked = useCallback(
     async (contactId: string, blocked: boolean) => {
-      await chatService.setBlocked(contactId, blocked);
+      await serviceRef.current.setBlocked(contactId, blocked);
       await refresh();
     },
     [refresh],
   );
   const reportContact = useCallback(
     async (contactId: string, reason: string, messageId?: string) => {
-      await chatService.reportContact(contactId, reason, messageId);
+      await serviceRef.current.reportContact(contactId, reason, messageId);
     },
     [],
   );
@@ -262,10 +324,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setTypingConversationId(conversationId);
       try {
         await new Promise((resolve) => setTimeout(resolve, 1200));
-        const message = await chatService.simulateIncoming(conversationId);
-        const snapshot = await chatService.load();
+        const message = await serviceRef.current.simulateIncoming(conversationId);
+        const snapshot = await serviceRef.current.load();
         if (activeConversation.current === conversationId) {
-          await chatService.markConversationRead(conversationId);
+          await serviceRef.current.markConversationRead(conversationId);
         } else if (
           !snapshot.conversations.find((item) => item.id === conversationId)
             ?.muted
@@ -281,15 +343,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   );
 
   const inviteContact = useCallback(async (contactId: string) => {
-    const contact = await chatService.inviteContact(contactId);
+    const contact = await serviceRef.current.inviteContact(contactId);
     setContacts((current) =>
       current.map((item) => (item.id === contactId ? contact : item)),
     );
+    if (contact.inviteUrl) {
+      await Share.share({
+        message: `Join me on Eventis so we can chat: ${contact.inviteUrl}`,
+      }).catch(() => undefined);
+    }
   }, []);
 
   const updateContactName = useCallback(
     async (contactId: string, name: string) => {
-      const contact = await chatService.updateContactName(contactId, name);
+      const contact = await serviceRef.current.updateContactName(contactId, name);
       setContacts((current) =>
         current.map((item) => (item.id === contactId ? contact : item)),
       );
@@ -299,7 +366,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const updateContact = useCallback(
     async (contactId: string, update: ChatContactUpdate) => {
-      const contact = await chatService.updateContact(contactId, update);
+      const contact = await serviceRef.current.updateContact(contactId, update);
       setContacts((current) =>
         current.map((item) => (item.id === contactId ? contact : item)),
       );
@@ -308,13 +375,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  const lookupPhone = useCallback(
-    (phone: string) => chatService.lookupPhone(phone),
-    [],
-  );
+  const lookupPhone = useCallback(async (phone: string) => {
+    const result = await serviceRef.current.lookupPhone(phone);
+    if (result.kind !== "not_found") {
+      const found = result.contact;
+      setContacts((current) =>
+        current.some((contact) => contact.id === found.id)
+          ? current.map((contact) =>
+              contact.id === found.id ? { ...contact, ...found } : contact,
+            )
+          : [found, ...current],
+      );
+    }
+    return result;
+  }, []);
 
   const markConversationRead = useCallback(async (conversationId: string) => {
-    await chatService.markConversationRead(conversationId);
+    await serviceRef.current.markConversationRead(conversationId);
     setConversations((current) =>
       current.map((conversation) =>
         conversation.id === conversationId
@@ -324,6 +401,169 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  const syncDeviceContacts = useCallback(async () => {
+    if (Platform.OS === "web") {
+      throw new Error(
+        "Contact sync is available in the installed Android and iOS app.",
+      );
+    }
+    const permission = await Contacts.requestPermissionsAsync();
+    if (!permission.granted) {
+      throw new Error(
+        "Allow Contacts access in your phone settings to find your friends.",
+      );
+    }
+    const DEVICE_CONTACT_PAGE_SIZE = 500;
+    const MAX_CONTACT_SYNC = 5000;
+    const fields = [
+      Contacts.ContactField.FULL_NAME,
+      Contacts.ContactField.GIVEN_NAME,
+      Contacts.ContactField.FAMILY_NAME,
+      Contacts.ContactField.PHONES,
+    ] as const;
+    const seen = new Set<string>();
+    const payload: Array<{ name?: string; phoneNumber: string }> = [];
+    for (
+      let offset = 0;
+      offset < MAX_CONTACT_SYNC && payload.length < MAX_CONTACT_SYNC;
+      offset += DEVICE_CONTACT_PAGE_SIZE
+    ) {
+      const records = await Contacts.Contact.getAllDetails(fields, {
+        limit: DEVICE_CONTACT_PAGE_SIZE,
+        offset,
+      });
+      for (const record of records) {
+        const name =
+          record.fullName?.trim() ||
+          [record.givenName, record.familyName]
+            .filter((part): part is string => Boolean(part?.trim()))
+            .join(" ");
+        for (const phone of record.phones ?? []) {
+          const number = phone.number?.trim();
+          if (!number) continue;
+          const normalized = number.replace(/\D/g, "");
+          if (normalized.length < 7 || seen.has(normalized)) continue;
+          seen.add(normalized);
+          payload.push({
+            ...(name ? { name } : {}),
+            phoneNumber: number,
+          });
+          if (payload.length >= MAX_CONTACT_SYNC) break;
+        }
+        if (payload.length >= MAX_CONTACT_SYNC) break;
+      }
+      if (records.length < DEVICE_CONTACT_PAGE_SIZE) break;
+    }
+    if (!payload.length) return 0;
+    await serviceRef.current.syncContacts(payload);
+    await refresh();
+    return payload.length;
+  }, [refresh]);
+
+  const acceptInvitation = useCallback(
+    async (token: string) => {
+      const conversation = await serviceRef.current.acceptInvitation(token);
+      await refresh();
+      return conversation;
+    },
+    [refresh],
+  );
+
+  const realtimeActive = Boolean(user && !user.isDemo);
+  useEffect(() => {
+    if (!realtimeActive || !user) return;
+    let cancelled = false;
+    let socket: Socket | null = null;
+    const sync = () => {
+      void refresh();
+      const active = activeConversation.current;
+      if (active) void loadMessages(active);
+    };
+    const onNewMessage = (payload: IncomingRealtimeMessage) => {
+      if (payload.service && payload.service !== "EVENTIS") return;
+      const conversationId = payload.conversationId;
+      const fromSelf = payload.senderId === user.id;
+      const active = activeConversation.current;
+      const muted = conversationId
+        ? conversationsRef.current.find(
+            (conversation) => conversation.id === conversationId,
+          )?.muted
+        : undefined;
+      void refresh().then(() => {
+        if (!conversationId || fromSelf) return;
+        if (active === conversationId) {
+          void markConversationRead(conversationId).catch(() => undefined);
+        } else if (!muted) {
+          setNotification({
+            conversationId,
+            text: realtimePreview(payload),
+          });
+        }
+      });
+      if (active) void loadMessages(active);
+    };
+    void getToken().then((token) => {
+      if (cancelled || !token) return;
+      const client = io(API_BASE, {
+        path: "/socket.io",
+        transports: ["websocket"],
+        auth: { token },
+      });
+      socket = client;
+      let authRetries = 0;
+      client.on("connect", () => {
+        authRetries = 0;
+      });
+      client.on("connect_error", () => {
+        if (cancelled || authRetries >= 2) return;
+        authRetries += 1;
+        void getToken().then((next) => {
+          if (cancelled || !next) return;
+          client.auth = { token: next };
+          client.connect();
+        });
+      });
+      client.on("chat:message:new", onNewMessage);
+      for (const event of REALTIME_SYNC_EVENTS) client.on(event, sync);
+    });
+    const poll = setInterval(() => {
+      if (AppState.currentState === "active") sync();
+    }, 20_000);
+    return () => {
+      cancelled = true;
+      socket?.disconnect();
+      clearInterval(poll);
+    };
+  }, [
+    realtimeActive,
+    user?.id,
+    refresh,
+    loadMessages,
+    markConversationRead,
+  ]);
+
+  useEffect(() => {
+    if (!realtimeActive) return;
+    let cancelled = false;
+    void AsyncStorage.getItem(PENDING_INVITE_KEY)
+      .then(async (token) => {
+        if (!token || cancelled) return;
+        await AsyncStorage.removeItem(PENDING_INVITE_KEY);
+        const conversation = await serviceRef.current.acceptInvitation(token);
+        await refresh();
+        if (!cancelled) {
+          router.push({
+            pathname: "/chat/[id]",
+            params: { id: conversation.id },
+          });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [realtimeActive, user?.id, refresh, router]);
+
   const value = useMemo(
     () => ({
       contacts,
@@ -332,6 +572,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       messagesByConversation,
       isLoading,
       error,
+      isDemoMode,
       refresh,
       getContact,
       getConversation,
@@ -354,6 +595,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       updateContact,
       lookupPhone,
       markConversationRead,
+      syncDeviceContacts,
+      acceptInvitation,
     }),
     [
       contacts,
@@ -362,6 +605,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       messagesByConversation,
       isLoading,
       error,
+      isDemoMode,
       refresh,
       getContact,
       getConversation,
@@ -384,6 +628,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       updateContact,
       lookupPhone,
       markConversationRead,
+      syncDeviceContacts,
+      acceptInvitation,
     ],
   );
 

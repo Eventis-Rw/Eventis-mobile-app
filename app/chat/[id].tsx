@@ -35,7 +35,7 @@ import {
 import {
   KeyboardAvoidingView,
   useKeyboardState,
-} from "react-native-keyboard-controller";
+} from "@/components/KeyboardCompat";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -48,6 +48,7 @@ import {
   ChatPopupMenu,
   type ChatMenuAnchor,
 } from "@/components/ChatPopupMenu";
+import { ChatVideoBubble } from "@/components/ChatVideoBubble";
 import { VoiceNoteBubble } from "@/components/VoiceNoteBubble";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
@@ -71,6 +72,16 @@ function formatRecordingTime(durationMillis: number) {
   const seconds = Math.floor(durationMillis / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
+
+type ComposerMedia = {
+  kind: "image" | "video";
+  uri: string;
+  mimeType: string;
+  fileName: string;
+  durationMs?: number;
+  width?: number;
+  height?: number;
+};
 
 function MessageBubble({
   message,
@@ -221,6 +232,9 @@ function MessageBubble({
                 durationMs={message.audioDurationMs}
               />
             ) : null}
+            {message.videoUri ? (
+              <ChatVideoBubble uri={message.videoUri} />
+            ) : null}
             {message.text ? (
               <Text style={[styles.messageText, { color: colors.foreground }]}>
                 {message.text}
@@ -249,7 +263,7 @@ function MessageBubble({
               </Text>
               {own ? (
                 <Ionicons
-                  accessibilityLabel={`Demo status: ${message.status}`}
+                  accessibilityLabel={`Message status: ${message.status}`}
                   name={
                     message.status === "pending"
                       ? "time-outline"
@@ -299,12 +313,12 @@ export default function ConversationScreen() {
     contact?.isInAddressBook === false ? contact.phone : contact?.name;
   const allMessages = chat.messagesByConversation[id] ?? [];
   const list = useRef<FlatList<ChatMessage>>(null);
-  const menuButton = useRef<View>(null);
+  const menuButton = useRef<React.ComponentRef<typeof View>>(null);
   const jumpRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jumpAttempts = useRef(0);
   const nearBottom = useRef(true);
   const [showLatest, setShowLatest] = useState(false);
-  const input = useRef<TextInput>(null);
+  const input = useRef<React.ComponentRef<typeof TextInput>>(null);
   const [composer, setComposer] = useState("");
   const [composerSelection, setComposerSelection] = useState({
     start: 0,
@@ -316,7 +330,8 @@ export default function ConversationScreen() {
   const [draftReady, setDraftReady] = useState(false);
   const [reply, setReply] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [media, setMedia] = useState<ComposerMedia | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [menu, setMenu] = useState(false);
@@ -469,7 +484,7 @@ export default function ConversationScreen() {
   );
 
   async function send() {
-    if ((!composer.trim() && !photo) || busy || !contact || contact.blocked)
+    if ((!composer.trim() && !media) || busy || !contact || contact.blocked)
       return;
     const text = composer.trim();
     setBusy(true);
@@ -478,7 +493,16 @@ export default function ConversationScreen() {
       if (editing) await chat.editMessage(id, editing.id, text);
       else
         await chat.sendMessage(id, text, {
-          imageUri: photo ?? undefined,
+          imageUri: media?.kind === "image" ? media.uri : undefined,
+          videoUri: media?.kind === "video" ? media.uri : undefined,
+          videoDurationMs:
+            media?.kind === "video" && media.durationMs !== undefined
+              ? Math.round(media.durationMs)
+              : undefined,
+          attachmentName: media?.fileName,
+          attachmentMimeType: media?.mimeType,
+          attachmentWidth: media?.width,
+          attachmentHeight: media?.height,
           replyTo: reply
             ? { id: reply.id, text: reply.text, direction: reply.direction }
             : undefined,
@@ -487,7 +511,7 @@ export default function ConversationScreen() {
       setEmojiOpen(false);
       setReply(null);
       setEditing(null);
-      setPhoto(null);
+      setMedia(null);
       await AsyncStorage.removeItem(`@eventis_chat_draft_${id}`);
       nearBottom.current = true;
       showNewest();
@@ -502,54 +526,117 @@ export default function ConversationScreen() {
     }
   }
 
+  const applyImageAsset = (
+    asset: ImagePicker.ImagePickerAsset,
+    demo: boolean,
+    actionLabel: string,
+  ) => {
+    if (demo) {
+      if (!asset.base64) throw new Error("This photo could not be opened.");
+      if (asset.base64.length > 700000)
+        throw new Error(
+          `${actionLabel} a smaller photo (under 500 KB after compression).`,
+        );
+      setMedia({
+        kind: "image",
+        uri: `data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}`,
+        mimeType: asset.mimeType ?? "image/jpeg",
+        fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
+        width: asset.width,
+        height: asset.height,
+      });
+      return;
+    }
+    setMedia({
+      kind: "image",
+      uri: asset.uri,
+      mimeType: asset.mimeType ?? "image/jpeg",
+      fileName: asset.fileName ?? `photo-${Date.now()}.jpg`,
+      width: asset.width,
+      height: asset.height,
+    });
+  };
+
   async function pickPhoto() {
     setEmojiOpen(false);
+    setAttachOpen(false);
     await run(async () => {
+      const demo = chat.isDemoMode;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: true,
-        quality: 0.3,
-        base64: true,
+        quality: demo ? 0.3 : 0.7,
+        base64: demo,
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      });
+      if (result.canceled) return;
+      applyImageAsset(result.assets[0], demo, "Choose");
+    });
+  }
+
+  async function pickVideo() {
+    setEmojiOpen(false);
+    setAttachOpen(false);
+    await run(async () => {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        videoMaxDuration: 60,
+        videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+        quality: 0.7,
       });
       if (result.canceled) return;
       const asset = result.assets[0];
-      if (!asset.base64) throw new Error("This photo could not be opened.");
-      // Small self-contained demo photos remain usable after reload; real service uploads replace this URI.
-      if (asset.base64.length > 700000)
-        throw new Error(
-          "Choose a smaller photo (under 500 KB after compression) for this local demo.",
-        );
-      setPhoto(`data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}`);
+      if (!asset.uri) throw new Error("This video could not be opened.");
+      setMedia({
+        kind: "video",
+        uri: asset.uri,
+        mimeType: asset.mimeType ?? "video/mp4",
+        fileName: asset.fileName ?? `video-${Date.now()}.mp4`,
+        durationMs: asset.duration ?? undefined,
+        width: asset.width,
+        height: asset.height,
+      });
     });
   }
 
   async function takePhoto() {
     setEmojiOpen(false);
+    setAttachOpen(false);
     await run(async () => {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
         throw new Error("Allow camera access to take a photo.");
       }
+      const demo = chat.isDemoMode;
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
         allowsEditing: true,
-        quality: 0.3,
-        base64: true,
+        quality: demo ? 0.3 : 0.7,
+        base64: demo,
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       });
       if (result.canceled) return;
-      const asset = result.assets[0];
-      if (!asset.base64) throw new Error("This photo could not be opened.");
-      if (asset.base64.length > 700000)
-        throw new Error(
-          "Take a smaller photo (under 500 KB after compression) for this local demo.",
-        );
-      setPhoto(`data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}`);
+      applyImageAsset(result.assets[0], demo, "Take");
     });
   }
 
+  const openAttachments = () => {
+    if (busy || editing) return;
+    Keyboard.dismiss();
+    setEmojiOpen(false);
+    setAttachOpen(true);
+  };
+
   const startCall = () => {
     if (!contact) return;
-    void run(() => Linking.openURL(`tel:${contact.phone.replace(/\s/g, "")}`));
+    const phone = contact.phone.replace(/[^\d+]/g, "");
+    if (!phone) {
+      setNotice("No phone number is available for this contact.");
+      return;
+    }
+    void run(() => Linking.openURL(`tel:${phone}`));
   };
 
   const toggleEmojiPicker = () => {
@@ -572,7 +659,7 @@ export default function ConversationScreen() {
   };
 
   async function startVoiceRecording() {
-    if (busy || editing || composer.trim() || photo || recordingActive) return;
+    if (busy || editing || composer.trim() || media || recordingActive) return;
     setError(null);
     setEmojiOpen(false);
     Keyboard.dismiss();
@@ -628,7 +715,7 @@ export default function ConversationScreen() {
       }
       await chat.sendMessage(id, "", {
         audioUri: uri,
-        audioDurationMs: durationMs,
+        audioDurationMs: Math.round(durationMs),
         replyTo: reply
           ? {
               id: reply.id,
@@ -714,32 +801,45 @@ export default function ConversationScreen() {
               },
             ]
           : []),
-        {
-          label: "Delete for me",
-          icon: "trash-outline",
-          destructive: true,
-          onPress: () =>
-            setConfirm({
-              title: "Delete this message?",
-              description: "This removes it from your local conversation only.",
-              action: () => chat.deleteMessage(id, selected.id),
-            }),
-        },
+        ...(chat.isDemoMode || selected.direction === "outgoing"
+          ? [
+              {
+                label: chat.isDemoMode ? "Delete for me" : "Delete message",
+                icon: "trash-outline" as const,
+                destructive: true,
+                onPress: () =>
+                  setConfirm({
+                    title: "Delete this message?",
+                    description: chat.isDemoMode
+                      ? "This removes it from your local conversation only."
+                      : "This deletes the message for everyone in the chat.",
+                    action: () => chat.deleteMessage(id, selected.id),
+                  }),
+              },
+            ]
+          : []),
         {
           label: "Report message",
           icon: "flag-outline",
           onPress: () =>
             setConfirm({
-              title: "Save a report?",
-              description:
-                "The report stays on this device. It will not reach a moderation team until a backend is connected.",
+              title: chat.isDemoMode
+                ? "Save a report?"
+                : "Report this message?",
+              description: chat.isDemoMode
+                ? "The report stays on this device. It will not reach a moderation team until a backend is connected."
+                : "This message and its details are sent to Eventis moderation.",
               action: async () => {
                 await chat.reportContact(
                   contact!.id,
                   "Inappropriate message",
                   selected.id,
                 );
-                setNotice("Report saved locally — not submitted");
+                setNotice(
+                  chat.isDemoMode
+                    ? "Report saved locally — not submitted"
+                    : "Report submitted to Eventis moderation",
+                );
               },
             }),
         },
@@ -822,12 +922,16 @@ export default function ConversationScreen() {
                 style={[styles.smallText, { color: colors.mutedForeground }]}
               >
                 {contact.blocked
-                  ? "Blocked on this device"
-                  : chat.typingConversationId === id
-                    ? "Typing… · demo"
-                    : contact.isOnline
-                      ? "Online · demo"
-                      : "Offline · demo"}
+                  ? chat.isDemoMode
+                    ? "Blocked on this device"
+                    : "Blocked"
+                  : chat.isDemoMode
+                    ? chat.typingConversationId === id
+                      ? "Typing… · demo"
+                      : contact.isOnline
+                        ? "Online · demo"
+                        : "Offline · demo"
+                    : "On Eventis"}
               </Text>
             </View>
           </Pressable>
@@ -1055,7 +1159,8 @@ export default function ConversationScreen() {
               accessibilityLiveRegion="polite"
               style={[styles.typing, { color: colors.mutedForeground }]}
             >
-              ••• {contact.name.split(" ")[0]} is typing · demo
+              ••• {contact.name.split(" ")[0]} is typing
+              {chat.isDemoMode ? " · demo" : ""}
             </Text>
           ) : null}
           {reply || editing ? (
@@ -1096,13 +1201,20 @@ export default function ConversationScreen() {
               </Pressable>
             </View>
           ) : null}
-          {photo ? (
+          {media ? (
             <View style={styles.photoPreview}>
-              <Image source={{ uri: photo }} style={styles.thumbnail} />
+              {media.kind === "image" ? (
+                <Image source={{ uri: media.uri }} style={styles.thumbnail} />
+              ) : (
+                <View style={[styles.thumbnail, styles.videoThumbnail]}>
+                  <Ionicons name="videocam" size={26} color="#FFFFFF" />
+                  <Text style={styles.videoLabel}>Video</Text>
+                </View>
+              )}
               <Pressable
-                onPress={() => setPhoto(null)}
+                onPress={() => setMedia(null)}
                 accessibilityRole="button"
-                accessibilityLabel="Remove selected photo"
+                accessibilityLabel={`Remove selected ${media.kind}`}
               >
                 <Ionicons
                   name="close-circle"
@@ -1226,7 +1338,7 @@ export default function ConversationScreen() {
             >
               {Platform.OS === "android" ? null : (
                 <Pressable
-                  onPress={() => void pickPhoto()}
+                  onPress={openAttachments}
                   disabled={busy || Boolean(editing)}
                   accessibilityRole="button"
                   accessibilityLabel="Add an attachment"
@@ -1277,7 +1389,7 @@ export default function ConversationScreen() {
                 />
                 {Platform.OS === "android" ? (
                   <Pressable
-                    onPress={() => void pickPhoto()}
+                    onPress={openAttachments}
                     disabled={busy || Boolean(editing)}
                     accessibilityRole="button"
                     accessibilityLabel="Add an attachment"
@@ -1348,7 +1460,7 @@ export default function ConversationScreen() {
               )}
               <Pressable
                 onPress={
-                  composer.trim() || photo || editing
+                  composer.trim() || media || editing
                     ? () => void send()
                     : () => void startVoiceRecording()
                 }
@@ -1357,7 +1469,7 @@ export default function ConversationScreen() {
                 accessibilityLabel={
                   editing
                     ? "Save edited message"
-                    : composer.trim() || photo
+                    : composer.trim() || media
                       ? "Send message"
                       : "Record a voice note"
                 }
@@ -1375,7 +1487,7 @@ export default function ConversationScreen() {
                     name={
                       editing
                         ? "checkmark"
-                        : composer.trim() || photo
+                        : composer.trim() || media
                           ? "send"
                           : "mic"
                     }
@@ -1388,6 +1500,28 @@ export default function ConversationScreen() {
           )}
         </KeyboardAvoidingView>
       </View>
+      <ChatActionSheet
+        visible={attachOpen}
+        title="Add to chat"
+        actions={[
+          {
+            label: "Photo",
+            icon: "image-outline",
+            onPress: () => void pickPhoto(),
+          },
+          {
+            label: "Video",
+            icon: "videocam-outline",
+            onPress: () => void pickVideo(),
+          },
+          {
+            label: "Take a photo",
+            icon: "camera-outline",
+            onPress: () => void takePhoto(),
+          },
+        ]}
+        onClose={() => setAttachOpen(false)}
+      />
       <ChatActionSheet
         visible={Boolean(selected)}
         title="Message"
@@ -1427,11 +1561,15 @@ export default function ConversationScreen() {
             onPress: () =>
               void run(() => chat.setMuted(id, !conversation.muted)),
           },
-          {
-            label: "Receive a demo reply",
-            icon: "flask-outline",
-            onPress: () => void run(() => chat.simulateIncoming(id)),
-          },
+          ...(chat.isDemoMode
+            ? [
+                {
+                  label: "Receive a demo reply",
+                  icon: "flask-outline" as const,
+                  onPress: () => void run(() => chat.simulateIncoming(id)),
+                },
+              ]
+            : []),
           {
             label: "Clear chat",
             icon: "trash-outline",
@@ -1708,6 +1846,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   thumbnail: { width: 75, height: 65, borderRadius: 10 },
+  videoThumbnail: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#111827",
+    gap: 3,
+  },
+  videoLabel: {
+    color: "#FFFFFF",
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10,
+  },
   blocked: { padding: 20, alignItems: "center" },
   fullImage: { width: "100%", height: "100%" },
   imageClose: { position: "absolute", right: 20, padding: 8 },

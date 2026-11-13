@@ -112,7 +112,7 @@ function TabIcon({
       <Ionicons
         name={focused ? activeIcon : inactiveIcon}
         size={24}
-        color={isDisabled ? colors.disabled : focused ? colors.primary : color}
+        color={(isDisabled ? colors.disabled : focused ? colors.primary : color) as string | undefined}
       />
 
       {/* Unread message badge */}
@@ -214,7 +214,7 @@ function LiveTabIcon({
       <Ionicons
         name={focused ? "videocam" : "videocam-outline"}
         size={24}
-        color={focused ? "#EF4444" : color}
+        color={(focused ? "#EF4444" : color) as string | undefined}
       />
       {/* Sleek LIVE micro-badge with pulsing beacon */}
       <View style={styles.liveMicroBadge}>

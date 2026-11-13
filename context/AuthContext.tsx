@@ -30,6 +30,7 @@ import {
   clearToken,
   getRefreshToken,
   getToken,
+  refreshSession,
   setAuthTokens,
   setToken,
 } from "@/utils/apiClient";
@@ -553,7 +554,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           bought.postsRemaining !== undefined && left
             ? { ...bought, postsRemaining: bought.postsRemaining + left }
             : bought;
-        await persistUser({ ...user, organiserSubscription });
+
+        const token = await getToken();
+        const serverBacked = !user.isDemo && !!token && !token.startsWith("demo_token_");
+        if (serverBacked) {
+          await api.patch("/api/v1/users/me", { accountType: "POSTER" });
+          await refreshSession();
+        }
+
+        await persistUser({
+          ...user,
+          organiserSubscription,
+          isBusinessAccount: true,
+          accountType: user.accountType === "business" ? "business" : "individual",
+        });
       }
       return result;
     },

@@ -7,8 +7,13 @@ import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
 
 export default function ChatLayout() {
-  const { notification, dismissNotification, getContact, getConversation } =
-    useChat();
+  const {
+    notification,
+    dismissNotification,
+    getContact,
+    getConversation,
+    isDemoMode,
+  } = useChat();
   const colors = useChatColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
@@ -50,11 +55,11 @@ export default function ChatLayout() {
               router.push({ pathname: "/chat/[id]", params: { id } });
             }}
             accessibilityRole="button"
-            accessibilityLabel={`Open new demo message from ${contact?.name ?? "contact"}`}
+            accessibilityLabel={`Open new ${isDemoMode ? "demo " : ""}message from ${contact?.name ?? "contact"}`}
             style={{ flex: 1 }}
           >
             <Text style={[styles.name, { color: colors.primary }]}>
-              Demo message · {contact?.name}
+              {isDemoMode ? "Demo message" : "New message"} · {contact?.name}
             </Text>
             <Text
               numberOfLines={2}

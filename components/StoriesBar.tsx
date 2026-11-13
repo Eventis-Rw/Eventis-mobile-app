@@ -10,7 +10,7 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: { user: User | null;
   const colors = useColors();
   const router = useRouter();
   const { collections, openStories, loading, error, refresh, viewerOpen } = useStories();
-  const tray = useRef<ScrollView>(null);
+  const tray = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const scroll = useRef({ offset: 0, width: 0, content: 0, touching: false, resumeAt: 0 });
   const [focused, setFocused] = useState(false);
   const [foreground, setForeground] = useState(AppState.currentState !== "background");

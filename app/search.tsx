@@ -48,8 +48,8 @@ export default function SearchScreen() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [sort, setSort] = useState<SortOption>("relevance");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
-  const inputRef = useRef<TextInput>(null);
-  const categoryScrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const categoryScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const categoryLayouts = useRef<Record<string, { x: number; width: number }>>({});
 
   const handleSelectCategory = useCallback(

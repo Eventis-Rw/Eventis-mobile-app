@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -26,7 +26,7 @@ export default function ChatScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const chat = useChat();
-  const menuButton = useRef<View>(null);
+  const menuButton = useRef<React.ComponentRef<typeof View>>(null);
   const appleHeader = Platform.OS !== "android";
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [options, setOptions] = useState<ChatConversation | null>(null);
@@ -36,6 +36,28 @@ export default function ChatScreen() {
   const [about, setAbout] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<ChatMenuAnchor>();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const syncContacts = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    setActionError(null);
+    setSyncNotice(null);
+    try {
+      const count = await chat.syncDeviceContacts();
+      setSyncNotice(
+        count
+          ? `Found ${count} phone contact${count === 1 ? "" : "s"}.`
+          : "Your phone contacts are already up to date.",
+      );
+    } catch (cause) {
+      setActionError(
+        cause instanceof Error ? cause.message : "Contacts could not be synced.",
+      );
+    } finally {
+      setSyncing(false);
+    }
+  };
   const run = async (action: () => Promise<unknown>) => {
     setActionError(null);
     try {
@@ -222,10 +244,40 @@ export default function ChatScreen() {
               </Text>
             </Pressable>
           ))}
-          <Text style={[styles.demoLabel, { color: colors.mutedForeground }]}>
-            Local demo
-          </Text>
+          {chat.isDemoMode ? (
+            <Text style={[styles.demoLabel, { color: colors.mutedForeground }]}>
+              Local demo
+            </Text>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sync phone contacts"
+              disabled={syncing}
+              onPress={() => void syncContacts()}
+              style={[
+                styles.chip,
+                { backgroundColor: colors.secondary, marginLeft: "auto" },
+              ]}
+            >
+              {syncing ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons name="sync-outline" size={15} color={colors.primary} />
+              )}
+              <Text style={[styles.chipText, { color: colors.primary }]}>
+                Sync contacts
+              </Text>
+            </Pressable>
+          )}
         </View>
+        {syncNotice ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={[styles.notice, { color: colors.mutedForeground }]}
+          >
+            {syncNotice}
+          </Text>
+        ) : null}
         {actionError || chat.error ? (
           <Pressable
             accessibilityRole="button"
@@ -339,12 +391,16 @@ export default function ChatScreen() {
                   onPress: () =>
                     void run(() => chat.setMuted(options.id, !options.muted)),
                 },
-                {
-                  label: "Receive a demo message",
-                  icon: "flask-outline",
-                  onPress: () =>
-                    void run(() => chat.simulateIncoming(options.id)),
-                },
+                ...(chat.isDemoMode
+                  ? [
+                      {
+                        label: "Receive a demo message",
+                        icon: "flask-outline" as const,
+                        onPress: () =>
+                          void run(() => chat.simulateIncoming(options.id)),
+                      },
+                    ]
+                  : []),
                 {
                   label: "Delete conversation",
                   icon: "trash-outline",
@@ -462,6 +518,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 16,
     minHeight: 38,
     justifyContent: "center",

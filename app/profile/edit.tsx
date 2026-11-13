@@ -55,6 +55,7 @@ import {
   validateUsername,
   validateWebsite,
 } from "@/utils/profileValidation";
+import { subscribeBeforeRemove } from "@/utils/beforeRemove";
 
 interface AccountValues {
   username: string;
@@ -127,7 +128,7 @@ export default function EditProfileScreen() {
   const { categories: eventCategories } = useEvents();
   const { accountType, isPublisher } = useAccountCapabilities();
   const isBusiness = accountType === "business" && !!user?.organisation;
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const allowLeave = useRef(false);
 
   const [initial, setInitial] = useState<FormValues | undefined>(() =>
@@ -210,7 +211,7 @@ export default function EditProfileScreen() {
 
   // Ask before throwing away edits (back button, swipe or hardware back).
   useEffect(() => {
-    return navigation.addListener("beforeRemove", (event) => {
+    return subscribeBeforeRemove(navigation, (event) => {
       if (allowLeave.current || !isDirty || saving) return;
       event.preventDefault();
       setPendingLeave(() => () => navigation.dispatch(event.data.action));

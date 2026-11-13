@@ -28,6 +28,7 @@ import {
   validateLoveInterestedIn,
   validateLoveUsername,
 } from "@/utils/findLoveProfile";
+import { subscribeBeforeRemove } from "@/utils/beforeRemove";
 
 type EditValues = LoveProfileFormValues & LoveProfileExtrasValues;
 
@@ -75,7 +76,7 @@ export default function EditLoveProfileScreen() {
   const isDirty = !!values && JSON.stringify(values) !== JSON.stringify(initial);
 
   useEffect(() => {
-    return navigation.addListener("beforeRemove", (event) => {
+    return subscribeBeforeRemove(navigation, (event) => {
       if (allowLeave.current || !isDirty || saving) return;
       event.preventDefault();
       setPendingLeave(() => () => navigation.dispatch(event.data.action));

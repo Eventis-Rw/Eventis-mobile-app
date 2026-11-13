@@ -154,7 +154,7 @@ function LoveTabs() {
             title: tab.title,
             tabBarBadge: tab.name === "messages" && inboxCount > 0 ? (inboxCount > 99 ? "99+" : inboxCount) : undefined,
             tabBarBadgeStyle: { backgroundColor: colors.primary, color: "#FFFFFF", fontSize: 10 },
-            tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? tab.activeIcon : tab.icon} size={23} color={color} />,
+            tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? tab.activeIcon : tab.icon} size={23} color={color as string | undefined} />,
           }}
         />
       ))}

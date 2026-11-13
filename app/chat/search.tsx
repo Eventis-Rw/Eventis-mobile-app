@@ -268,7 +268,7 @@ export default function ChatSearchScreen() {
                     item.contact.isEventisUser
                       ? item.contact.headline
                       : item.contact.invited
-                        ? "Invitation saved locally"
+                        ? "Invitation ready to share"
                         : "Invite to Eventis"
                   }
                   onPress={() => openContact(item.contact)}
@@ -322,8 +322,22 @@ export default function ChatSearchScreen() {
                     ? "Search for a saved contact, then tap their name to call."
                     : "Search by a saved name, phone number or words in a message."}
                 </Text>
+                {!chat.isDemoMode && !callMode ? (
+                  <Pressable
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sync phone contacts"
+                    onPress={() => void run(chat.syncDeviceContacts)}
+                    style={[styles.lookup, { backgroundColor: colors.secondary }]}
+                  >
+                    <Ionicons name="sync-outline" size={20} color={colors.primary} />
+                    <Text style={{ color: colors.primary }}>
+                      Sync phone contacts
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
-            ) : null
+            ) : undefined
           }
           ListFooterComponent={
             phoneQuery ? (
@@ -355,7 +369,9 @@ export default function ChatSearchScreen() {
                   <Text
                     style={[styles.hint, { color: colors.mutedForeground }]}
                   >
-                    This number isn't in the local demo contacts.
+                    {chat.isDemoMode
+                      ? "This number isn't in the local demo contacts."
+                      : "No Eventis account uses this number yet."}
                   </Text>
                 ) : lookupResult ? (
                   <ChatListRow
@@ -401,7 +417,7 @@ export default function ChatSearchScreen() {
                   />
                 ) : null}
               </View>
-            ) : null
+            ) : undefined
           }
         />
       </View>

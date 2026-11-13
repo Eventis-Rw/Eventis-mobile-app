@@ -114,7 +114,7 @@ export function LiveRoomView({
   const giftTransaction = useRef("");
   const [reaction, setReaction] = useState("");
   const animation = useRef(new Animated.Value(0)).current;
-  const chat = useRef<ScrollView>(null);
+  const chat = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const lastGift = room.messages.filter((m) => m.kind === "gift").at(-1);
   useEffect(() => {
     if (!lastGift || Date.now() - lastGift.at > 5000) return;

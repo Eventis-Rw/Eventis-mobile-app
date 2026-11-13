@@ -15,6 +15,7 @@ import { useColors } from "@/hooks/useColors";
 import { useDiscoveryPreferences } from "@/hooks/useDiscoveryPreferences";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { PROFILE_LIMITS, validateMaxLength } from "@/utils/profileValidation";
+import { subscribeBeforeRemove } from "@/utils/beforeRemove";
 
 /** Preferred event categories and location, used for recommendations and category alerts. */
 export default function DiscoveryPreferencesScreen() {
@@ -54,7 +55,7 @@ export default function DiscoveryPreferencesScreen() {
   const locationError = validateMaxLength(location, PROFILE_LIMITS.location);
 
   useEffect(() => {
-    return navigation.addListener("beforeRemove", (event) => {
+    return subscribeBeforeRemove(navigation, (event) => {
       if (allowLeave.current || !isDirty || saving) return;
       event.preventDefault();
       setPendingLeave(() => () => navigation.dispatch(event.data.action));

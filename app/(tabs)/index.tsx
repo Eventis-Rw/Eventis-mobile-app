@@ -19,6 +19,8 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
+import { NotificationPopupHost } from "@/components/NotificationPopup";
+import { useNotificationsOptional } from "@/context/NotificationsContext";
 import { GlassSurface } from "@/components/GlassSurface";
 import { EventCardSkeleton } from "@/components/SkeletonLoader";
 import { StoriesBar } from "@/components/StoriesBar";
@@ -40,6 +42,8 @@ export default function HomeScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const notifications = useNotificationsOptional();
+  const unreadNotifications = notifications?.unreadCount ?? 0;
   const { events, categories, isLoading, error, refreshEvents } = useEvents();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
@@ -78,7 +82,7 @@ export default function HomeScreen() {
     }
   }, [refreshEvents]);
 
-  const categoryScrollRef = useRef<ScrollView>(null);
+  const categoryScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const categoryLayouts = useRef<Record<string, { x: number; width: number }>>({});
 
   const selectCategory = useCallback(
@@ -269,7 +273,11 @@ export default function HomeScreen() {
               accessibilityLabel="Notifications"
             >
               <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
-              <View style={[styles.notifBadgeDot, { backgroundColor: colors.primary }]} />
+              {unreadNotifications > 0 ? (
+                <View style={[styles.notifBadge, { backgroundColor: colors.primary, borderColor: colors.card }]}>
+                  <Text style={styles.notifBadgeText}>{unreadNotifications > 9 ? "9+" : unreadNotifications}</Text>
+                </View>
+              ) : null}
             </Pressable>
           </View>
         </View>
@@ -287,7 +295,7 @@ export default function HomeScreen() {
           <Text style={{ color: colors.mutedForeground, textAlign: "center", paddingVertical: 20 }}>
             {visibleCount < filtered.length ? "Scroll for more events" : "You're all caught up"}
           </Text>
-        ) : null}
+        ) : undefined}
         onEndReached={loadMore}
         viewabilityConfig={feedAnalytics.viewabilityConfig}
         onViewableItemsChanged={feedAnalytics.onViewableItemsChanged}
@@ -625,13 +633,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
   },
-  notifBadgeDot: {
+  notifBadge: {
     position: "absolute",
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+  },
+  notifBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    lineHeight: 12,
   },
   scroll: {
     flex: 1,
