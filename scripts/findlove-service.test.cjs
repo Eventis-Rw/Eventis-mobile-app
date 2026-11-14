@@ -66,9 +66,11 @@ const profiles = load("constants/loveProfiles.ts", {}, () => undefined);
 const membership = load("utils/findLoveMembership.ts", {}, () => undefined);
 const ageCheck = load("utils/findLoveAgeVerification.ts", {}, () => undefined);
 const connections = load("utils/findLoveConnections.ts", {}, () => undefined);
+const ageRange = load("utils/findLoveAgeRange.ts", {}, () => undefined);
 function loadService(env) {
   return load("services/findLoveService.ts", env, (name) => {
     if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
+    if (name === "@/utils/findLoveAgeRange") return ageRange;
     if (name === "@/constants/loveProfiles") return profiles;
     if (name === "@/utils/apiClient") return { api, ApiError };
     if (name === "@/utils/findLoveProfile") return rules;
@@ -95,9 +97,12 @@ test("FindLove and its API are off unless explicitly switched on", () => {
   assert.equal(real.USE_FINDLOVE_API, true);
 });
 
-test("profiles without a valid 18+ age are dropped, never defaulted", () => {
+test("an age, when sent, must be a whole 18+; rows without one are kept with no age", () => {
   const base = { id: "p1", name: "Ana", gender: "female" };
-  assert.equal(demo.normalizeLoveProfile(base), null);
+  // The server stops sending ages once age search runs there.
+  const noAge = demo.normalizeLoveProfile(base);
+  assert.ok(noAge);
+  assert.equal(noAge.age, undefined);
   assert.equal(demo.normalizeLoveProfile({ ...base, age: 17 }), null);
   assert.equal(demo.normalizeLoveProfile({ ...base, age: "abc" }), null);
   assert.equal(demo.normalizeLoveProfile({ ...base, age: 18.5 }), null);
@@ -443,7 +448,7 @@ test("extras are saved, trimmed and read back; empty ones are dropped", async ()
 });
 // ---- Phase 2: discovery ----
 
-const discovery = load("utils/findLoveDiscovery.ts", {}, () => undefined);
+const discovery = load("utils/findLoveDiscovery.ts", {}, (name) => (name === "@/utils/findLoveAgeRange" ? ageRange : undefined));
 const NOW = Date.parse("2026-10-15T12:00:00Z");
 const ago = (minutes) => new Date(NOW - minutes * 60000).toISOString();
 const person = (over) => ({
@@ -497,6 +502,102 @@ test("filters combine and results are ordered online, recent, away", () => {
   assert.equal(forMen.gender, "Man");
   assert.equal(discovery.activeFilterCount(forMen, forMen), 0, "the member's own preference is not an active filter");
   assert.equal(discovery.defaultFiltersFor(undefined).gender, "All");
+});
+
+// ---- Age-range search (ages never shown) ----
+
+test("age ranges cover at least 5 years and stay within 18–70+", () => {
+  assert.equal(ageRange.validateLoveAgeRange(undefined), undefined);
+  assert.equal(ageRange.validateLoveAgeRange({ min: 25, max: 30 }), undefined);
+  assert.match(ageRange.validateLoveAgeRange({ min: 25, max: 29 }), /at least 5 years/);
+  assert.match(ageRange.validateLoveAgeRange({ min: 30, max: 30 }), /at least 5 years/);
+  assert.match(ageRange.validateLoveAgeRange({ min: 17, max: 30 }), /18/);
+  assert.match(ageRange.validateLoveAgeRange({ min: 20, max: 71 }), /70/);
+  assert.match(ageRange.validateLoveAgeRange({ min: 20.5, max: 30 }), /whole/);
+});
+
+test("stepping one end pushes the other to keep the 5-year gap, within bounds", () => {
+  assert.deepEqual(ageRange.stepAgeRange({ min: 25, max: 30 }, "min", 1), { min: 26, max: 31 });
+  assert.deepEqual(ageRange.stepAgeRange({ min: 25, max: 30 }, "max", -1), { min: 24, max: 29 });
+  assert.deepEqual(ageRange.stepAgeRange({ min: 25, max: 40 }, "min", 1), { min: 26, max: 40 });
+  assert.deepEqual(ageRange.stepAgeRange({ min: 18, max: 23 }, "min", -1), { min: 18, max: 23 });
+  assert.deepEqual(ageRange.stepAgeRange({ min: 18, max: 23 }, "max", -1), { min: 18, max: 23 });
+  assert.deepEqual(ageRange.stepAgeRange({ min: 65, max: 70 }, "min", 1), { min: 65, max: 70 });
+  assert.deepEqual(ageRange.stepAgeRange({ min: 65, max: 70 }, "max", 1), { min: 65, max: 70 });
+});
+
+test("age range labels, query and API parsing", () => {
+  assert.equal(ageRange.formatAgeRange(undefined), "Any age");
+  assert.equal(ageRange.formatAgeRange({ min: 18, max: 70 }), "Any age");
+  assert.equal(ageRange.formatAgeRange({ min: 25, max: 32 }), "25–32");
+  assert.equal(ageRange.formatAgeRange({ min: 40, max: 70 }), "40+");
+  assert.equal(ageRange.ageRangeQuery(undefined), "");
+  assert.equal(ageRange.ageRangeQuery({ min: 25, max: 32 }), "ageMin=25&ageMax=32");
+  assert.equal(ageRange.ageRangeQuery({ min: 40, max: 70 }), "ageMin=40", "70 means and older");
+  assert.equal(ageRange.ageRangeQuery({ min: 18, max: 30 }), "ageMax=30");
+  assert.deepEqual(ageRange.normalizeLoveAgeRange({ preferredAgeMin: 25, preferredAgeMax: 32 }), { min: 25, max: 32 });
+  assert.deepEqual(ageRange.normalizeLoveAgeRange({ preferred_age_min: "30", preferred_age_max: 70 }), { min: 30, max: 70 });
+  assert.deepEqual(ageRange.normalizeLoveAgeRange({ ageRange: { min: 22, max: 27 } }), { min: 22, max: 27 });
+  assert.equal(ageRange.normalizeLoveAgeRange({ preferredAgeMin: 30, preferredAgeMax: 31 }), undefined, "too narrow = no preference");
+  assert.equal(ageRange.normalizeLoveAgeRange({ preferredAgeMin: null, preferredAgeMax: null }), undefined);
+  assert.equal(ageRange.normalizeLoveAgeRange({}), undefined);
+});
+
+test("the saved range is the starting filter, not an active one; a different range is", () => {
+  const defaults = discovery.defaultFiltersFor("Woman", { min: 25, max: 32 });
+  assert.deepEqual(defaults.ageRange, { min: 25, max: 32 });
+  assert.equal(discovery.activeFilterCount(defaults, defaults), 0);
+  assert.equal(discovery.activeFilterCount({ ...defaults, ageRange: { min: 25, max: 35 } }, defaults), 1);
+  assert.equal(discovery.activeFilterCount({ ...defaults, ageRange: undefined }, defaults), 1);
+  assert.equal(discovery.defaultFiltersFor("Woman", { min: 18, max: 70 }).ageRange, undefined, "18–70+ is any age");
+});
+
+test("demo: the profile list carries no ages; age search returns only matching ids", async () => {
+  const list = await demo.fetchLoveProfiles("RW");
+  assert.ok(list.length > 0);
+  assert.ok(list.every((p) => !("age" in p)), "no ages reach the phone");
+  assert.equal(await demo.fetchLoveProfileIdsInAgeRange("RW", undefined), null, "any age: no search");
+  const ids = await demo.fetchLoveProfileIdsInAgeRange("RW", { min: 25, max: 30 });
+  const expected = profiles.MOCK_LOVE_PROFILES.filter((p) => p.country === "RW" && p.age >= 25 && p.age <= 30).map((p) => p.id);
+  assert.deepEqual([...ids].sort(), expected.sort());
+  assert.ok(ids.size < list.length, "the demo range leaves someone out");
+  await assert.rejects(demo.fetchLoveProfileIdsInAgeRange("RW", { min: 30, max: 31 }), /at least 5 years/);
+  assert.deepEqual(apiCalls, []);
+});
+
+test("real mode: age search goes to the server as query params", async () => {
+  apiHandler = async () => ({ profiles: [{ id: "a", gender: "female" }, { id: "b", gender: "male" }] });
+  const ids = await real.fetchLoveProfileIdsInAgeRange("RW", { min: 25, max: 32 });
+  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/love-profiles?country=RW&ageMin=25&ageMax=32"]);
+  assert.deepEqual([...ids], ["a", "b"]);
+  await real.fetchLoveProfileIdsInAgeRange(undefined, { min: 40, max: 70 });
+  assert.deepEqual(apiCalls[1], ["GET", "/api/v1/love-profiles?ageMin=40"]);
+});
+
+test("the preferred range is saved, read back, cleared, and checked", async () => {
+  apiHandler = async (_method, _path, body) => ({ ...body, gender: "female" });
+  const saved = await real.saveMyLoveProfile("u1", { ...validInput, ageRange: { min: 25, max: 32 } }, false);
+  assert.equal(apiCalls[0][2].preferredAgeMin, 25);
+  assert.equal(apiCalls[0][2].preferredAgeMax, 32);
+  assert.equal(apiCalls[0][2].ageRange, undefined, "sent as preferredAgeMin/Max only");
+  assert.deepEqual(saved.ageRange, { min: 25, max: 32 });
+
+  await real.saveMyLoveProfile("u1", { ...validInput, ageRange: { min: 40, max: 70 } }, false);
+  assert.equal(apiCalls[1][2].preferredAgeMin, 40);
+  assert.equal(apiCalls[1][2].preferredAgeMax, null, "70+ has no upper limit");
+
+  const cleared = await real.saveMyLoveProfile("u1", { ...validInput, ageRange: undefined }, false);
+  assert.equal(apiCalls[2][2].preferredAgeMin, null);
+  assert.equal(cleared.ageRange, undefined);
+
+  await assert.rejects(
+    real.saveMyLoveProfile("u1", { ...validInput, ageRange: { min: 30, max: 32 } }, false),
+    (err) => err.field === "ageRange",
+  );
+
+  const demoSaved = await demo.saveMyLoveProfile("u2", { ...validInput, ageRange: { min: 22, max: 28 } }, true);
+  assert.deepEqual(demoSaved.ageRange, { min: 22, max: 28 });
+  assert.deepEqual((await demo.fetchMyLoveProfile("u2")).ageRange, { min: 22, max: 28 });
 });
 
 test("demo list gives every member a last-active time and includes a private member", async () => {

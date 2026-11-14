@@ -24,6 +24,9 @@ import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 
 const USE_NATIVE_DRIVER = Platform.OS !== "web";
 
+// Set to false to switch Live off: the tab then stays visible but greyed out and does nothing.
+const LIVE_ENABLED = true;
+
 interface TabIconProps {
   color: ColorValue;
   focused: boolean;
@@ -32,6 +35,8 @@ interface TabIconProps {
   badgeCount?: number;
   isCreate?: boolean;
   isDisabled?: boolean;
+  /** Small caption under the icon. */
+  label?: string;
 }
 
 function TabIcon({
@@ -42,6 +47,7 @@ function TabIcon({
   badgeCount,
   isCreate = false,
   isDisabled = false,
+  label,
 }: TabIconProps) {
   const colors = useColors();
   const { scheme } = useTheme();
@@ -71,12 +77,14 @@ function TabIcon({
       <Animated.View
         style={[
           styles.iconSlot,
+          label && styles.labelledSlot,
           { transform: [{ scale: scaleAnim }] },
         ]}
       >
         <View
           style={[
             styles.createSquircle,
+            label && styles.createSquircleLabelled,
             {
               borderColor: focused
                 ? colors.primary
@@ -93,11 +101,16 @@ function TabIcon({
         >
           <Ionicons
             name="add"
-            size={22}
+            size={label ? 20 : 22}
             color={focused ? colors.primary : colors.foreground}
           />
         </View>
-        {focused && <View style={[styles.activeDot, { backgroundColor: colors.primary }]} />}
+        {label ? (
+          <Text numberOfLines={1} style={[styles.iconLabel, { color: focused ? colors.primary : color }]}>
+            {label}
+          </Text>
+        ) : null}
+        {focused && !label && <View style={[styles.activeDot, { backgroundColor: colors.primary }]} />}
       </Animated.View>
     );
   }
@@ -106,6 +119,7 @@ function TabIcon({
     <Animated.View
       style={[
         styles.iconSlot,
+        label && styles.labelledSlot,
         isDisabled && styles.disabledSlot,
         { transform: [{ scale: scaleAnim }] },
       ]}
@@ -115,12 +129,24 @@ function TabIcon({
         size={24}
         color={isDisabled ? colors.disabled : focused ? colors.primary : (typeof color === "string" ? color : colors.foreground)}
       />
+      {label ? (
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.iconLabel,
+            { color: isDisabled ? colors.disabled : focused ? colors.primary : color },
+          ]}
+        >
+          {label}
+        </Text>
+      ) : null}
 
       {/* Unread message badge */}
       {badgeCount !== undefined && badgeCount > 0 && (
         <View
           style={[
             styles.tabBadge,
+            label ? { top: -1, right: 14 } : null,
             {
               backgroundColor: "#38BDF8",
               borderColor: isDark ? "#0A0F1E" : "#FFFFFF",
@@ -134,7 +160,7 @@ function TabIcon({
       )}
 
       {/* Active micro indicator dot */}
-      {focused && !isDisabled && (
+      {focused && !isDisabled && !label && (
         <View style={[styles.activeDot, { backgroundColor: colors.primary }]} />
       )}
     </Animated.View>
@@ -144,9 +170,11 @@ function TabIcon({
 function LiveTabIcon({
   color,
   focused,
+  isDisabled = false,
 }: {
   color: ColorValue;
   focused: boolean;
+  isDisabled?: boolean;
 }) {
   const colors = useColors();
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -154,6 +182,7 @@ function LiveTabIcon({
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    if (isDisabled) return;
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.parallel([
@@ -186,7 +215,7 @@ function LiveTabIcon({
     );
     pulse.start();
     return () => pulse.stop();
-  }, [pulseAnim, pulseOpacity]);
+  }, [isDisabled, pulseAnim, pulseOpacity]);
 
   useEffect(() => {
     if (focused) {
@@ -206,10 +235,20 @@ function LiveTabIcon({
     }
   }, [focused, scaleAnim]);
 
+  if (isDisabled) {
+    return (
+      <View style={[styles.iconSlot, styles.labelledSlot, styles.disabledSlot]}>
+        <Ionicons name="videocam-outline" size={22} color={colors.disabled} />
+        <Text numberOfLines={1} style={[styles.iconLabel, { color: colors.disabled }]}>Live</Text>
+      </View>
+    );
+  }
+
   return (
     <Animated.View
       style={[
         styles.iconSlot,
+        styles.labelledSlot,
         { transform: [{ scale: scaleAnim }] },
       ]}
     >
@@ -218,8 +257,9 @@ function LiveTabIcon({
         size={24}
         color={focused ? "#EF4444" : (typeof color === "string" ? color : colors.mutedForeground)}
       />
+      <Text numberOfLines={1} style={[styles.iconLabel, { color: focused ? "#EF4444" : color }]}>Live</Text>
       {/* Sleek LIVE micro-badge with pulsing beacon */}
-      <View style={styles.liveMicroBadge}>
+      <View style={[styles.liveMicroBadge, styles.liveMicroBadgeLabelled]}>
         <View style={styles.livePulseContainer}>
           <Animated.View
             style={[
@@ -234,8 +274,6 @@ function LiveTabIcon({
         </View>
         <Text style={styles.liveMicroText}>LIVE</Text>
       </View>
-
-      {focused && <View style={[styles.activeDot, { backgroundColor: "#EF4444" }]} />}
     </Animated.View>
   );
 }
@@ -322,6 +360,7 @@ function TabLayout() {
                 inactiveIcon="home-outline"
                 color={color}
                 focused={focused}
+                label="Home"
               />
             ),
           }}
@@ -343,6 +382,7 @@ function TabLayout() {
                 color={color}
                 focused={focused}
                 badgeCount={unread}
+                label="Chat"
               />
             ),
           }}
@@ -364,6 +404,7 @@ function TabLayout() {
                 inactiveIcon="add"
                 color={color}
                 focused={focused}
+                label="Create"
               />
             ),
           }}
@@ -392,6 +433,7 @@ function TabLayout() {
                 color={color}
                 focused={FIND_LOVE_ENABLED && focused}
                 isDisabled={!FIND_LOVE_ENABLED}
+                label="FindLove"
               />
             ),
           }}
@@ -399,10 +441,17 @@ function TabLayout() {
         <Tabs.Screen name="tickets" options={HIDDEN_TAB_OPTIONS} />
         <Tabs.Screen
           name="live"
+          listeners={{
+            tabPress: (event) => {
+              if (!LIVE_ENABLED) event.preventDefault();
+            },
+          }}
           options={{
-            title: "Live",
+            title: LIVE_ENABLED ? "Live" : "Live · Soon",
+            tabBarAccessibilityLabel: LIVE_ENABLED ? "Live" : "Live, temporarily unavailable",
+            tabBarItemStyle: [styles.item, !LIVE_ENABLED && styles.disabledItem],
             tabBarIcon: ({ color, focused }) => (
-              <LiveTabIcon color={color} focused={focused} />
+              <LiveTabIcon color={color} focused={LIVE_ENABLED && focused} isDisabled={!LIVE_ENABLED} />
             ),
           }}
         />
@@ -551,12 +600,26 @@ const styles = StyleSheet.create({
   disabledSlot: {
     opacity: 0.45,
   },
+  labelledSlot: {
+    width: 64,
+  },
+  iconLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: 1,
+    lineHeight: 12,
+  },
   activeDot: {
     position: "absolute",
     bottom: 2,
     width: 4,
     height: 4,
     borderRadius: 2,
+  },
+  createSquircleLabelled: {
+    width: 30,
+    height: 26,
+    borderRadius: 9,
   },
   createSquircle: {
     width: 34,
@@ -602,6 +665,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 3,
     elevation: 4,
+  },
+  // The labelled slot is wider, so pull the badge back over the camera icon.
+  liveMicroBadgeLabelled: {
+    top: -2,
+    right: 1,
   },
   livePulseContainer: {
     width: 5,
