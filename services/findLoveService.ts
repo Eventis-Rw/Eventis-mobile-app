@@ -13,6 +13,15 @@ import {
 } from "@/constants/loveProfiles";
 import { api, ApiError } from "@/utils/apiClient";
 import {
+  ageInRange,
+  ageRangeQuery,
+  isAnyAgeRange,
+  LOVE_AGE_RANGE_MAX,
+  normalizeLoveAgeRange,
+  validateLoveAgeRange,
+  type LoveAgeRange,
+} from "@/utils/findLoveAgeRange";
+import {
   afterFailedRead,
   AGE_VERIFICATION_NOT_STARTED,
   canSubmitAgeVerification,
@@ -129,8 +138,8 @@ function optionalCountry(value: unknown): string | undefined {
 
 /**
  * Maps one API row to a profile. FindLove is 18+ only and gender is required,
- * so a row without a whole-number age of at least 18 or a known gender is
- * dropped rather than given a default.
+ * so a row with an age under 18 (or not a whole number) or without a known
+ * gender is dropped rather than given a default.
  */
 export function normalizeLoveProfile(value: unknown): LoveProfile | null {
   if (!value || typeof value !== "object") return null;
@@ -138,8 +147,13 @@ export function normalizeLoveProfile(value: unknown): LoveProfile | null {
   const id = String(source.id ?? source.profileId ?? "");
   if (!id) return null;
 
-  const age = typeof source.age === "number" ? source.age : Number(source.age ?? Number.NaN);
-  if (!Number.isInteger(age) || age < MIN_LOVE_AGE) return null;
+  // Age is optional: the server should stop sending it, since age search runs
+  // there. When it is sent, anything below 18 or not a whole number drops the row.
+  let age: number | undefined;
+  if (source.age !== undefined) {
+    age = typeof source.age === "number" ? source.age : Number(source.age ?? Number.NaN);
+    if (!Number.isInteger(age) || age < MIN_LOVE_AGE) return null;
+  }
 
   const gender = normalizeGender(source.gender);
   if (!gender) return null;
@@ -231,8 +245,9 @@ export async function fetchLoveProfiles(country?: string): Promise<LoveProfile[]
     const saved = await readDemoConnections();
     const now = Date.now();
     const rows = country ? MOCK_LOVE_PROFILES.filter((profile) => profile.country === country) : MOCK_LOVE_PROFILES;
-    return rows.map((profile) => {
+    return rows.map(({ age: _age, ...profile }) => {
       const minutes = DEMO_LAST_ACTIVE_MINUTES[profile.id];
+      // Like the real API, the list carries no ages.
       return {
         ...profile,
         lastActiveAt: minutes === undefined ? profile.lastActiveAt : new Date(now - minutes * 60000).toISOString(),
@@ -240,9 +255,39 @@ export async function fetchLoveProfiles(country?: string): Promise<LoveProfile[]
       };
     });
   }
-  const path = country ? `/api/v1/love-profiles?country=${encodeURIComponent(country)}` : "/api/v1/love-profiles";
-  const response = await withTimeout(api.get<unknown>(path), PROFILES_TIMEOUT_MS);
+  const response = await withTimeout(api.get<unknown>(profilesPath(country)), PROFILES_TIMEOUT_MS);
   return readLoveProfilesResponse(response);
+}
+
+function profilesPath(country: string | undefined, range?: LoveAgeRange): string {
+  const query = [country ? `country=${encodeURIComponent(country)}` : "", ageRangeQuery(range)].filter(Boolean).join("&");
+  return query ? `/api/v1/love-profiles?${query}` : "/api/v1/love-profiles";
+}
+
+// INTEGRATION POINT: GET /api/v1/love-profiles?country=RW&ageMin=25&ageMax=32
+// Same endpoint and reply as fetchLoveProfiles, plus age filters. The server
+// matches them against each member's date of birth from the ID check and must
+// NOT include ages in the reply. No ageMax means "and older". It should refuse
+// (400) a range narrower than LOVE_AGE_RANGE_MIN_SPAN years, so exact ages can't
+// be worked out by searching one year at a time.
+/**
+ * Ids of the members whose age is in `range`, or null for any age (no request
+ * made). Home shows only these; the full list stays as it is for chats and requests.
+ */
+export async function fetchLoveProfileIdsInAgeRange(country: string | undefined, range: LoveAgeRange | undefined): Promise<Set<string> | null> {
+  if (isAnyAgeRange(range)) return null;
+  const rangeError = validateLoveAgeRange(range);
+  if (rangeError) throw new Error(rangeError);
+  if (!USE_FINDLOVE_API) {
+    await wait(250);
+    return new Set(
+      MOCK_LOVE_PROFILES.filter((profile) => (!country || profile.country === country) && profile.age !== undefined && ageInRange(profile.age, range)).map(
+        (profile) => profile.id,
+      ),
+    );
+  }
+  const response = await withTimeout(api.get<unknown>(profilesPath(country, range)), PROFILES_TIMEOUT_MS);
+  return new Set(readLoveProfilesResponse(response).map((profile) => profile.id));
 }
 
 /** The member needs an active Private membership to connect with this person. */
@@ -342,7 +387,8 @@ export class LoveProfileInputError extends Error {
       | "interests"
       | "relationshipGoal"
       | "lookingFor"
-      | "neighborhood",
+      | "neighborhood"
+      | "ageRange",
     message: string,
   ) {
     super(message);
@@ -380,16 +426,20 @@ export function checkMyLoveProfileInput(input: MyLoveProfileInput, isNew: boolea
   if (lookingForError) throw new LoveProfileInputError("lookingFor", lookingForError);
   const neighborhoodError = validateLoveNeighborhood(input.neighborhood, input.country);
   if (neighborhoodError) throw new LoveProfileInputError("neighborhood", neighborhoodError);
+  const ageRangeError = validateLoveAgeRange(input.ageRange);
+  if (ageRangeError) throw new LoveProfileInputError("ageRange", ageRangeError);
 }
 
 /** Trims the optional extras and drops empty ones so storage and the API see one shape. */
-function cleanExtras(input: Pick<MyLoveProfileInput, "bio" | "interests" | "relationshipGoal" | "lookingFor" | "neighborhood">) {
+function cleanExtras(input: Pick<MyLoveProfileInput, "bio" | "interests" | "relationshipGoal" | "lookingFor" | "neighborhood" | "ageRange">) {
   return {
     bio: input.bio?.trim() || undefined,
     interests: [...new Set(input.interests ?? [])],
     relationshipGoal: input.relationshipGoal || undefined,
     lookingFor: input.lookingFor?.trim() || undefined,
     neighborhood: input.neighborhood || undefined,
+    // 18–70+ is the same as no preference.
+    ageRange: isAnyAgeRange(input.ageRange) ? undefined : { min: input.ageRange!.min, max: input.ageRange!.max },
   };
 }
 
@@ -423,6 +473,7 @@ export function normalizeMyLoveProfile(value: unknown): MyLoveProfile | null {
     relationshipGoal: normalizeLoveRelationshipGoal(source.relationshipGoal ?? source.relationship_goal),
     lookingFor: optionalString(source.lookingFor ?? source.looking_for),
     neighborhood: optionalString(source.neighborhood ?? source.neighbourhood),
+    ageRange: normalizeLoveAgeRange(source),
     createdAt: optionalString(source.createdAt) ?? now,
     updatedAt: optionalString(source.updatedAt) ?? now,
   };
@@ -499,6 +550,7 @@ export async function saveMyLoveProfile(
     return saved;
   }
 
+  const { ageRange, ...extras } = cleanExtras(input);
   const body = {
     username,
     gender: input.gender.toLowerCase().replace(/ /g, "_"),
@@ -506,7 +558,10 @@ export async function saveMyLoveProfile(
     dateOfBirth: input.dateOfBirth,
     photoUrls: input.photoUrls,
     country: input.country,
-    ...cleanExtras(input),
+    ...extras,
+    // null clears a saved preference; a null max means "and older".
+    preferredAgeMin: ageRange?.min ?? null,
+    preferredAgeMax: ageRange && ageRange.max < LOVE_AGE_RANGE_MAX ? ageRange.max : null,
     ...(isNew ? { confirmedAdult: true, accountType: input.accountType ?? "public" } : {}),
   };
   try {

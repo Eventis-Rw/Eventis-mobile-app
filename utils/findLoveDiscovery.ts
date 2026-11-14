@@ -6,6 +6,8 @@
  * only limits who may connect (utils/findLoveMembership.ts).
  */
 
+import { isAnyAgeRange, sameAgeRange, type LoveAgeRange } from "@/utils/findLoveAgeRange";
+
 /** Active within this window = "Online". */
 export const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 /** Active within this window = "Recently active". */
@@ -62,19 +64,29 @@ export interface DiscoveryFilters {
   presence: PresenceFilter;
   /** One of LOVE_NEIGHBORHOODS, or undefined for anywhere. */
   neighborhood?: string;
+  /**
+   * Undefined for any age. Profiles carry no ages, so filterProfiles ignores
+   * this; the server does the age search (fetchLoveProfileIdsInAgeRange).
+   */
+  ageRange?: LoveAgeRange;
   query: string;
 }
 
 export const DEFAULT_DISCOVERY_FILTERS: DiscoveryFilters = { gender: "All", presence: "any", query: "" };
 
-/** The member's starting filters: their "Interested in" choice, everything else open. */
-export function defaultFiltersFor(interestedIn: GenderFilter | undefined): DiscoveryFilters {
-  return { ...DEFAULT_DISCOVERY_FILTERS, gender: interestedIn ?? "All" };
+/** The member's starting filters: their "Interested in" and saved age range, everything else open. */
+export function defaultFiltersFor(interestedIn: GenderFilter | undefined, ageRange?: LoveAgeRange): DiscoveryFilters {
+  return { ...DEFAULT_DISCOVERY_FILTERS, gender: interestedIn ?? "All", ageRange: isAnyAgeRange(ageRange) ? undefined : ageRange };
 }
 
-/** Filters changed from `defaults`; the member's own "Interested in" doesn't count. */
+/** Filters changed from `defaults`; the member's own "Interested in" and saved age range don't count. */
 export function activeFilterCount(filters: DiscoveryFilters, defaults: DiscoveryFilters = DEFAULT_DISCOVERY_FILTERS): number {
-  return (filters.gender !== defaults.gender ? 1 : 0) + (filters.presence !== "any" ? 1 : 0) + (filters.neighborhood ? 1 : 0);
+  return (
+    (filters.gender !== defaults.gender ? 1 : 0) +
+    (filters.presence !== "any" ? 1 : 0) +
+    (filters.neighborhood ? 1 : 0) +
+    (sameAgeRange(filters.ageRange, defaults.ageRange) ? 0 : 1)
+  );
 }
 
 /**

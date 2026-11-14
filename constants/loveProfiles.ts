@@ -1,7 +1,8 @@
 import type { LoveGender, LoveInterestedIn, LoveRelationshipGoal } from "@/utils/findLoveProfile";
 import type { LoveAccountType, LoveMembership } from "@/utils/findLoveMembership";
+import type { LoveAgeRange } from "@/utils/findLoveAgeRange";
 
-export type { LoveAccountType, LoveGender, LoveInterestedIn, LoveMembership, LoveRelationshipGoal };
+export type { LoveAccountType, LoveAgeRange, LoveGender, LoveInterestedIn, LoveMembership, LoveRelationshipGoal };
 /**
  * The viewer's connection with another member:
  * - pending: the viewer sent a request, no answer yet.
@@ -36,6 +37,8 @@ export interface MyLoveProfile {
   lookingFor?: string;
   /** One of LOVE_NEIGHBORHOODS. Never an exact location. */
   neighborhood?: string;
+  /** Ages they want to meet; Home starts on it. Missing = any age. Only they see it. */
+  ageRange?: LoveAgeRange;
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +62,8 @@ export interface MyLoveProfileInput {
   relationshipGoal?: LoveRelationshipGoal;
   lookingFor?: string;
   neighborhood?: string;
+  /** Missing or 18–70+ = any age. */
+  ageRange?: LoveAgeRange;
   /** Create only: the member ticked "I confirm I am 18 or older". */
   confirmedAdult?: boolean;
 }
@@ -70,7 +75,11 @@ export interface LoveProfile {
   username: string;
   name: string;
   gender: LoveGender;
-  age: number;
+  /**
+   * Never shown. The server should stop sending it, since age search runs on
+   * the server; the local demo uses it to fake that search.
+   */
+  age?: number;
   city: string;
   /** ISO country code; discovery only lists members from the viewer's country. */
   country?: string;
