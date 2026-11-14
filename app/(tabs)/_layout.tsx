@@ -23,8 +23,8 @@ import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
 
 const USE_NATIVE_DRIVER = Platform.OS !== "web";
 
-// Live is switched off for now: the tab stays visible but greyed out and does nothing.
-const LIVE_ENABLED = false;
+// Set to false to switch Live off: the tab then stays visible but greyed out and does nothing.
+const LIVE_ENABLED = true;
 
 interface TabIconProps {
   color: ColorValue;
