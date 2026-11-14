@@ -5,7 +5,7 @@ import { LoveScreenShell } from "@/components/love/LoveScreenShell";
 import { LegalDocumentView } from "@/components/support/LegalDocumentView";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/constants/legal";
 
-/** Terms of Service and Privacy Policy, reached from Account safety. */
+/** Terms of Service and Privacy Policy, reached from "Terms & privacy" on the Me tab. */
 export default function LovePoliciesScreen() {
   const router = useRouter();
 

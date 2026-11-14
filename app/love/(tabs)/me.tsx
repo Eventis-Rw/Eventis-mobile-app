@@ -3,8 +3,10 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
 import { LoveHeader } from "@/components/love/LoveHeader";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
+import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
 import { cheapestPlan, formatMembershipPrice } from "@/utils/findLoveMembership";
@@ -17,7 +19,25 @@ export default function LoveMeScreen() {
   const colors = useColors();
   const router = useRouter();
   const { myProfile, accountType, verification } = useMyLoveProfile();
+  const { logout } = useAuth();
   const [photoFailed, setPhotoFailed] = useState(false);
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  const doLogout = async () => {
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      await logout();
+      setConfirmingLogout(false);
+    } catch {
+      setConfirmingLogout(false);
+      setLogoutError("We couldn't log you out. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
   const photo = myProfile?.photoUrls[0];
   const isPrivate = accountType === "private";
   const expiresAt = myProfile?.membership.expiresAt;
@@ -26,7 +46,7 @@ export default function LoveMeScreen() {
 
   const rows: { icon: IconName; label: string; value?: string; onPress: () => void }[] = [
     { icon: "create-outline", label: "Edit profile, bio & photos", onPress: () => router.push("/love/edit" as any) },
-    { icon: "lock-closed-outline", label: "Account safety", onPress: () => router.push("/love/settings" as any) },
+    { icon: "document-text-outline", label: "Terms & privacy", onPress: () => router.push("/love/policies" as any) },
     {
       icon: "shield-checkmark-outline",
       label: "Age verification",
@@ -103,7 +123,36 @@ export default function LoveMeScreen() {
             </Pressable>
           ))}
         </View>
+
+        {/* Kept in its own card, apart from the rows above, so it is easy to find but hard to hit by accident. */}
+        <Pressable
+          onPress={() => setConfirmingLogout(true)}
+          style={({ pressed }) => [
+            styles.list,
+            styles.row,
+            { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Log out of Eventis"
+        >
+          <View style={[styles.rowIcon, { backgroundColor: colors.glass }]}>
+            <Ionicons name="log-out-outline" size={19} color={colors.destructive} />
+          </View>
+          <Text style={[styles.rowLabel, { color: colors.destructive }]}>Log out</Text>
+        </Pressable>
+        {logoutError ? <Text style={[styles.error, { color: colors.destructive }]}>{logoutError}</Text> : null}
       </ScrollView>
+
+      <ChatConfirmDialog
+        visible={confirmingLogout}
+        title="Log out of Eventis?"
+        description="You'll need to sign in again to use FindLove, see your tickets and bookings."
+        confirmLabel="Log out"
+        destructive
+        busy={loggingOut}
+        onConfirm={() => void doLogout()}
+        onClose={() => setConfirmingLogout(false)}
+      />
     </View>
   );
 }
@@ -128,4 +177,5 @@ const styles = StyleSheet.create({
   rowIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   rowLabel: { flex: 1, fontSize: 15, fontFamily: "Inter_600SemiBold" },
   rowValue: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  error: { fontSize: 12, fontFamily: "Inter_500Medium", paddingHorizontal: 4, marginTop: -6 },
 });
