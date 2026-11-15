@@ -7,13 +7,14 @@ import { ActivityIndicator, BackHandler, Image, Platform, Pressable, StyleSheet,
 
 import { LoveScreenShell } from "@/components/love/LoveScreenShell";
 import { Section } from "@/components/love/LoveProfileForm";
+import { FormField } from "@/components/OrganisationForm";
 import { InlineError, SectionState } from "@/components/profile/ProfileSection";
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
 import { describeError } from "@/services/organiserService";
 import { USE_FINDLOVE_API } from "@/services/findLoveService";
-import { MIN_LOVE_AGE } from "@/utils/findLoveProfile";
+import { isAdult, MIN_LOVE_AGE } from "@/utils/findLoveProfile";
 import {
   describeAgeVerification,
   ID_DOCUMENTS,
@@ -24,6 +25,14 @@ import {
 } from "@/utils/findLoveAgeVerification";
 
 const SHOW_DEMO_CONTROLS = __DEV__ && !USE_FINDLOVE_API;
+/** The backend can't read IDs yet, so with the real API the member types the date of birth from their ID. */
+const ASK_DATE_OF_BIRTH = USE_FINDLOVE_API;
+
+function dateOfBirthError(value: string): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) return "Use the format YYYY-MM-DD, e.g. 1998-03-15.";
+  if (!isAdult(value)) return `FindLove is only for people aged ${MIN_LOVE_AGE} and over.`;
+  return undefined;
+}
 
 const TIPS = [
   "The whole document is inside the photo",
@@ -52,6 +61,7 @@ export default function VerifyAgeScreen() {
   const [documentType, setDocumentType] = useState<IdDocumentType>("national_id");
   const [photos, setPhotos] = useState<Partial<Record<IdSide, string>>>({});
   const [confirmed, setConfirmed] = useState(false);
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   // Leaving while the photos upload would hide the result, so the back button waits.
@@ -106,6 +116,10 @@ export default function VerifyAgeScreen() {
       setError("Add a photo of every side of your ID first.");
       return;
     }
+    if (ASK_DATE_OF_BIRTH && dateOfBirthError(dateOfBirth)) {
+      setError(dateOfBirthError(dateOfBirth) ?? null);
+      return;
+    }
     if (!confirmed) {
       setError(`Tick the box to confirm you are ${MIN_LOVE_AGE} or older and this is your own ID.`);
       return;
@@ -113,7 +127,7 @@ export default function VerifyAgeScreen() {
     setError(null);
     setSending(true);
     try {
-      const result = await submitVerification({ documentType, photos, confirmedAdult: true });
+      const result = await submitVerification({ documentType, photos, confirmedAdult: true, ...(ASK_DATE_OF_BIRTH ? { dateOfBirth } : {}) });
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(
           result.status === "verified" ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning,
@@ -200,7 +214,9 @@ export default function VerifyAgeScreen() {
     <LoveScreenShell title="Verify your age" onBack={verification.status === "failed" ? () => setCapturing(false) : leave} stepLabel={stepLabel}>
       <Text style={[styles.lead, { color: colors.foreground }]}>Confirm you're {MIN_LOVE_AGE}+ with your ID</Text>
       <Text style={[styles.leadText, { color: colors.mutedForeground }]}>
-        FindLove is for adults only. We read your date of birth from your ID, so there's nothing to type.
+        {ASK_DATE_OF_BIRTH
+          ? "FindLove is for adults only. Add photos of your ID and the date of birth printed on it."
+          : "FindLove is for adults only. We read your date of birth from your ID, so there's nothing to type."}
       </Text>
 
       <View style={[styles.privacy, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -271,6 +287,24 @@ export default function VerifyAgeScreen() {
         </View>
       </Section>
 
+      {ASK_DATE_OF_BIRTH ? (
+        <Section title="Date of birth" hint="Exactly as printed on your ID. Other members never see it.">
+          <FormField
+            label="Date of birth"
+            placeholder="YYYY-MM-DD"
+            value={dateOfBirth}
+            onChangeText={(text) => {
+              setError(null);
+              setDateOfBirth(text.trim());
+            }}
+            keyboardType="numbers-and-punctuation"
+            autoCorrect={false}
+            maxLength={10}
+            error={dateOfBirth.length === 10 ? dateOfBirthError(dateOfBirth) : undefined}
+          />
+        </Section>
+      ) : null}
+
       <Pressable
         onPress={() => {
           setError(null);
@@ -287,7 +321,7 @@ export default function VerifyAgeScreen() {
       </Pressable>
 
       {error ? <InlineError message={error} /> : null}
-      <PrimaryButton label="Send for checking" onPress={() => void send()} disabled={!ready || !confirmed} />
+      <PrimaryButton label="Send for checking" onPress={() => void send()} disabled={!ready || !confirmed || (ASK_DATE_OF_BIRTH && !!dateOfBirthError(dateOfBirth))} />
     </LoveScreenShell>
   );
 }
