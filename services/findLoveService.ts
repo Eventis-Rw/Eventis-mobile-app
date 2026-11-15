@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
 
 import {
   DEMO_LAST_ACTIVE_MINUTES,
@@ -11,12 +10,21 @@ import {
   type MyLoveProfile,
   type MyLoveProfileInput,
 } from "@/constants/loveProfiles";
+import {
+  activateMockMembership,
+  apiConnections,
+  apiDiscover,
+  apiFetchAgeVerification,
+  apiFetchMyProfile,
+  apiRequestConnection,
+  apiRespondToConnection,
+  apiSaveMyProfile,
+  apiSubmitAgeVerification,
+} from "@/services/findLoveApi";
 import { api, ApiError } from "@/utils/apiClient";
 import {
   ageInRange,
-  ageRangeQuery,
   isAnyAgeRange,
-  LOVE_AGE_RANGE_MAX,
   normalizeLoveAgeRange,
   validateLoveAgeRange,
   type LoveAgeRange,
@@ -60,10 +68,10 @@ import {
 /**
  * FindLove data: member profiles and connection requests.
  *
- * BACKEND STATUS: no FindLove endpoints are confirmed yet (see
- * docs/findlove-inspection-and-plan.md, Q-B1 and Q-B8). Until they ship, this
- * service runs a local demo. Set EXPO_PUBLIC_USE_FINDLOVE_API=true to call the
- * endpoints below instead; their errors are surfaced, never replaced by demo data.
+ * BACKEND STATUS: wired to Eventis-api /api/v1/findlove/* (services/findLoveApi.ts)
+ * for age verification, profile, discover and connections. Membership payments
+ * stay MOCKED on the device. Without EXPO_PUBLIC_USE_FINDLOVE_API=true this
+ * service runs a local demo; with it, API errors are surfaced, never replaced by demo data.
  *
  * Screens and contexts never call `api` for FindLove directly, so the endpoint
  * paths and response mapping here are the single integration point.
@@ -233,7 +241,7 @@ function demoStatusOf(profile: LoveProfile, saved: DemoConnections, now: number)
   return entry.status;
 }
 
-// INTEGRATION POINT: GET /api/v1/love-profiles?country=RW -> LoveProfile[] | { profiles: LoveProfile[] }
+// API: GET /api/v1/findlove/discover + GET /api/v1/findlove/connections (see services/findLoveApi.ts).
 // The server must only return members from the requested country (the caller's
 // own); LoveProfilesContext filters again so a missed filter can't leak others.
 // connectionStatus on each row is the caller's status with that member.
@@ -255,16 +263,19 @@ export async function fetchLoveProfiles(country?: string): Promise<LoveProfile[]
       };
     });
   }
-  const response = await withTimeout(api.get<unknown>(profilesPath(country)), PROFILES_TIMEOUT_MS);
-  return readLoveProfilesResponse(response);
+  // Discover lists people to meet; connections carry each one's status with the
+  // viewer (and people already connected, who may not be in discover any more).
+  const [discovered, connections] = await withTimeout(Promise.all([apiDiscover(country), apiConnections()]), PROFILES_TIMEOUT_MS);
+  const byId = new Map<string, LoveProfile>();
+  for (const profile of readLoveProfilesResponse(discovered)) byId.set(profile.id, profile);
+  for (const profile of readLoveProfilesResponse(connections)) {
+    const seen = byId.get(profile.id);
+    byId.set(profile.id, seen ? { ...seen, connectionStatus: profile.connectionStatus, requestMessage: profile.requestMessage } : profile);
+  }
+  return [...byId.values()];
 }
 
-function profilesPath(country: string | undefined, range?: LoveAgeRange): string {
-  const query = [country ? `country=${encodeURIComponent(country)}` : "", ageRangeQuery(range)].filter(Boolean).join("&");
-  return query ? `/api/v1/love-profiles?${query}` : "/api/v1/love-profiles";
-}
-
-// INTEGRATION POINT: GET /api/v1/love-profiles?country=RW&ageMin=25&ageMax=32
+// API: GET /api/v1/findlove/discover?country=RW&minAge=25&maxAge=32
 // Same endpoint and reply as fetchLoveProfiles, plus age filters. The server
 // matches them against each member's date of birth from the ID check and must
 // NOT include ages in the reply. No ageMax means "and older". It should refuse
@@ -286,8 +297,8 @@ export async function fetchLoveProfileIdsInAgeRange(country: string | undefined,
       ),
     );
   }
-  const response = await withTimeout(api.get<unknown>(profilesPath(country, range)), PROFILES_TIMEOUT_MS);
-  return new Set(readLoveProfilesResponse(response).map((profile) => profile.id));
+  const rows = await withTimeout(apiDiscover(country, range), PROFILES_TIMEOUT_MS);
+  return new Set(readLoveProfilesResponse(rows).map((profile) => profile.id));
 }
 
 /** The member needs an active Private membership to connect with this person. */
@@ -298,7 +309,7 @@ export class MembershipRequiredError extends Error {
   }
 }
 
-// INTEGRATION POINT: POST /api/v1/love-profiles/:id/connections { message? } -> { connectionStatus }
+// API: POST /api/v1/findlove/connections { profileId, message? } (accepts instead when they asked first).
 // Returns the status the server recorded. Throws if the request was not saved.
 // `message` is the one note allowed with a request (utils/findLoveConnections.ts);
 // the server must reject a second message before the request is accepted.
@@ -325,21 +336,16 @@ export async function requestLoveConnection(profileId: string, userId?: string, 
     if (current !== "pending") await setDemoConnection(profileId, "pending");
     return "pending";
   }
-  let response: { connectionStatus?: unknown } | undefined;
   try {
-    response = await api.post<{ connectionStatus?: unknown } | undefined>(
-      `/api/v1/love-profiles/${encodeURIComponent(profileId)}/connections`,
-      message ? { message } : undefined,
-    );
+    const status = await apiRequestConnection(profileId, message);
+    return status === "none" ? "pending" : status;
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) throw new MembershipRequiredError(err.message || undefined);
     throw err;
   }
-  const status = normalizeConnectionStatus(response?.connectionStatus);
-  return status === "none" ? "pending" : status;
 }
 
-// INTEGRATION POINT: POST /api/v1/love-profiles/:id/connections/accept  -> { connectionStatus: "connected" }
+// API: PATCH /api/v1/findlove/connections/:id { status: ACCEPTED | DECLINED }
 //                    POST /api/v1/love-profiles/:id/connections/decline -> { connectionStatus: "none" }
 // Answers a request the member received. The server must only accept these for
 // a request that is really waiting for this member.
@@ -350,15 +356,10 @@ export async function respondToLoveConnection(profileId: string, accept: boolean
     await setDemoConnection(profileId, status);
     return status;
   }
-  const response = await api.post<{ connectionStatus?: unknown } | undefined>(
-    `/api/v1/love-profiles/${encodeURIComponent(profileId)}/connections/${accept ? "accept" : "decline"}`,
-  );
-  // An empty reply means it worked; anything unclear falls back to what was asked for.
-  const status = normalizeConnectionStatus(response?.connectionStatus);
-  return status === "none" && accept ? "connected" : status;
+  return apiRespondToConnection(profileId, accept);
 }
 
-// INTEGRATION POINT: DELETE /api/v1/love-profiles/:id/connections
+// API: not available yet; the backend can't withdraw a pending request.
 // Withdraws a request the member sent. Throws if it could not be withdrawn
 // (for example because it was accepted in the meantime); callers reload then.
 export async function cancelLoveConnection(profileId: string): Promise<void> {
@@ -367,7 +368,8 @@ export async function cancelLoveConnection(profileId: string): Promise<void> {
     await setDemoConnection(profileId, "none");
     return;
   }
-  await api.delete<unknown>(`/api/v1/love-profiles/${encodeURIComponent(profileId)}/connections`);
+  // The backend has no "withdraw a pending request" endpoint yet.
+  throw new Error("Withdrawing a request isn't available yet.");
 }
 
 // ---- The member's own profile ------------------------------------------------
@@ -497,21 +499,17 @@ async function readDemoMyProfiles(): Promise<Record<string, MyLoveProfile>> {
   }
 }
 
-// INTEGRATION POINT: GET /api/v1/love-profiles/me -> MyLoveProfile, 404 when none exists yet.
+// API: GET /api/v1/findlove/profile -> profile, or null when none exists yet.
 export async function fetchMyLoveProfile(userId: string): Promise<MyLoveProfile | null> {
   if (!USE_FINDLOVE_API) {
     await wait(200);
     return normalizeMyLoveProfile((await readDemoMyProfiles())[userId]);
   }
-  try {
-    return normalizeMyLoveProfile(await withTimeout(api.get<unknown>("/api/v1/love-profiles/me"), PROFILES_TIMEOUT_MS));
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return null;
-    throw err;
-  }
+  // The API answers null (not 404) when no profile exists yet.
+  return normalizeMyLoveProfile(await withTimeout(apiFetchMyProfile(userId), PROFILES_TIMEOUT_MS));
 }
 
-// INTEGRATION POINT: POST (create) / PUT (update) /api/v1/love-profiles/me -> MyLoveProfile
+// API: POST /api/v1/findlove/profile (create); PATCH /api/v1/findlove/profile + PUT /profile/photos (update).
 // The server must check username format and uniqueness (409 when taken), refuse
 // members whose ID isn't verified, and store the date of birth read from the ID
 // rather than the one sent here.
@@ -550,25 +548,8 @@ export async function saveMyLoveProfile(
     return saved;
   }
 
-  const { ageRange, ...extras } = cleanExtras(input);
-  const body = {
-    username,
-    gender: input.gender.toLowerCase().replace(/ /g, "_"),
-    interestedIn: input.interestedIn.toLowerCase(),
-    dateOfBirth: input.dateOfBirth,
-    photoUrls: input.photoUrls,
-    country: input.country,
-    ...extras,
-    // null clears a saved preference; a null max means "and older".
-    preferredAgeMin: ageRange?.min ?? null,
-    preferredAgeMax: ageRange && ageRange.max < LOVE_AGE_RANGE_MAX ? ageRange.max : null,
-    ...(isNew ? { confirmedAdult: true, accountType: input.accountType ?? "public" } : {}),
-  };
   try {
-    const response = isNew
-      ? await api.post<unknown>("/api/v1/love-profiles/me", body)
-      : await api.put<unknown>("/api/v1/love-profiles/me", body);
-    const saved = normalizeMyLoveProfile(response);
+    const saved = normalizeMyLoveProfile(await apiSaveMyProfile(userId, { ...input, username }, isNew));
     if (!saved) throw new Error("FindLove saved your profile but sent back an unexpected reply. Pull to refresh.");
     return saved;
   } catch (err) {
@@ -621,7 +602,20 @@ export async function buyMembership(
 ): Promise<LoveCheckoutResult> {
   const { type, interval, ...payer } = input;
   const plan = membershipPlan(type, interval);
-  if (!USE_FINDLOVE_API) {
+  if (USE_FINDLOVE_API) {
+    // PAYMENTS STAY MOCKED (no real checkout yet): activate the plan on this device only.
+    void payer;
+    await wait(2200);
+    if (demoOutcome === "failed") {
+      return { status: "failed", message: "The payment was declined. Check your balance and try again." };
+    }
+    if (demoOutcome === "cancelled") return { status: "cancelled" };
+    const expiresAt = new Date(Date.now() + plan.periodDays * 24 * 60 * 60 * 1000).toISOString();
+    await activateMockMembership(userId, { type: plan.type, status: "active", expiresAt });
+    return { status: "succeeded" };
+  }
+  {
+    // Local demo (EXPO_PUBLIC_USE_FINDLOVE_API off).
     await wait(2200);
     if (demoOutcome === "failed") {
       return { status: "failed", message: "The payment was declined. Check your balance and try again." };
@@ -634,9 +628,15 @@ export async function buyMembership(
     await AsyncStorage.setItem(DEMO_MY_PROFILE_KEY, JSON.stringify({ ...all, [userId]: updated }));
     return { status: "succeeded" };
   }
+}
 
+/**
+ * NOT USED YET: the real mobile-money checkout, kept for when payments are
+ * integrated. Endpoint paths are the app's guess; the backend's may differ.
+ */
+export async function realMembershipCheckout(planId: string, payer: { paymentMethod: LovePaymentMethod; payerPhone: string }): Promise<LoveCheckoutResult> {
   let payment = readPayment(
-    await api.post<unknown>("/api/v1/love-profiles/me/membership/checkout", { planId: plan.id, ...payer }),
+    await api.post<unknown>("/api/v1/love-profiles/me/membership/checkout", { planId, ...payer }),
   );
   const { paymentId } = payment;
   const startedAt = Date.now();
@@ -665,9 +665,12 @@ export interface AgeVerificationInput {
   photos: Partial<Record<IdSide, string>>;
   /** The member ticked "I'm 18 or older and this is my own ID". */
   confirmedAdult: boolean;
+  /**
+   * YYYY-MM-DD as printed on the ID. Typed by the member until the server reads
+   * IDs automatically; the server rejects anyone under 18.
+   */
+  dateOfBirth?: string;
 }
-
-const AGE_VERIFICATION_PATH = "/api/v1/users/me/age-verification";
 
 /** Demo date of birth "read" from the ID: 25 years ago today. */
 function demoDateOfBirth(now: Date): string {
@@ -694,7 +697,7 @@ async function writeDemoVerification(userId: string, verification: AgeVerificati
   await AsyncStorage.setItem(DEMO_AGE_VERIFICATION_KEY, JSON.stringify({ ...all, [userId]: verification }));
 }
 
-// INTEGRATION POINT: GET /api/v1/users/me/age-verification
+// API: GET /api/v1/findlove/age-verification -> latest row, or null when nothing was sent yet.
 //   -> { status, attemptsLeft, reason?, dateOfBirth?, updatedAt? }; 404 when nothing was sent yet.
 // Belongs to the Eventis account: it's checked before a FindLove profile exists.
 export async function fetchAgeVerification(userId: string): Promise<AgeVerification> {
@@ -703,33 +706,14 @@ export async function fetchAgeVerification(userId: string): Promise<AgeVerificat
     const stored = (await readDemoVerifications())[userId];
     return stored ? normalizeAgeVerification(stored) : AGE_VERIFICATION_NOT_STARTED;
   }
-  try {
-    return normalizeAgeVerification(
-      await withTimeout(api.get<unknown>(AGE_VERIFICATION_PATH), PROFILES_TIMEOUT_MS),
-    );
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return AGE_VERIFICATION_NOT_STARTED;
-    throw err;
-  }
+  return (await withTimeout(apiFetchAgeVerification(), PROFILES_TIMEOUT_MS)) ?? AGE_VERIFICATION_NOT_STARTED;
 }
 
-/** A photo as a multipart part: a file reference on native, a Blob on web. */
-async function appendPhoto(form: FormData, field: string, uri: string): Promise<void> {
-  if (Platform.OS === "web") {
-    const blob = await (await fetch(uri)).blob();
-    form.append(field, blob, `${field}.jpg`);
-  } else {
-    form.append(field, { uri, name: `${field}.jpg`, type: "image/jpeg" } as unknown as Blob);
-  }
-}
-
-// INTEGRATION POINT:
-//   POST /api/v1/users/me/age-verification  multipart: documentType, confirmedAdult, front, back?
-//     -> { status, attemptsLeft, reason?, dateOfBirth? }
-// The server stores the photos securely, reads them (OCR), rejects anyone under
-// 18, counts failed reads and moves the case to manual review after the last
-// one. Once verified, the date of birth read from the ID is the one the profile
-// uses. The server must also refuse FindLove requests (including creating a
+// API: each ID photo -> POST /api/v1/uploads (purpose AGE_ID, private), then
+//   POST /api/v1/findlove/age-verification { documentType, frontKey, backKey, dateOfBirth, adultConfirmed }
+// The server has no OCR yet: an admin approves it (or FINDLOVE_AGE_AUTO_APPROVE in
+// dev). The date of birth is typed by the member and checked against 18+; once
+// verified it is the one the profile uses. The server must also refuse FindLove requests (including creating a
 // profile) from members who aren't verified; the app's gate is only for the UI.
 // A "processing" reply is polled for up to a minute, then returned as is.
 export async function submitAgeVerification(
@@ -764,13 +748,14 @@ export async function submitAgeVerification(
     return next;
   }
 
-  const form = new FormData();
-  form.append("documentType", input.documentType);
-  form.append("confirmedAdult", "true");
-  for (const [side, uri] of Object.entries(input.photos)) {
-    if (uri) await appendPhoto(form, side, uri);
+  if (!input.dateOfBirth || !isAdult(input.dateOfBirth)) {
+    throw new Error(`Enter the date of birth on your ID. FindLove is only for people aged ${MIN_LOVE_AGE} and over.`);
   }
-  let verification = normalizeAgeVerification(await api.postForm<unknown>(AGE_VERIFICATION_PATH, form));
+  let verification = await apiSubmitAgeVerification({
+    documentType: input.documentType,
+    photos: input.photos,
+    dateOfBirth: input.dateOfBirth,
+  });
   const startedAt = Date.now();
   while (verification.status === "processing" && Date.now() - startedAt < VERIFICATION_POLL_LIMIT_MS) {
     await wait(VERIFICATION_POLL_MS);

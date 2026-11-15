@@ -154,6 +154,10 @@ async function fetchWithToken(
       signal: controller.signal,
     });
   } catch (error) {
+    if (__DEV__) {
+      // Dev only: shows in the Metro terminal which call failed and why.
+      console.warn(`[api] ${options.method ?? "GET"} ${API_BASE}${path} failed:`, error instanceof Error ? `${error.name}: ${error.message}` : error);
+    }
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error("The server took too long to respond. Please try again.");
     }
