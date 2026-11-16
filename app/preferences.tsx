@@ -16,7 +16,6 @@ import { useColors } from "@/hooks/useColors";
 import { useDiscoveryPreferences } from "@/hooks/useDiscoveryPreferences";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { PROFILE_LIMITS, validateMaxLength } from "@/utils/profileValidation";
-import { subscribeBeforeRemove } from "@/utils/beforeRemove";
 
 /** Preferred event categories and location, used for recommendations and category alerts. */
 export default function DiscoveryPreferencesScreen() {
