@@ -7,8 +7,10 @@ import {
 } from "@/services/liveDirectoryService";
 import {
   watchSession,
+  sampleBroadcastSession,
   type BroadcastSession,
 } from "@/services/liveBroadcastProtocol";
+import type { useLiveDemo } from "@/hooks/useLiveDemo";
 import type { LivePerson } from "@/services/liveState";
 import { LiveBroadcastEntry } from "./LiveBroadcastEntry";
 import { LiveButton, liveColors as c, liveStyles as s } from "./LivePrimitives";
@@ -17,7 +19,9 @@ export function LiveWatchEntry({
   id,
   person,
   onClose,
+  wallet,
 }: {
+  wallet?: ReturnType<typeof useLiveDemo>;
   id: string;
   person: LivePerson;
   onClose: () => void;
@@ -31,6 +35,10 @@ export function LiveWatchEntry({
     setSession(null);
     setError("");
     setUnavailable(false);
+    if (/^sample_[0-4]$/.test(id)) {
+      setSession(sampleBroadcastSession(id, person, liveRequestId()));
+      return () => { disposed = true; };
+    }
     void liveDirectoryApi
       .watch(id)
       .then((value) => {
@@ -48,12 +56,13 @@ export function LiveWatchEntry({
       disposed = true;
     };
   }, [id, person.id, attempt]);
-  if (session?.listing?.id === id)
+  if (session && (session.listing?.id === id || session.sample?.id === id))
     return (
       <LiveBroadcastEntry
         key={session.code}
         person={person}
         initialSession={session}
+        sampleWallet={wallet}
         onClose={onClose}
       />
     );

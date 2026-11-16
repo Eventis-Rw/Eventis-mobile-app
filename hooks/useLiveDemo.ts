@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { createLiveState, readLiveState, reduceLive, refreshLiveSamples, tickLiveState, type LiveAction, type LivePerson, type LiveState } from "@/services/liveState";
 
-/** Mounted inside an account-keyed screen. Writes are serialized and committed only after storage succeeds. */
 export function useLiveDemo(accountId: string) {
   const key = `@eventis_live_demo_v1:${accountId}`;
   const current = useRef<LiveState | null>(null);

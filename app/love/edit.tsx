@@ -1,7 +1,8 @@
+import { usePreventRemove } from "expo-router/react-navigation";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useNavigation, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
@@ -30,7 +31,6 @@ import {
   validateLoveInterestedIn,
   validateLoveUsername,
 } from "@/utils/findLoveProfile";
-import { subscribeBeforeRemove } from "@/utils/beforeRemove";
 
 type EditValues = LoveProfileFormValues & LoveProfileExtrasValues & { ageRange?: LoveAgeRange };
 
@@ -41,7 +41,7 @@ export default function EditLoveProfileScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const { myProfile, status, error, reload, save, accountType } = useMyLoveProfile();
-  const allowLeave = useRef(false);
+  const [allowLeave, setAllowLeave] = useState(false);
 
   const initial = useMemo<EditValues | null>(
     () =>
@@ -79,13 +79,12 @@ export default function EditLoveProfileScreen() {
 
   const isDirty = !!values && JSON.stringify(values) !== JSON.stringify(initial);
 
-  useEffect(() => {
-    return subscribeBeforeRemove(navigation, (event) => {
-      if (allowLeave.current || !isDirty || saving) return;
-      event.preventDefault();
-      setPendingLeave(() => () => navigation.dispatch(event.data.action));
-    });
-  }, [navigation, isDirty, saving]);
+  usePreventRemove(isDirty && !saving && !allowLeave, (options) => {
+    const repeat = "repeat" in options ? options.repeat : undefined;
+    setPendingLeave(() => typeof repeat === "function"
+      ? () => repeat()
+      : () => navigation.dispatch(options.data.action));
+  });
 
   const errors = useMemo<LoveProfileFormErrors>(() => {
     if (!values) return {};
@@ -168,7 +167,7 @@ export default function EditLoveProfileScreen() {
         ageRange: values.ageRange,
       });
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      allowLeave.current = true;
+      setAllowLeave(true);
       back();
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -277,7 +276,7 @@ export default function EditLoveProfileScreen() {
         onConfirm={() => {
           const leave = pendingLeave;
           setPendingLeave(null);
-          allowLeave.current = true;
+          setAllowLeave(true);
           leave?.();
         }}
         onClose={() => setPendingLeave(null)}

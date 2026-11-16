@@ -3,6 +3,7 @@ import type { Participant } from "livekit-client";
 import { StyleSheet } from "react-native";
 
 export function BroadcastVideo({ participant, revision }: { participant: Participant; revision: number }) {
+  "use no memo";
   // This component only mounts after prepareLiveMedia succeeds; Expo Go never loads native WebRTC.
   const { VideoTrack } = require("@livekit/react-native") as typeof import("@livekit/react-native");
   const camera = useMemo(() => {
