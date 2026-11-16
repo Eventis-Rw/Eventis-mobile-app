@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { type ComponentRef, useCallback, useMemo, useRef, useState } from "react";
 import {
   Image,
   FlatList,
@@ -82,7 +82,7 @@ export default function HomeScreen() {
     }
   }, [refreshEvents]);
 
-  const categoryScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const categoryScrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const categoryLayouts = useRef<Record<string, { x: number; width: number }>>({});
 
   const selectCategory = useCallback(
@@ -290,7 +290,7 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <EventCard event={item} variant="feed" inset={0} source={selectedCategory === "All" ? "home" : "category"} onMediaReady={feedAnalytics.onMediaReady} onTrackingBlocked={setCardCovered} />
         )}
-        ListHeaderComponent={renderBody()}
+        ListHeaderComponent={renderBody() ?? undefined}
         ListFooterComponent={visibleEvents.length ? (
           <Text style={{ color: colors.mutedForeground, textAlign: "center", paddingVertical: 20 }}>
             {visibleCount < filtered.length ? "Scroll for more events" : "You're all caught up"}

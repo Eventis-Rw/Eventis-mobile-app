@@ -6,7 +6,7 @@ import { useRouter } from "expo-router";
 import { describeStatusError, publishStatus, type StatusCreateInput, type StatusMediaAsset, type StatusMediaType } from "@/services/statusService";
 import { StoryVideo } from "@/components/StoryVideo";
 import { useStories } from "@/context/StoriesContext";
-import React, { useEffect, useRef, useState } from "react";
+import React, { type ComponentRef, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Image, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions,
@@ -80,7 +80,7 @@ export default function CreateStoryScreen() {
   const { refresh, openStories } = useStories();
   const { width, height } = useWindowDimensions();
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
-  const textInputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const textInputRef = useRef<ComponentRef<typeof TextInput>>(null);
   const nextLayerId = useRef(0);
   const [editing, setEditing] = useState(false);
   const [image, setImage] = useState<ImageSourcePropType | undefined>();

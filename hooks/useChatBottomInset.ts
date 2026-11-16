@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
+import { type ComponentRef, useCallback, useEffect, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { useSafeAreaFrame } from "react-native-safe-area-context";
 
