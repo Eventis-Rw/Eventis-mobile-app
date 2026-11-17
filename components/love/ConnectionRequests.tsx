@@ -248,10 +248,19 @@ export function RequestMessageSheet({ profile, onClose }: { profile: LoveProfile
       setError(problem);
       return;
     }
-    sendMessage(profile.id, { kind: "text", text: text.trim() });
-    if (Platform.OS !== "web") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const body = text.trim();
     setText("");
     setError(undefined);
+    sendMessage(profile.id, { kind: "text", text: body }).then(
+      () => {
+        if (Platform.OS !== "web") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      },
+      (failure: unknown) => {
+        // Put the text back so the reply isn't lost.
+        setText(body);
+        setError(failure instanceof Error ? failure.message : "Your reply wasn't sent. Please try again.");
+      },
+    );
   };
 
   return (

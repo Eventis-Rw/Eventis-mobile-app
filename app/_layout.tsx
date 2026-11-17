@@ -32,6 +32,7 @@ import { StoriesProvider } from "@/context/StoriesContext";
 import { AnalyticsProvider } from "@/context/AnalyticsContext";
 import { FindLoveChatProvider } from "@/context/FindLoveChatContext";
 import { FindLoveDemoProvider } from "@/context/FindLoveDemoContext";
+import { FindLoveNotificationsProvider } from "@/context/FindLoveNotificationsContext";
 import { LoveProfilesProvider } from "@/context/LoveProfilesContext";
 import { MyLoveProfileProvider } from "@/context/MyLoveProfileContext";
 import { NotificationsProvider } from "@/context/NotificationsContext";
@@ -158,7 +159,9 @@ function FindLoveProviders({ children }: { children: React.ReactNode }) {
     <MyLoveProfileProvider>
       <LoveProfilesProvider>
         <FindLoveDemoProvider>
-          <FindLoveChatProvider>{children}</FindLoveChatProvider>
+          <FindLoveNotificationsProvider>
+            <FindLoveChatProvider>{children}</FindLoveChatProvider>
+          </FindLoveNotificationsProvider>
         </FindLoveDemoProvider>
       </LoveProfilesProvider>
     </MyLoveProfileProvider>

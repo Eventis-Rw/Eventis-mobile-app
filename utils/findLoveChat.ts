@@ -20,6 +20,11 @@ export type LoveChatMessage = {
 export interface LoveChatThread {
   messages: LoveChatMessage[];
   readAt?: string;
+  /**
+   * Unread count from the server, used while only the last message is loaded
+   * (the Inbox). Absent once the full chat is loaded or in the local demo.
+   */
+  unreadCount?: number;
 }
 
 export interface LoveConversationSummary {
@@ -42,6 +47,7 @@ export function loveMessagePreview(message: LoveChatMessage): string {
 /** Messages from the other person that arrived after the member last opened the chat. */
 export function countUnread(thread: LoveChatThread | undefined): number {
   if (!thread) return 0;
+  if (typeof thread.unreadCount === "number") return thread.unreadCount;
   const readAt = thread.readAt ? Date.parse(thread.readAt) : Number.NEGATIVE_INFINITY;
   return thread.messages.filter((message) => !message.own && Date.parse(message.sentAt) > readAt).length;
 }

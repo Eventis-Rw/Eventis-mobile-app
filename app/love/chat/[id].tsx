@@ -28,6 +28,7 @@ import { VoiceNoteBubble } from "@/components/VoiceNoteBubble";
 import { useFindLoveChat } from "@/context/FindLoveChatContext";
 import { useFindLoveDemo } from "@/context/FindLoveDemoContext";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
+import { USE_FINDLOVE_API } from "@/services/findLoveService";
 import { useConnectionActions } from "@/components/love/ConnectionRequests";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useLoveConnect } from "@/components/love/UpgradePrompt";
@@ -59,7 +60,7 @@ export default function LoveChatScreen() {
   const insets = useAppSafeAreaInsets();
   const { isLoading, getProfileById, getConnectionStatus } = useLoveProfiles();
   const { recordMessage, recordConnection } = useFindLoveDemo();
-  const { threads, sendMessage: saveMessage, markRead } = useFindLoveChat();
+  const { threads, sendMessage: saveMessage, markRead, watchChat } = useFindLoveChat();
   const { connect, upgradePrompt } = useLoveConnect();
   const { accept } = useConnectionActions();
   const profile = getProfileById(id ?? "");
@@ -92,6 +93,13 @@ export default function LoveChatScreen() {
     return () => clearTimeout(timer);
   }, [notice]);
 
+  // With the real API, load this chat and check for new messages while it is open.
+  // Re-runs when the connection changes, so a just-sent request shows its note at once.
+  useEffect(() => {
+    if (!id) return;
+    return watchChat(id);
+  }, [id, status, watchChat]);
+
   // While the chat is open, anything that arrives counts as read.
   useEffect(() => {
     if (id) markRead(id);
@@ -122,18 +130,25 @@ export default function LoveChatScreen() {
 
   const chatProfile = profile;
 
-  function append(content: LoveChatContent) {
-    saveMessage(chatProfile.id, content);
+  async function append(content: LoveChatContent): Promise<boolean> {
+    try {
+      await saveMessage(chatProfile.id, content);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Your message wasn't sent. Please try again.");
+      return false;
+    }
     recordMessage(chatProfile);
     if (Platform.OS !== "web") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    return true;
   }
 
   async function sendMessage() {
     const text = composer.trim();
     if (!text || sending) return;
     if (connected || status !== "none") {
-      append({ kind: "text", text });
       setComposer("");
+      // Put the text back if it could not be sent, so it isn't lost.
+      if (!(await append({ kind: "text", text }))) setComposer(text);
       return;
     }
     // No request yet: the message goes with a new connection request.
@@ -141,7 +156,8 @@ export default function LoveChatScreen() {
     const sent = await connect(chatProfile, text);
     setSending(false);
     if (!sent) return;
-    append({ kind: "text", text });
+    // With the real API the request note is already the chat's first message.
+    if (!USE_FINDLOVE_API) await append({ kind: "text", text });
     recordConnection("request", `Request sent to ${chatProfile.username}`, "Your message went with it. You'll be told when they answer.", "sent");
     setComposer("");
   }
@@ -155,7 +171,7 @@ export default function LoveChatScreen() {
         setNotice(`Choose a file under ${formatBytes(MAX_DOCUMENT_BYTES)}.`);
         return;
       }
-      append({ kind: "document", name: file.name, size: file.size });
+      await append({ kind: "document", name: file.name, size: file.size });
     } catch {
       setNotice("We couldn't open your files. Please try again.");
     }
@@ -191,7 +207,7 @@ export default function LoveChatScreen() {
         return;
       }
       if (!uri) throw new Error("missing recording");
-      append({ kind: "voice", uri, durationMs });
+      await append({ kind: "voice", uri, durationMs });
     } catch {
       setNotice("The voice note could not be saved.");
     } finally {

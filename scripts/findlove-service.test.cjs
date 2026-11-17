@@ -37,6 +37,10 @@ const api = {
     apiCalls.push(["PUT", p, body]);
     return apiHandler("PUT", p, body);
   },
+  patch: (p, body) => {
+    apiCalls.push(["PATCH", p, body]);
+    return apiHandler("PATCH", p, body);
+  },
   delete: (p) => {
     apiCalls.push(["DELETE", p]);
     return apiHandler("DELETE", p);
@@ -67,8 +71,23 @@ const membership = load("utils/findLoveMembership.ts", {}, () => undefined);
 const ageCheck = load("utils/findLoveAgeVerification.ts", {}, () => undefined);
 const connections = load("utils/findLoveConnections.ts", {}, () => undefined);
 const ageRange = load("utils/findLoveAgeRange.ts", {}, () => undefined);
+// The real API mapping layer, wired to the same stub API and storage as the service.
+function loadApi(env) {
+  return load("services/findLoveApi.ts", env, (name) => {
+    if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
+    if (name === "@/utils/apiClient") return { api, ApiError };
+    if (name === "@/utils/findLoveAgeRange") return ageRange;
+    if (name === "@/utils/findLoveAgeVerification") return ageCheck;
+    if (name === "@/utils/findLoveMembership") return membership;
+    if (name === "@/utils/findLoveProfile") return rules;
+    if (name === "@/utils/formDataFile") return { appendLocalFile: (form, field, uri) => form.append(field, uri) };
+  });
+}
+
 function loadService(env) {
+  const findLoveApi = loadApi(env);
   return load("services/findLoveService.ts", env, (name) => {
+    if (name === "@/services/findLoveApi") return findLoveApi;
     if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
     if (name === "@/utils/findLoveAgeRange") return ageRange;
     if (name === "@/constants/loveProfiles") return profiles;
@@ -217,24 +236,36 @@ test("demo: the auto-accept member accepts a request after a while", async () =>
 });
 
 test("real mode: request message, accept, decline and cancel use the API", async () => {
-  apiHandler = async () => ({ connectionStatus: "pending" });
+  const other = (id) => apiProfileRow({ id, username: `m.${id}` });
+  apiHandler = async () => ({ connection: { id: "c1", status: "PENDING", direction: "outgoing", otherProfile: other("p1") } });
   assert.equal(await real.requestLoveConnection("p1", "u1", "Hi there"), "pending");
-  assert.deepEqual(apiCalls[0], ["POST", "/api/v1/love-profiles/p1/connections", { message: "Hi there" }]);
+  assert.deepEqual(apiCalls[0], ["POST", "/api/v1/findlove/connections", { profileId: "p1", message: "Hi there" }]);
 
-  apiHandler = async () => undefined;
-  assert.equal(await real.respondToLoveConnection("p2", true), "connected", "an empty reply to accept means connected");
-  assert.equal(apiCalls[1][1], "/api/v1/love-profiles/p2/connections/accept");
+  // Accept/decline need the connection id, which comes from the connections list.
+  apiHandler = async (_method, p) =>
+    p.includes("direction=incoming")
+      ? {
+          items: [
+            { id: "c2", status: "PENDING", direction: "incoming", message: "Hello", otherProfile: other("p2") },
+            { id: "c3", status: "PENDING", direction: "incoming", otherProfile: other("p3") },
+          ],
+        }
+      : { items: [] };
+  const rows = await real.fetchLoveProfiles();
+  assert.equal(rows.find((row) => row.id === "p2").requestMessage, "Hello", "the request note reaches the screens");
+
+  apiCalls = [];
+  apiHandler = async (_method, _p, body) => ({ connection: { id: "c2", status: body.status, direction: "incoming", otherProfile: other("p2") } });
+  assert.equal(await real.respondToLoveConnection("p2", true), "connected");
+  assert.deepEqual(apiCalls[0], ["PATCH", "/api/v1/findlove/connections/c2", { status: "ACCEPTED" }]);
+  apiHandler = async (_method, _p, body) => ({ connection: { id: "c3", status: body.status, direction: "incoming", otherProfile: other("p3") } });
   assert.equal(await real.respondToLoveConnection("p3", false), "none");
-  assert.equal(apiCalls[2][1], "/api/v1/love-profiles/p3/connections/decline");
+  assert.deepEqual(apiCalls[1], ["PATCH", "/api/v1/findlove/connections/c3", { status: "DECLINED" }]);
 
-  await real.cancelLoveConnection("a/b");
-  assert.deepEqual(apiCalls[3], ["DELETE", "/api/v1/love-profiles/a%2Fb/connections"]);
-
-  apiHandler = async () => {
-    throw new ApiError(409, "Already accepted");
-  };
-  await assert.rejects(real.cancelLoveConnection("p4"), /Already accepted/);
-  assert.equal(stored.size, 0, "real mode never writes demo storage");
+  await assert.rejects(real.respondToLoveConnection("unknown", true), /no longer waiting/);
+  // The backend has no endpoint to withdraw a request yet.
+  await assert.rejects(real.cancelLoveConnection("p1"), /isn't available yet/);
+  assertOnlyLocalExtras();
 });
 
 test("received requests and their message come from the API", () => {
@@ -259,15 +290,26 @@ test("one message each before connecting; connected members chat freely", () => 
 });
 
 test("real mode uses the server's status and surfaces errors", async () => {
-  apiHandler = async () => ({ profiles: [{ id: "srv", age: 25, gender: "male", connectionStatus: "connected" }] });
+  apiHandler = async (_method, p) =>
+    p.startsWith("/api/v1/findlove/discover")
+      ? { items: [apiProfileRow({ id: "srv" }), apiProfileRow({ id: "other", username: "other.one" })] }
+      : p.includes("direction=accepted")
+        ? { items: [{ id: "c1", status: "ACCEPTED", direction: "outgoing", otherProfile: apiProfileRow({ id: "srv" }) }] }
+        : { items: [] };
   const list = await real.fetchLoveProfiles();
-  assert.deepEqual(list.map((p) => [p.id, p.connectionStatus]), [["srv", "connected"]]);
-  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/love-profiles"]);
+  assert.deepEqual(
+    list.map((p) => [p.id, p.connectionStatus]),
+    [["srv", "connected"], ["other", "none"]],
+  );
+  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/findlove/discover?page=1&limit=100"]);
+  assert.deepEqual(
+    apiCalls.slice(1).map((call) => call[1]),
+    ["incoming", "outgoing", "accepted"].map((direction) => `/api/v1/findlove/connections?direction=${direction}`),
+  );
 
-  apiHandler = async () => ({ connectionStatus: "connected" });
-  assert.equal(await real.requestLoveConnection("a/b"), "connected");
-  assert.equal(apiCalls[1][1], "/api/v1/love-profiles/a%2Fb/connections");
-
+  // Asking someone who already asked you accepts their request instead.
+  apiHandler = async () => ({ connection: { id: "c9", status: "ACCEPTED", direction: "incoming" } });
+  assert.equal(await real.requestLoveConnection("someone"), "connected");
   apiHandler = async () => undefined;
   assert.equal(await real.requestLoveConnection("c"), "pending");
 
@@ -276,6 +318,10 @@ test("real mode uses the server's status and surfaces errors", async () => {
   };
   await assert.rejects(real.fetchLoveProfiles(), /Service unavailable/);
   await assert.rejects(real.requestLoveConnection("c"), /Service unavailable/);
+  apiHandler = async () => {
+    throw new ApiError(403, "Private members only");
+  };
+  await assert.rejects(real.requestLoveConnection("c"), (err) => err.name === "MembershipRequiredError");
   assert.equal(stored.size, 0);
 });
 
@@ -327,6 +373,37 @@ const validInput = {
   confirmedAdult: true,
 };
 
+// ---- Real API fixtures (shapes from Eventis-api /api/v1/findlove/*) ----
+
+const LOCAL_EXTRAS_KEY = "@eventis_love_api_local_extras_v1";
+/** A profile row as the API returns it. */
+const apiProfileRow = (over = {}) => ({
+  id: "11111111-1111-4111-8111-111111111111",
+  userId: "u1",
+  username: "new.member",
+  gender: "WOMAN",
+  interestedIn: "MEN",
+  dateOfBirth: "1998-03-05",
+  age: 28,
+  country: "RW",
+  city: "",
+  neighborhood: "",
+  occupation: null,
+  bio: null,
+  interests: [],
+  relationshipGoal: null,
+  lookingFor: null,
+  photos: [{ key: "love/a.jpg", url: "https://cdn.example/love/a.jpg", position: 0, isPrimary: true }],
+  createdAt: "2026-11-01T10:00:00.000Z",
+  ...over,
+});
+/** Answers uploads with a key, and every other call with `reply(method, path, body)`. */
+const withUploads = (reply) => async (method, p, body) =>
+  method === "POST_FORM" ? { key: `uploads/${apiCalls.length}`, url: null } : reply(method, p, body);
+/** Real mode may only keep its local extras (mocked membership, age range) on the device. */
+const assertOnlyLocalExtras = () =>
+  assert.ok([...stored.keys()].every((key) => key === LOCAL_EXTRAS_KEY), "real mode never writes demo storage");
+
 test("own-profile input breaking a rule is rejected with the field name", () => {
   const field = (input, isNew = true) => {
     try {
@@ -368,42 +445,51 @@ test("demo mode rejects a username another member already uses", async () => {
   assert.equal(stored.size, 0);
 });
 
-test("real mode: 404 means no profile, 409 means username taken, other errors surface", async () => {
-  apiHandler = async () => {
-    throw new ApiError(404, "Not found");
-  };
+test("real mode: null means no profile, 409 means username taken, other errors surface", async () => {
+  apiHandler = async () => null;
   assert.equal(await real.fetchMyLoveProfile("u1"), null);
-  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/love-profiles/me"]);
+  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/findlove/profile"]);
 
   apiHandler = async () => {
     throw new ApiError(500, "Server error");
   };
   await assert.rejects(real.fetchMyLoveProfile("u1"), /Server error/);
 
-  apiHandler = async () => {
+  apiHandler = withUploads(() => {
     throw new ApiError(409, "Conflict");
-  };
+  });
   await assert.rejects(real.saveMyLoveProfile("u1", validInput, true), (err) => err.field === "username");
 });
 
-test("real mode creates with POST, updates with PUT and reads the reply", async () => {
-  apiHandler = async (_method, _path, body) => ({ ...body, gender: "female", photos: body.photoUrls });
+test("real mode creates with POST, updates with PATCH + PUT photos and reads the reply", async () => {
+  apiHandler = withUploads(() => apiProfileRow());
   const created = await real.saveMyLoveProfile("u1", validInput, true);
-  assert.equal(apiCalls[0][0], "POST");
-  assert.equal(apiCalls[0][2].username, "new.member");
-  assert.equal(apiCalls[0][2].gender, "woman");
-  assert.equal(apiCalls[0][2].interestedIn, "man");
-  assert.equal(apiCalls[0][2].confirmedAdult, true);
+  const [upload, create] = apiCalls;
+  assert.equal(upload[0], "POST_FORM", "a local photo is uploaded first");
+  assert.equal(upload[2].get("purpose"), "LOVE_PHOTO");
+  assert.equal(create[0], "POST");
+  assert.equal(create[1], "/api/v1/findlove/profile");
+  assert.equal(create[2].username, "new.member");
+  assert.equal(create[2].gender, "WOMAN");
+  assert.equal(create[2].interestedIn, "MEN");
+  assert.deepEqual(create[2].photoKeys, ["uploads/1"]);
   assert.equal(created.gender, "Woman");
   assert.equal(created.interestedIn, "Man");
+  assert.deepEqual(created.photoUrls, ["https://cdn.example/love/a.jpg"]);
 
-  await real.saveMyLoveProfile("u1", validInput, false);
-  assert.equal(apiCalls[1][0], "PUT");
-  assert.equal(apiCalls[1][2].confirmedAdult, undefined);
+  // An unchanged photo goes back as its key, not a new upload.
+  apiCalls = [];
+  await real.saveMyLoveProfile("u1", { ...validInput, photoUrls: created.photoUrls }, false);
+  assert.deepEqual(apiCalls.map((call) => [call[0], call[1]]), [
+    ["PATCH", "/api/v1/findlove/profile"],
+    ["PUT", "/api/v1/findlove/profile/photos"],
+  ]);
+  assert.equal(apiCalls[0][2].username, undefined, "the username can't change");
+  assert.deepEqual(apiCalls[1][2], { photoKeys: ["love/a.jpg"] });
 
-  apiHandler = async () => ({ unexpected: true });
+  apiHandler = withUploads(() => ({ unexpected: true }));
   await assert.rejects(real.saveMyLoveProfile("u1", validInput, false), /unexpected reply/);
-  assert.equal(stored.size, 0, "real mode never writes demo storage");
+  assertOnlyLocalExtras();
 });
 test("bio, interests and neighbourhood are optional but checked when given", () => {
   const field = (input) => {
@@ -441,10 +527,13 @@ test("extras are saved, trimmed and read back; empty ones are dropped", async ()
   assert.equal(cleared.bio, undefined);
   assert.equal(cleared.neighborhood, undefined);
 
-  apiHandler = async (_method, _path, body) => body;
+  apiCalls = [];
+  apiHandler = withUploads(() => apiProfileRow());
   await real.saveMyLoveProfile("u1", { ...validInput, bio: " Hey ", neighborhood: "Kiyovu" }, false);
-  assert.equal(apiCalls[0][2].bio, "Hey");
-  assert.equal(apiCalls[0][2].neighborhood, "Kiyovu");
+  const patch = apiCalls.find((call) => call[0] === "PATCH");
+  assert.equal(patch[2].bio, "Hey");
+  assert.equal(patch[2].neighborhood, "Kiyovu");
+  assert.equal(patch[2].city, "Kigali", "the city comes from the neighbourhood");
 });
 // ---- Phase 2: discovery ----
 
@@ -566,28 +655,25 @@ test("demo: the profile list carries no ages; age search returns only matching i
 });
 
 test("real mode: age search goes to the server as query params", async () => {
-  apiHandler = async () => ({ profiles: [{ id: "a", gender: "female" }, { id: "b", gender: "male" }] });
+  apiHandler = async () => ({ items: [apiProfileRow({ id: "a" }), apiProfileRow({ id: "b", gender: "MAN" })] });
   const ids = await real.fetchLoveProfileIdsInAgeRange("RW", { min: 25, max: 32 });
-  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/love-profiles?country=RW&ageMin=25&ageMax=32"]);
+  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/findlove/discover?page=1&limit=100&country=RW&minAge=25&maxAge=32"]);
   assert.deepEqual([...ids], ["a", "b"]);
   await real.fetchLoveProfileIdsInAgeRange(undefined, { min: 40, max: 70 });
-  assert.deepEqual(apiCalls[1], ["GET", "/api/v1/love-profiles?ageMin=40"]);
+  assert.deepEqual(apiCalls[1], ["GET", "/api/v1/findlove/discover?page=1&limit=100&minAge=40"], "70+ has no upper limit");
 });
 
-test("the preferred range is saved, read back, cleared, and checked", async () => {
-  apiHandler = async (_method, _path, body) => ({ ...body, gender: "female" });
+test("the preferred range is kept on the device in real mode, and checked", async () => {
+  // The backend doesn't store the preferred range yet, so it never goes to the server.
+  apiHandler = withUploads(() => apiProfileRow());
   const saved = await real.saveMyLoveProfile("u1", { ...validInput, ageRange: { min: 25, max: 32 } }, false);
-  assert.equal(apiCalls[0][2].preferredAgeMin, 25);
-  assert.equal(apiCalls[0][2].preferredAgeMax, 32);
-  assert.equal(apiCalls[0][2].ageRange, undefined, "sent as preferredAgeMin/Max only");
+  assert.ok(apiCalls.every((call) => call[2]?.ageRange === undefined && call[2]?.preferredAgeMin === undefined));
   assert.deepEqual(saved.ageRange, { min: 25, max: 32 });
+  apiHandler = async () => apiProfileRow();
+  assert.deepEqual((await real.fetchMyLoveProfile("u1")).ageRange, { min: 25, max: 32 }, "read back from the device");
 
-  await real.saveMyLoveProfile("u1", { ...validInput, ageRange: { min: 40, max: 70 } }, false);
-  assert.equal(apiCalls[1][2].preferredAgeMin, 40);
-  assert.equal(apiCalls[1][2].preferredAgeMax, null, "70+ has no upper limit");
-
+  apiHandler = withUploads(() => apiProfileRow());
   const cleared = await real.saveMyLoveProfile("u1", { ...validInput, ageRange: undefined }, false);
-  assert.equal(apiCalls[2][2].preferredAgeMin, null);
   assert.equal(cleared.ageRange, undefined);
 
   await assert.rejects(
@@ -732,40 +818,34 @@ test("real mode: 403 on connect means membership required", async () => {
   await assert.rejects(real.requestLoveConnection("p"), (err) => !(err instanceof real.MembershipRequiredError) && /Boom/.test(err.message));
 });
 
-test("real mode: create sends the chosen account type; membership is read from the reply", async () => {
-  apiHandler = async (_method, _path, body) => ({ ...body, membership: { type: "private", status: "pending_payment" } });
+test("real mode: a new profile waits for payment on the chosen plan (membership is mocked on the device)", async () => {
+  apiHandler = withUploads(() => apiProfileRow());
   const created = await real.saveMyLoveProfile("u1", { ...validInput, accountType: "private" }, true);
-  assert.equal(apiCalls[0][2].accountType, "private");
-  assert.equal(apiCalls[0][2].visibility, undefined);
+  const create = apiCalls.find((call) => call[0] === "POST");
+  assert.equal(create[2].accountType, undefined, "the backend has no account type yet");
   assert.deepEqual(created.membership, { type: "private", status: "pending_payment" });
 
-  await real.saveMyLoveProfile("u1", { ...validInput, accountType: "private" }, false);
-  assert.equal(apiCalls[1][2].accountType, undefined, "updates never send an account type");
+  // Saving again never changes the membership.
+  const updated = await real.saveMyLoveProfile("u1", { ...validInput, accountType: "public" }, false);
+  assert.deepEqual(updated.membership, { type: "private", status: "pending_payment" });
 });
 
-test("real mode: checkout returns the payment's final status", async () => {
-  apiHandler = async (method, p) => (method === "POST" ? { paymentId: "pay/1", status: "succeeded" } : undefined);
-  assert.deepEqual(
-    await real.buyMembership("u1", { type: "private", interval: "year", paymentMethod: "airtel_money", payerPhone: "+250730000000" }),
-    { status: "succeeded" },
-  );
-  assert.deepEqual(apiCalls[0], [
-    "POST",
-    "/api/v1/love-profiles/me/membership/checkout",
-    { planId: "findlove_private_year", paymentMethod: "airtel_money", payerPhone: "+250730000000" },
-  ]);
+test("real mode: payments stay mocked and never call a payment API", { timeout: 20_000 }, async () => {
+  apiHandler = withUploads(() => apiProfileRow());
+  await real.saveMyLoveProfile("u1", validInput, true);
+  apiCalls = [];
+  const payer = { paymentMethod: "airtel_money", payerPhone: "+250730000000" };
+  assert.deepEqual(await real.buyMembership("u1", { type: "private", interval: "year", ...payer }), { status: "succeeded" });
+  assert.deepEqual(apiCalls, [], "no request leaves the device");
+  apiHandler = async () => apiProfileRow();
+  const membership = (await real.fetchMyLoveProfile("u1")).membership;
+  assert.equal(membership.type, "private");
+  assert.equal(membership.status, "active");
+  assert.ok(Date.parse(membership.expiresAt) > Date.now());
 
-  apiHandler = async () => ({ paymentId: "p2", status: "failed", message: "Insufficient balance." });
-  assert.deepEqual(await real.buyMembership("u1", { type: "public", interval: "week", paymentMethod: "mtn_momo", payerPhone: "+250788000000" }), {
-    status: "failed",
-    message: "Insufficient balance.",
-  });
-
-  apiHandler = async () => {
-    throw new ApiError(502, "Payment provider down");
-  };
-  await assert.rejects(real.buyMembership("u1", { type: "public", interval: "week", paymentMethod: "mtn_momo", payerPhone: "+250788000000" }), /provider down/);
-  assert.equal(stored.size, 0, "real mode never writes demo storage");
+  assert.equal((await real.buyMembership("u1", { type: "public", interval: "week", ...payer }, "failed")).status, "failed");
+  assert.deepEqual(await real.buyMembership("u1", { type: "public", interval: "week", ...payer }, "cancelled"), { status: "cancelled" });
+  assertOnlyLocalExtras();
 });
 
 // ---- ID age check ----
@@ -835,30 +915,38 @@ test("missing ID photos or a missing 18+ confirmation are refused before anythin
   assert.equal(apiCalls.length, 0);
 });
 
-test("real mode: the check belongs to the account; 404 means not started; photos go as multipart", async () => {
-  apiHandler = async () => {
-    throw new ApiError(404, "Not found");
-  };
+test("real mode: the check belongs to the account; null means not started; photos upload privately first", async () => {
+  apiHandler = async () => null;
   assert.equal((await real.fetchAgeVerification("u1")).status, "not_started");
+  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/findlove/age-verification"]);
 
-  assert.equal(apiCalls[0][1], "/api/v1/users/me/age-verification");
-
-  apiHandler = async (method) =>
-    method === "POST_FORM" ? { status: "verified", attemptsLeft: 3, dateOfBirth: "1999-04-02" } : undefined;
-  const result = await real.submitAgeVerification("u1", idPhotos);
+  apiHandler = withUploads(() => ({ status: "VERIFIED", dateOfBirth: "1999-04-02", submittedAt: "2026-11-01T10:00:00.000Z" }));
+  const result = await real.submitAgeVerification("u1", { ...idPhotos, dateOfBirth: "1999-04-02" });
   assert.equal(result.status, "verified");
   assert.equal(result.dateOfBirth, "1999-04-02");
-  const [method, p, form] = apiCalls[1];
-  assert.equal(method, "POST_FORM");
-  assert.equal(p, "/api/v1/users/me/age-verification");
-  assert.equal(form.get("documentType"), "national_id");
-  assert.equal(form.get("confirmedAdult"), "true");
-  assert.ok(form.get("front") && form.get("back"));
+  const uploads = apiCalls.filter((call) => call[0] === "POST_FORM");
+  assert.equal(uploads.length, 2, "front and back");
+  assert.ok(uploads.every((call) => call[1] === "/api/v1/uploads" && call[2].get("purpose") === "AGE_ID"));
+  const submit = apiCalls.find((call) => call[0] === "POST");
+  assert.equal(submit[1], "/api/v1/findlove/age-verification");
+  assert.deepEqual(submit[2], {
+    documentType: "NATIONAL_ID",
+    frontKey: "uploads/2",
+    backKey: "uploads/3",
+    dateOfBirth: "1999-04-02",
+    adultConfirmed: true,
+  });
 
-  apiHandler = async () => {
-    throw new ApiError(500, "OCR down");
-  };
-  await assert.rejects(real.submitAgeVerification("u1", idPhotos), /OCR down/);
+  // No date of birth, or under 18: refused before anything is uploaded.
+  apiCalls = [];
+  await assert.rejects(real.submitAgeVerification("u1", idPhotos), /date of birth/);
+  await assert.rejects(real.submitAgeVerification("u1", { ...idPhotos, dateOfBirth: "2015-01-01" }), /aged 18/);
+  assert.deepEqual(apiCalls, []);
+
+  apiHandler = withUploads(() => {
+    throw new ApiError(500, "Review queue down");
+  });
+  await assert.rejects(real.submitAgeVerification("u1", { ...idPhotos, dateOfBirth: "1999-04-02" }), /Review queue down/);
   assert.equal(stored.size, 0, "real mode never writes demo storage");
 });
 
@@ -913,13 +1001,14 @@ test("discovery only lists people from the member's country", async () => {
 });
 
 test("real mode asks the server for the member's country and sends it on save", async () => {
-  apiHandler = async () => [];
+  apiHandler = async () => ({ items: [] });
   await real.fetchLoveProfiles("RW");
-  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/love-profiles?country=RW"]);
+  assert.deepEqual(apiCalls[0], ["GET", "/api/v1/findlove/discover?page=1&limit=100&country=RW"]);
 
-  apiHandler = async (_method, _path, body) => ({ ...body, gender: "female" });
+  apiCalls = [];
+  apiHandler = withUploads(() => apiProfileRow({ country: "RW" }));
   const saved = await real.saveMyLoveProfile("u1", validInput, true);
-  assert.equal(apiCalls[1][2].country, "RW");
+  assert.equal(apiCalls.find((call) => call[0] === "POST")[2].country, "RW");
   assert.equal(saved.country, "RW");
 });
 
@@ -983,4 +1072,15 @@ test("FindLove chats are saved per member and seeded once", async () => {
   await chatStore.saveLoveChats("u1", threads);
   assert.deepEqual(await chatStore.loadLoveChats("u1"), threads);
   assert.notDeepEqual(await chatStore.loadLoveChats("u2"), threads, "another member never sees these chats");
+});
+
+test("with the real API on, sample chats never load and never count as unread", async () => {
+  const apiChatStore = load("services/findLoveChatService.ts", { EXPO_PUBLIC_USE_FINDLOVE_API: "true" }, (name) => {
+    if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
+  });
+  assert.deepEqual(await apiChatStore.loadLoveChats("api-new"), {}, "no demo chats for a new member");
+  const realId = "6f1c2a1e-1111-4a2b-9c3d-123456789abc";
+  const msg = { id: "m", sentAt: new Date().toISOString(), own: false, kind: "text", text: "hi" };
+  await apiChatStore.saveLoveChats("api-old", { "love-amara": { messages: [msg] }, [realId]: { messages: [msg] } });
+  assert.deepEqual(Object.keys(await apiChatStore.loadLoveChats("api-old")), [realId], "leftover demo chats are dropped");
 });

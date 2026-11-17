@@ -31,7 +31,7 @@ export default function LoveInboxScreen() {
   const [activeTab, setActiveTab] = useState<InboxTab>(tabFromParam(tab));
   const { connections, sentRequests, receivedRequests } = useFindLoveDemo();
   const { refreshProfiles } = useLoveProfilesState();
-  const { threads, totalUnread } = useFindLoveChat();
+  const { threads, totalUnread, refreshChats } = useFindLoveChat();
 
   // Newest chat first; connections with no messages yet go last.
   const conversations = useMemo(() => {
@@ -47,10 +47,11 @@ export default function LoveInboxScreen() {
     if (tab) setActiveTab(tabFromParam(tab));
   }, [tab, at]);
 
-  // Requests change on the other member's side; fetch the latest when a request tab opens.
+  // Requests and chats change on the other member's side; fetch the latest when a tab opens.
   useEffect(() => {
     if (activeTab !== "connections") void refreshProfiles();
-  }, [activeTab, refreshProfiles]);
+    else void refreshChats().catch(() => {});
+  }, [activeTab, refreshProfiles, refreshChats]);
 
   const tabs = useMemo(() => [
     // Chats counts unread messages, not people, so the badge means "something new".

@@ -346,3 +346,102 @@ export async function apiRespondToConnection(profileId: string, accept: boolean)
   if (reply?.connection) connectionByProfileId.set(profileId, reply.connection);
   return reply?.connection ? statusOf(reply.connection) : accept ? "connected" : "none";
 }
+
+// ---- Chats ---------------------------------------------------------------------
+
+/** A chat message as the screens use it (utils/findLoveChat LoveChatMessage, text only). */
+export type ApiLoveChatMessage = {
+  id: string;
+  clientMessageId?: string | null;
+  kind: "text";
+  text: string;
+  own: boolean;
+  sentAt: string;
+};
+
+export type ApiLoveChatSummary = {
+  profileId: string;
+  connectionStatus: "PENDING" | "ACCEPTED";
+  lastMessage: ApiLoveChatMessage | null;
+  unreadCount: number;
+  readAt: string | null;
+  updatedAt: string;
+};
+
+/** GET /findlove/chats -> one row per chat, with the unread count for the badge. */
+export async function apiListChats(): Promise<ApiLoveChatSummary[]> {
+  const reply = await api.get<{ items?: ApiLoveChatSummary[] }>(`${BASE}/chats`);
+  return reply?.items ?? [];
+}
+
+/** GET /findlove/chats/:profileId/messages -> the newest page, oldest first. */
+export async function apiChatMessages(
+  profileId: string,
+  options: { before?: string; limit?: number } = {},
+): Promise<{ items: ApiLoveChatMessage[]; canSend: boolean; otherReadAt: string | null; hasMore: boolean }> {
+  const params = [`limit=${options.limit ?? 50}`];
+  if (options.before) params.push(`before=${encodeURIComponent(options.before)}`);
+  const reply = await api.get<{
+    items?: ApiLoveChatMessage[];
+    canSend?: boolean;
+    otherReadAt?: string | null;
+    hasMore?: boolean;
+  }>(`${BASE}/chats/${encodeURIComponent(profileId)}/messages?${params.join("&")}`);
+  return {
+    items: reply?.items ?? [],
+    canSend: reply?.canSend ?? true,
+    otherReadAt: reply?.otherReadAt ?? null,
+    hasMore: reply?.hasMore ?? false,
+  };
+}
+
+/** POST /findlove/chats/:profileId/messages. clientMessageId makes retries safe. */
+export async function apiSendChatMessage(profileId: string, text: string, clientMessageId: string): Promise<ApiLoveChatMessage> {
+  const reply = await api.post<{ message?: ApiLoveChatMessage }>(`${BASE}/chats/${encodeURIComponent(profileId)}/messages`, {
+    text,
+    clientMessageId,
+  });
+  if (!reply?.message) throw new Error("FindLove sent back an unexpected reply. Pull to refresh.");
+  return reply.message;
+}
+
+/** POST /findlove/chats/:profileId/read */
+export async function apiMarkChatRead(profileId: string): Promise<string> {
+  const reply = await api.post<{ readAt?: string }>(`${BASE}/chats/${encodeURIComponent(profileId)}/read`, {});
+  return reply?.readAt ?? new Date().toISOString();
+}
+
+// ---- Notifications -----------------------------------------------------------------
+
+/** A FindLove notification as GET /findlove/notifications returns it. */
+export type ApiLoveNotification = {
+  id: string;
+  type: string;
+  /** What the app shows an icon for: a request to answer, or connection news. */
+  kind: "request" | "connection";
+  title: string;
+  body: string;
+  /** The other member's FindLove profile, for opening their chat. */
+  profileId: string | null;
+  /** Which Inbox tab a request opens. */
+  tab: "received" | "sent" | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
+/** GET /findlove/notifications -> newest first, with the unread count for the bell. */
+export async function apiListNotifications(limit = 50): Promise<{ items: ApiLoveNotification[]; unreadCount: number }> {
+  const reply = await api.get<{ items?: ApiLoveNotification[]; unreadCount?: number }>(`${BASE}/notifications?page=1&limit=${limit}`);
+  const items = reply?.items ?? [];
+  return { items, unreadCount: reply?.unreadCount ?? items.filter((item) => !item.readAt).length };
+}
+
+/** POST /findlove/notifications/:id/read */
+export async function apiMarkNotificationRead(id: string): Promise<void> {
+  await api.post(`${BASE}/notifications/${encodeURIComponent(id)}/read`, {});
+}
+
+/** POST /findlove/notifications/read-all */
+export async function apiMarkAllNotificationsRead(): Promise<void> {
+  await api.post(`${BASE}/notifications/read-all`, {});
+}
