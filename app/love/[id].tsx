@@ -17,7 +17,7 @@ export default function LoveProfileDetailScreen() {
   const insets = useAppSafeAreaInsets();
   const colors = useColors();
   const { isLoading, getProfileById, getConnectionStatus } = useLoveProfiles();
-  const { connect: connectWith, upgradePrompt } = useLoveConnect();
+  const { connectWithNote, upgradePrompt } = useLoveConnect();
   const { accept } = useConnectionActions();
   const [imageFailed, setImageFailed] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
@@ -63,7 +63,7 @@ export default function LoveProfileDetailScreen() {
     if (!profile || pending || connected || busy) return;
     setBusy(true);
     if (received) await accept(profile);
-    else await connectWith(profile);
+    else await connectWithNote(profile);
     setBusy(false);
   }
 

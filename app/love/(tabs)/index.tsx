@@ -19,6 +19,7 @@ import { AgeRangeSheet } from "@/components/love/AgeRangePicker";
 import { DiscoveryFilters } from "@/components/love/DiscoveryFilters";
 import { useConnectionActions } from "@/components/love/ConnectionRequests";
 import { useLoveConnect } from "@/components/love/UpgradePrompt";
+import { useFindLoveNotifications } from "@/context/FindLoveNotificationsContext";
 import type { LoveProfile } from "@/constants/loveProfiles";
 import { useLoveProfiles } from "@/context/LoveProfilesContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
@@ -40,7 +41,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { profiles, isLoading, error, refreshProfiles, getConnectionStatus } = useLoveProfiles();
-  const { connect, upgradePrompt } = useLoveConnect();
+  const { connectWithNote, upgradePrompt } = useLoveConnect();
   const { accept } = useConnectionActions();
   const { myProfile, accountType } = useMyLoveProfile();
   const country = myProfile?.country;
@@ -117,11 +118,11 @@ export default function HomeScreen() {
         profile={item}
         connectionStatus={getConnectionStatus(item.id)}
         onOpen={() => openProfile(item)}
-        onConnect={() => void (getConnectionStatus(item.id) === "received" ? accept(item) : connect(item))}
+        onConnect={() => void (getConnectionStatus(item.id) === "received" ? accept(item) : connectWithNote(item))}
         onMessage={() => openChat(item)}
       />
     </View>
-  ), [accept, cellWidth, connect, getConnectionStatus, openChat, openProfile]);
+  ), [accept, cellWidth, connectWithNote, getConnectionStatus, openChat, openProfile]);
 
   const topBar = (
     <HomeTopBar
@@ -275,6 +276,7 @@ function HomeTopBar({
   onNotifications: () => void;
   onUpgrade?: () => void;
 }) {
+  const { unreadCount } = useFindLoveNotifications();
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -300,9 +302,14 @@ function HomeTopBar({
         hitSlop={6}
         style={[styles.topIcon, { backgroundColor: colors.card, borderColor: colors.border }]}
         accessibilityRole="button"
-        accessibilityLabel="Notifications"
+        accessibilityLabel={unreadCount ? `Notifications, ${unreadCount} new` : "Notifications"}
       >
-        <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
+        <Ionicons name={unreadCount ? "notifications" : "notifications-outline"} size={20} color={colors.foreground} />
+        {unreadCount ? (
+          <View style={[styles.bellBadge, { backgroundColor: colors.primary, borderColor: colors.background }]}>
+            <Text style={styles.bellBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+          </View>
+        ) : null}
       </Pressable>
       {onUpgrade ? (
         <Pressable
@@ -326,6 +333,19 @@ const MAX_GRID_WIDTH = 1080;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingBottom: 6 },
+  bellBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: { color: "#FFFFFF", fontSize: 9, fontFamily: "Inter_700Bold" },
   brand: { flex: 1, flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 7 },
   upgrade: { flexDirection: "row", alignItems: "center", gap: 5, height: 40, paddingHorizontal: 12, borderRadius: 20, backgroundColor: "#D4A017" },
   upgradeText: { fontSize: 12, color: "#1A1300", fontFamily: "Inter_700Bold" },

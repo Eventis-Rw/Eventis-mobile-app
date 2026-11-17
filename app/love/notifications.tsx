@@ -1,10 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { LoveScreenShell } from "@/components/love/LoveScreenShell";
-import { useFindLoveDemo, type LoveActivity, type LoveActivityType } from "@/context/FindLoveDemoContext";
+import { type LoveActivityType } from "@/context/FindLoveDemoContext";
+import {
+  notificationTimeLabel,
+  useFindLoveNotifications,
+  type LoveNotification,
+} from "@/context/FindLoveNotificationsContext";
 import { useColors } from "@/hooks/useColors";
 
 type Palette = ReturnType<typeof useColors>;
@@ -28,7 +33,14 @@ function toneFor(type: LoveActivityType, colors: Palette): { icon: keyof typeof 
 export default function LoveNotificationsScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { activity } = useFindLoveDemo();
+  const { notifications: activity, unreadCount, isLoading, error, refresh, markRead, markAllRead } = useFindLoveNotifications();
+
+  // Fetch the latest each time the page opens.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
 
   const groups = useMemo(() => {
     const requests = activity.filter((entry) => entry.type === "request");
@@ -46,13 +58,29 @@ export default function LoveNotificationsScreen() {
     else router.replace("/love" as any);
   };
 
-  const open = (entry: LoveActivity) => {
+  const isTappable = (entry: LoveNotification) =>
+    entry.type === "request" || entry.type === "purchase" || entry.type === "gift" || (entry.type === "connection" && !!entry.profileId);
+
+  const open = (entry: LoveNotification) => {
+    markRead(entry.id);
     if (entry.type === "request") {
       router.navigate({ pathname: "/love/messages", params: { tab: entry.tab ?? "received", at: String(Date.now()) } } as any);
     } else if (entry.type === "purchase" || entry.type === "gift") {
       router.push("/love/wallet" as any);
+    } else if (entry.type === "connection" && entry.profileId) {
+      router.push({ pathname: "/love/chat/[id]", params: { id: entry.profileId } } as any);
     }
   };
+
+  if (isLoading && !activity.length) {
+    return (
+      <LoveScreenShell title="Notifications" onBack={back}>
+        <View style={styles.empty}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </LoveScreenShell>
+    );
+  }
 
   return (
     <LoveScreenShell title="Notifications" onBack={back}>
@@ -64,7 +92,9 @@ export default function LoveNotificationsScreen() {
             </View>
             <View style={styles.summaryCopy}>
               <Text style={[styles.summaryTitle, { color: colors.foreground }]}>
-                {activity.length} recent {activity.length === 1 ? "update" : "updates"}
+                {unreadCount
+                  ? `${unreadCount} new ${unreadCount === 1 ? "update" : "updates"}`
+                  : `${activity.length} recent ${activity.length === 1 ? "update" : "updates"}`}
               </Text>
               <Text style={[styles.summaryText, { color: colors.mutedForeground }]}>
                 {requestCount
@@ -72,7 +102,13 @@ export default function LoveNotificationsScreen() {
                   : "Connection news and updates appear here."}
               </Text>
             </View>
+            {unreadCount ? (
+              <Pressable onPress={markAllRead} hitSlop={8} accessibilityRole="button" accessibilityLabel="Mark all notifications read">
+                <Text style={[styles.markAll, { color: colors.primary }]}>Mark all read</Text>
+              </Pressable>
+            ) : null}
           </View>
+          {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
 
           {groups.map((group) => (
             <View key={group.key} style={styles.group}>
@@ -86,7 +122,8 @@ export default function LoveNotificationsScreen() {
               <View style={styles.groupList}>
                 {group.entries.map((entry) => {
                   const tone = toneFor(entry.type, colors);
-                  const tappable = entry.type === "request" || entry.type === "purchase" || entry.type === "gift";
+                  const tappable = isTappable(entry);
+                  const unread = !entry.read;
 
                   return (
                     <Pressable
@@ -94,6 +131,7 @@ export default function LoveNotificationsScreen() {
                       onPress={() => open(entry)}
                       disabled={!tappable}
                       accessibilityRole={tappable ? "button" : undefined}
+                      accessibilityLabel={`${unread ? "New. " : ""}${entry.title}. ${entry.description}`}
                       style={({ pressed }) => [
                         styles.card,
                         { backgroundColor: colors.card, borderColor: colors.border },
@@ -105,14 +143,17 @@ export default function LoveNotificationsScreen() {
                       </View>
                       <View style={styles.copy}>
                         <View style={styles.titleRow}>
-                          <Text style={[styles.title, { color: colors.foreground }]} numberOfLines={2}>{entry.title}</Text>
-                          <Text style={[styles.time, { color: colors.mutedForeground }]}>{entry.createdAt}</Text>
+                          <Text style={[styles.title, unread && styles.titleUnread, { color: colors.foreground }]} numberOfLines={2}>{entry.title}</Text>
+                          <Text style={[styles.time, { color: unread ? colors.primary : colors.mutedForeground }]}>
+                            {entry.timeLabel ?? notificationTimeLabel(entry.createdAt)}
+                          </Text>
+                          {unread ? <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} /> : null}
                         </View>
                         <Text style={[styles.description, { color: colors.mutedForeground }]}>{entry.description}</Text>
                         {tappable ? (
                           <View style={styles.actionRow}>
                             <Text style={[styles.actionText, { color: colors.primary }]}>
-                              {entry.type === "request" ? "Answer request" : "Open wallet"}
+                              {entry.type === "request" ? "Answer request" : entry.type === "connection" ? "Say hello" : "Open wallet"}
                             </Text>
                             <Ionicons name="chevron-forward" size={14} color={colors.primary} />
                           </View>
@@ -131,7 +172,9 @@ export default function LoveNotificationsScreen() {
             <Ionicons name="notifications-outline" size={32} color={colors.primary} />
           </View>
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No notifications yet</Text>
-          <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>Connection requests and new matches will appear here.</Text>
+          <Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>
+            {error ?? "Connection requests and new matches will appear here."}
+          </Text>
         </View>
       )}
     </LoveScreenShell>
@@ -139,6 +182,10 @@ export default function LoveNotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
+  markAll: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  error: { fontSize: 13, fontFamily: "Inter_400Regular", paddingHorizontal: 2 },
+  titleUnread: { fontFamily: "Inter_700Bold" },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
   summary: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 20, padding: 14 },
   summaryIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   summaryCopy: { flex: 1, minWidth: 0 },

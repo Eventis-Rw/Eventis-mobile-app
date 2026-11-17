@@ -15,6 +15,14 @@ export type LoveChatThreads = Record<string, LoveChatThread>;
 // utils/findLoveConnections.ts): the sender's note and the receiver's reply.
 const chatsKey = (userId: string) => `@eventis_findlove_chats_v1_${userId}`;
 
+// With the real FindLove API on, the sample chats below must not appear: their
+// people ("love-amara", "love-ethan") are not real connections, so they would
+// only inflate the Inbox badge while the Chats list stays empty.
+const USE_FINDLOVE_API = process.env.EXPO_PUBLIC_USE_FINDLOVE_API === "true";
+
+/** Real FindLove profile ids are UUIDs; anything else is left over from the demo. */
+const isRealProfileId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 const MINUTE = 60 * 1000;
 
 /** Sample chats with the demo's connected members, dated relative to now so the Inbox times look real. */
@@ -53,14 +61,20 @@ function isThread(value: unknown): value is LoveChatThread {
 }
 
 export async function loadLoveChats(userId: string, now: number = Date.now()): Promise<LoveChatThreads> {
+  const fallback = USE_FINDLOVE_API ? {} : demoThreads(now);
   const stored = await AsyncStorage.getItem(chatsKey(userId));
-  if (!stored) return demoThreads(now);
+  if (!stored) return fallback;
   try {
     const parsed: unknown = JSON.parse(stored);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return demoThreads(now);
-    return Object.fromEntries(Object.entries(parsed).filter(([, thread]) => isThread(thread))) as LoveChatThreads;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fallback;
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        // Drop sample chats a device saved before the API was switched on.
+        ([profileId, thread]) => isThread(thread) && (!USE_FINDLOVE_API || isRealProfileId(profileId)),
+      ),
+    ) as LoveChatThreads;
   } catch {
-    return demoThreads(now);
+    return fallback;
   }
 }
 
