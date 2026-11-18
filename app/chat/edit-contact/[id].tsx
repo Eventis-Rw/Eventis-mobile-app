@@ -163,10 +163,16 @@ export default function EditContactScreen() {
             { paddingBottom: insets.bottom + 28 },
           ]}
         >
-          <Image
-            source={{ uri: contact.avatarUrl }}
-            style={[styles.avatar, { backgroundColor: colors.secondary }]}
-          />
+          {contact.avatarUrl ? (
+            <Image
+              source={{ uri: contact.avatarUrl }}
+              style={[styles.avatar, { backgroundColor: colors.secondary }]}
+            />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: colors.secondary }]}>
+              <Ionicons name="person" size={38} color={colors.mutedForeground} />
+            </View>
+          )}
           <View
             style={[
               styles.form,
@@ -304,6 +310,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   avatar: { width: 96, height: 96, borderRadius: 48, marginVertical: 22 },
+  avatarFallback: { alignItems: "center", justifyContent: "center" },
   form: {
     width: "100%",
     borderWidth: StyleSheet.hairlineWidth,

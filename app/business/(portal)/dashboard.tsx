@@ -10,6 +10,7 @@ import { OrganiserPortalHeader } from "@/components/OrganiserPortalHeader";
 import { useAuth } from "@/context/AuthContext";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { useOrganiserEvents } from "@/hooks/useOrganiserEvents";
+import { useEventAnalytics } from "@/hooks/useEventAnalytics";
 
 const enter = (delay: number) => Platform.OS !== "web" ? FadeInDown.delay(delay).springify() : undefined;
 
@@ -18,6 +19,7 @@ export default function OrganiserDashboard() {
   const router = useRouter();
   const { user } = useAuth();
   const { events, hasLoaded, error, refresh } = useOrganiserEvents();
+  const analytics = useEventAnalytics(30);
   const organisation = user?.organisation?.name ?? user?.businessName ?? "Your organisation";
   const { width, fontScale } = useWindowDimensions();
   const compact = width < 370 || fontScale > 1.2;
@@ -62,6 +64,20 @@ export default function OrganiserDashboard() {
             <Text style={[styles.summaryLabel, { color: palette.muted }]}>Active organisation</Text>
           </Pressable>
         </Animated.View>
+
+        <Animated.View entering={enter(90)} style={[styles.summaryRow, compact && styles.stack]}>
+          <Pressable onPress={() => router.navigate("/business/insights")} accessibilityRole="button" accessibilityLabel="View all-time event views" style={[styles.summaryCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+            <View style={[styles.summaryIcon, { backgroundColor: palette.blueSoft }]}><Ionicons name="eye-outline" size={20} color={palette.accent} /></View>
+            <Text style={[styles.summaryValue, { color: palette.text }]}>{analytics.overview ? analytics.overview.eventViews.toLocaleString() : "—"}</Text>
+            <Text style={[styles.summaryLabel, { color: palette.muted }]}>All-time event views</Text>
+          </Pressable>
+          <Pressable onPress={() => router.navigate("/business/insights")} accessibilityRole="button" accessibilityLabel="View people who saved your events" style={[styles.summaryCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+            <View style={[styles.summaryIcon, { backgroundColor: palette.blueSoft }]}><Ionicons name="bookmark-outline" size={20} color={palette.accent} /></View>
+            <Text style={[styles.summaryValue, { color: palette.text }]}>{analytics.overview ? analytics.overview.savedEvents.toLocaleString() : "—"}</Text>
+            <Text style={[styles.summaryLabel, { color: palette.muted }]}>Current event saves</Text>
+          </Pressable>
+        </Animated.View>
+        {analytics.error ? <Pressable onPress={() => void analytics.refresh()} accessibilityRole="button"><Text style={[styles.actionText, { color: palette.danger }]}>Event statistics are unavailable. Tap to retry.</Text></Pressable> : null}
 
         {error ? <Pressable onPress={() => void refresh()} accessibilityRole="button"><Text style={[styles.actionText, { color: palette.danger }]}>{error} Tap to retry.</Text></Pressable> : null}
 

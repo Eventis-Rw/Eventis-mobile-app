@@ -4,26 +4,27 @@ import { useColors } from "@/hooks/useColors";
 /** Solid, high-contrast surfaces shared by every organiser screen. */
 export function useOrganiserPalette() {
   const { scheme } = useTheme();
+  const colors = useColors();
   const dark = scheme === "dark";
 
   return {
     dark,
-    canvas: dark ? "#080B10" : "#F4F6F9",
-    surface: dark ? "#11161E" : "#FFFFFF",
-    surfaceRaised: dark ? "#181F2A" : "#F1F4F8",
-    surfacePressed: dark ? "#202B3A" : "#E8EFF7",
-    line: dark ? "#29313D" : "#DEE5EE",
-    text: dark ? "#F7F9FC" : "#08111F",
-    muted: dark ? "#9EABC0" : "#647084",
-    blue: dark ? "#087AC1" : "#086EAE",
-    accent: dark ? "#70BDF5" : "#086EAE",
-    blueDeep: dark ? "#075DA3" : "#075DA3",
-    blueSoft: dark ? "#102F4B" : "#E3F3FD",
-    cyan: "#62D4FF",
-    positive: dark ? "#45D49A" : "#168A5B",
-    warning: dark ? "#F5B94C" : "#9A6200",
-    danger: dark ? "#FF6B7B" : "#C93348",
-    onBlue: "#FFFFFF",
+    canvas: colors.background,
+    surface: colors.card,
+    surfaceRaised: colors.secondary,
+    surfacePressed: colors.input,
+    line: colors.border,
+    text: colors.foreground,
+    muted: colors.mutedForeground,
+    blue: colors.primary,
+    accent: colors.accent,
+    blueDeep: colors.primary,
+    blueSoft: `${colors.primary}18`,
+    cyan: colors.info,
+    positive: colors.success,
+    warning: colors.warning,
+    danger: colors.destructive,
+    onBlue: colors.primaryForeground,
   };
 }
 

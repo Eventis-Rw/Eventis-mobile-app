@@ -67,11 +67,17 @@ export default function ContactDetails() {
           </Text>
         </View>
         <View style={styles.identity}>
-          <Image
-            source={{ uri: contact.avatarUrl }}
-            style={styles.avatar}
-            accessibilityLabel={`Photo of ${contact.name}`}
-          />
+          {contact.avatarUrl ? (
+            <Image
+              source={{ uri: contact.avatarUrl }}
+              style={styles.avatar}
+              accessibilityLabel={`Photo of ${contact.name}`}
+            />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Ionicons name="person" size={42} color={colors.mutedForeground} />
+            </View>
+          )}
           <Text
             numberOfLines={2}
             maxFontSizeMultiplier={1.35}
@@ -302,6 +308,7 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   avatar: { width: 108, height: 108, borderRadius: 54, marginBottom: 10 },
+  avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: "#25283A" },
   name: {
     maxWidth: "100%",
     fontFamily: "Inter_800ExtraBold",

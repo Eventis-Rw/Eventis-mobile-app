@@ -119,8 +119,8 @@ export default function BecomeOrganiserScreen() {
               style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
               accessibilityRole="button"
             >
-              <Text style={styles.heroButtonText}>{ctaLabel}</Text>
-              <Ionicons name="arrow-forward" size={18} color="#087EC1" />
+              <Text style={[styles.heroButtonText, { color: palette.blue }]}>{ctaLabel}</Text>
+              <Ionicons name="arrow-forward" size={18} color={palette.blue} />
             </Pressable>
           </LinearGradient>
         </Animated.View>
@@ -199,8 +199,8 @@ export default function BecomeOrganiserScreen() {
           style={({ pressed }) => [styles.primaryButton, { backgroundColor: palette.blue }, pressed && styles.pressed]}
           accessibilityRole="button"
         >
-          <Text style={styles.primaryButtonText}>{ctaLabel}</Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+          <Text style={[styles.primaryButtonText, { color: palette.onBlue }]}>{ctaLabel}</Text>
+          <Ionicons name="arrow-forward" size={18} color={palette.onBlue} />
         </Pressable>
         {step !== "ready" ? (
           <Pressable
