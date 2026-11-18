@@ -24,6 +24,7 @@ import { KeyboardProvider } from "@/components/KeyboardCompat";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ChatProvider } from "@/context/ChatContext";
+import { CallProvider } from "@/context/CallContext";
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 import { BookingsProvider } from "@/context/BookingsContext";
 import { EventsProvider } from "@/context/EventsContext";
@@ -182,20 +183,24 @@ function ThemedAppSurface() {
               <AuthProvider>
                 <NotificationsProvider>
                   <ChatProvider>
-                    <EventsProvider>
-                      <AnalyticsProvider>
-                        <FindLoveProviders>
-                          <BookingsProvider>
-                            <StoriesProvider>
-                              <View style={{ flex: 1 }}>
-                                <RootLayoutNav />
-                                <NotificationPopupHost />
-                              </View>
-                            </StoriesProvider>
-                          </BookingsProvider>
-                        </FindLoveProviders>
-                      </AnalyticsProvider>
-                    </EventsProvider>
+                    <View style={{ flex: 1 }}>
+                      <CallProvider>
+                        <EventsProvider>
+                          <AnalyticsProvider>
+                            <FindLoveProviders>
+                              <BookingsProvider>
+                                <StoriesProvider>
+                                  <View style={{ flex: 1 }}>
+                                    <RootLayoutNav />
+                                    <NotificationPopupHost />
+                                  </View>
+                                </StoriesProvider>
+                              </BookingsProvider>
+                            </FindLoveProviders>
+                          </AnalyticsProvider>
+                        </EventsProvider>
+                      </CallProvider>
+                    </View>
                   </ChatProvider>
                 </NotificationsProvider>
               </AuthProvider>

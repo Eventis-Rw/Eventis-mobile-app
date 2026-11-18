@@ -1,4 +1,6 @@
 import { CATEGORIES, type Event, type EventCategory } from "@/constants/events";
+import { File as ExpoFile } from "expo-file-system";
+import { Platform } from "react-native";
 import { api } from "@/utils/apiClient";
 
 export const USE_EVENTS_API = process.env.EXPO_PUBLIC_USE_EVENTS_API !== "false";
@@ -16,7 +18,7 @@ export interface ApiEvent {
   time: string;
   end_date: string | null;
   end_time: string | null;
-  status: "draft" | "published" | "cancelled";
+  status: "draft" | "published" | "paused" | "cancelled";
   capacity: number | null;
   is_paid: boolean;
   price_minor: string | null;
@@ -43,6 +45,8 @@ interface ApiEventPage {
 
 export interface EventWriteInput {
   image: string;
+  imageMimeType?: string;
+  imageFileName?: string;
   title: string;
   description: string;
   category: Exclude<EventCategory, "All">;
@@ -53,6 +57,68 @@ export interface EventWriteInput {
   isPaid: boolean;
   price: number;
   websiteUrl?: string;
+}
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "image/bmp": "bmp",
+  "image/x-ms-bmp": "bmp",
+  "image/tiff": "tiff",
+  "image/x-tiff": "tiff",
+};
+
+function inferImageMimeType(uri: string, name?: string) {
+  const extension = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(name ?? uri)?.[1]?.toLowerCase();
+  const byExtension: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", jpe: "image/jpeg", png: "image/png",
+    webp: "image/webp", gif: "image/gif", avif: "image/avif", heic: "image/heic",
+    heif: "image/heif", bmp: "image/bmp", tif: "image/tiff", tiff: "image/tiff",
+  };
+  return (extension && byExtension[extension]) || "image/jpeg";
+}
+
+function imageFileName(input: EventWriteInput, mimeType: string) {
+  const suppliedName = input.imageFileName?.trim();
+  if (suppliedName) return suppliedName.replace(/[\\/]/g, "_");
+  const leaf = input.image.split(/[\\/]/).pop()?.split(/[?#]/)[0];
+  if (leaf && /\.[a-z0-9]{2,5}$/i.test(leaf)) return leaf;
+  return `cover.${IMAGE_EXTENSIONS[mimeType] ?? "jpg"}`;
+}
+
+async function appendCoverImage(form: FormData, input: EventWriteInput) {
+  if (!/^(file|content|blob):/i.test(input.image)) {
+    throw new Error("Choose an event image from your device before publishing.");
+  }
+  let mimeType = input.imageMimeType?.toLowerCase() || inferImageMimeType(input.image, input.imageFileName);
+  if (!mimeType.startsWith("image/")) mimeType = inferImageMimeType(input.image, input.imageFileName);
+  if (mimeType === "image/jpg" || mimeType === "image/pjpeg") mimeType = "image/jpeg";
+
+  if (Platform.OS === "web") {
+    const response = await fetch(input.image);
+    if (!response.ok) throw new Error("We couldn't read the selected event image.");
+    const blob = await response.blob();
+    if (!input.imageMimeType && blob.type.startsWith("image/")) mimeType = blob.type;
+    form.append("cover_image", blob, imageFileName(input, mimeType));
+    return;
+  }
+
+  try {
+    const file = new ExpoFile(input.image);
+    const bytes = await file.bytes();
+    form.append("cover_image", {
+      name: imageFileName(input, mimeType),
+      type: mimeType,
+      bytes: () => bytes,
+    } as unknown as Blob);
+  } catch {
+    throw new Error("We couldn't read this image from your device. Choose it again from your gallery.");
+  }
 }
 
 export function mapApiEvent(record: ApiEvent, organizer = "Event organiser"): Event {
@@ -95,6 +161,14 @@ export function mapApiEvent(record: ApiEvent, organizer = "Event organiser"): Ev
 }
 
 export async function listApiEvents(): Promise<ApiEvent[]> {
+  return listApiEventsAt("/api/v1/events");
+}
+
+export async function listApiPublisherEvents(): Promise<ApiEvent[]> {
+  return listApiEventsAt("/api/v1/events/me/events");
+}
+
+async function listApiEventsAt(path: string): Promise<ApiEvent[]> {
   const limit = 100;
   const records: ApiEvent[] = [];
   let page = 1;
@@ -102,7 +176,7 @@ export async function listApiEvents(): Promise<ApiEvent[]> {
 
   while (records.length < total) {
     const result = await api.get<ApiEventPage>(
-      `/api/v1/events?page=${page}&limit=${limit}`,
+      `${path}?page=${page}&limit=${limit}`,
     );
     records.push(...result.items);
     total = result.total;
@@ -111,6 +185,15 @@ export async function listApiEvents(): Promise<ApiEvent[]> {
   }
 
   return records;
+}
+
+export async function updateApiEventStatus(
+  id: string,
+  status: "published" | "paused",
+): Promise<ApiEvent> {
+  return api.patch<ApiEvent>(`/api/v1/events/${encodeURIComponent(id)}`, {
+    status,
+  });
 }
 
 export async function getApiEvent(id: string): Promise<ApiEvent> {
@@ -131,7 +214,7 @@ function toApiPayload(
     time: input.time,
     timezone: "Africa/Kigali",
     ...(status ? { status } : {}),
-    capacity: input.capacity,
+    capacity: input.capacity > 0 ? input.capacity : null,
     is_paid: input.isPaid,
     ...(input.isPaid ? { price_minor: String(Math.round(input.price)) } : {}),
     currency: "RWF",
@@ -141,17 +224,11 @@ function toApiPayload(
 }
 
 async function createEventForm(input: EventWriteInput): Promise<FormData> {
-  if (!/^(file|content|blob):/i.test(input.image)) {
-    throw new Error("Select an event image from this device to publish it.");
-  }
-  const imageResponse = await fetch(input.image);
-  if (!imageResponse.ok) throw new Error("We couldn't read the selected event image.");
-
   const form = new FormData();
   for (const [key, value] of Object.entries(toApiPayload(input, "published"))) {
     form.append(key, Array.isArray(value) ? value.join(",") : String(value));
   }
-  form.append("cover_image", await imageResponse.blob(), "cover.jpg");
+  await appendCoverImage(form, input);
   return form;
 }
 
@@ -170,9 +247,7 @@ export async function updateApiEvent(
     for (const [key, value] of Object.entries(payload)) {
       form.append(key, Array.isArray(value) ? value.join(",") : String(value));
     }
-    const imageResponse = await fetch(input.image);
-    if (!imageResponse.ok) throw new Error("We couldn't read the selected event image.");
-    form.append("cover_image", await imageResponse.blob(), "cover.jpg");
+    await appendCoverImage(form, input);
     return api.patchForm<ApiEvent>(
       `/api/v1/events/${encodeURIComponent(id)}`,
       form,

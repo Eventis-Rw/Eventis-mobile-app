@@ -44,6 +44,8 @@ const NON_ALL_CATEGORIES = CATEGORIES.filter((c) => c !== "All") as Exclude<Even
 
 interface FormState {
   image: string;
+  imageMimeType: string;
+  imageFileName: string;
   title: string;
   description: string;
   category: Exclude<EventCategory, "All"> | "";
@@ -58,6 +60,8 @@ interface FormState {
 
 const INITIAL: FormState = {
   image: "",
+  imageMimeType: "",
+  imageFileName: "",
   title: "",
   description: "",
   category: "",
@@ -73,13 +77,15 @@ const INITIAL: FormState = {
 function toInput(form: FormState): PublisherEventInput {
   return {
     image: form.image,
+    imageMimeType: form.imageMimeType || undefined,
+    imageFileName: form.imageFileName || undefined,
     title: form.title,
     description: form.description,
     category: form.category as Exclude<EventCategory, "All">,
     location: form.location,
     date: form.date,
     time: form.time.trim(),
-    capacity: Number(form.capacity),
+    capacity: form.capacity.trim() ? Number(form.capacity) : 0,
     isPaid: form.isPaid,
     price: Number(form.price),
     websiteUrl: form.websiteUrl,
@@ -89,13 +95,15 @@ function toInput(form: FormState): PublisherEventInput {
 function toForm(event: PublisherEvent): FormState {
   return {
     image: event.image,
+    imageMimeType: "",
+    imageFileName: "",
     title: event.title,
     description: event.description,
     category: event.category === "All" ? "" : event.category,
     location: event.location,
     date: event.date,
     time: event.time,
-    capacity: String(event.capacity),
+    capacity: event.capacity ? String(event.capacity) : "",
     isPaid: event.isPaid,
     price: event.isPaid ? String(event.price) : "",
     websiteUrl: event.organizerWebsite ?? "",
@@ -170,8 +178,7 @@ export default function CreateEventScreen() {
     form.category &&
     form.location.trim() &&
     form.date.trim() &&
-    form.time.trim() &&
-    form.capacity.trim(),
+    form.time.trim(),
   );
 
   async function chooseEventImage(source: "library" | "camera") {
@@ -203,7 +210,13 @@ export default function CreateEventScreen() {
         : await ImagePicker.launchImageLibraryAsync(options);
       const selected = result.canceled ? undefined : result.assets[0];
       if (selected) {
-        set("image", selected.uri);
+        setError(null);
+        setForm((current) => ({
+          ...current,
+          image: selected.uri,
+          imageMimeType: selected.mimeType ?? "",
+          imageFileName: selected.fileName ?? "",
+        }));
         if (Platform.OS !== "web") void Haptics.selectionAsync();
       }
     } catch {
@@ -443,7 +456,7 @@ export default function CreateEventScreen() {
 
               <EventScheduleFields date={form.date} time={form.time} onDate={(value) => set("date", value)} onTime={(value) => set("time", value)} />
 
-              <Field label="Capacity" required colors={colors}>
+              <Field label="Capacity (optional)" colors={colors}>
                 <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
                   <Ionicons name="people-outline" size={18} color={colors.mutedForeground} />
                   <TextInput
@@ -463,7 +476,8 @@ export default function CreateEventScreen() {
               entering={Platform.OS !== "web" ? FadeInDown.delay(200).springify() : undefined}
               style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>03  Tickets & entry</Text>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>03  Tickets & entry (optional)</Text>
+              <Text style={[styles.switchSub, { color: colors.mutedForeground }]}>Publish without ticket details, or turn on paid entry to add a price and booking link.</Text>
 
               <View style={styles.switchRow}>
                 <View style={styles.switchLabel}>
