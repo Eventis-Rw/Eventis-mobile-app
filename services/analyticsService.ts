@@ -46,7 +46,7 @@ async function save(records: AnalyticsRecord[]) {
   await AsyncStorage.setItem(ANALYTICS_KEY, JSON.stringify(records));
   listeners.forEach((listener) => listener(records));
 }
-/** Local collection only. No unimplemented endpoint is called. Owner previews are excluded. */
+/** Saves a local activity record. Owner previews are excluded. */
 export function recordAnalytics(input: AnalyticsInput): Promise<boolean> {
   return serialized(async () => {
     if (!input.entityId || (input.ownerId && input.ownerId === input.viewerId)) return false;

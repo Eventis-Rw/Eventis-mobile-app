@@ -24,6 +24,7 @@ interface ApiProfile {
 
 interface ApiParticipant {
   userId: string;
+  isOnline?: boolean;
   isArchived: boolean;
   isMuted: boolean;
   hiddenAt: string | null;
@@ -608,6 +609,7 @@ export class ApiChatService implements ChatService {
       avatarUrl: profile?.avatarUrl ?? FALLBACK_AVATAR,
       headline: "On Eventis",
       isEventisUser: true,
+      isOnline: peer?.isOnline ?? false,
       firstName: profile?.firstName ?? alias?.firstName ?? undefined,
       lastName: profile?.lastName ?? alias?.lastName ?? undefined,
       isInAddressBook: Boolean(alias),

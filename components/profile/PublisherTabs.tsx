@@ -79,7 +79,9 @@ function EventRow({ item, onPress, trailing }: { item: ManagedEvent; onPress: ()
   const { event } = item;
   const status = statusOf(item);
   const statusColor = colors[status.colorKey];
-  const attendance = `${event.attendees}/${event.capacity} attending`;
+  const attendance = event.capacity
+    ? `${event.attendees}/${event.capacity} attending`
+    : `${event.attendees} attending · capacity not set`;
 
   return (
     <View style={styles.eventRow}>
@@ -681,8 +683,8 @@ export function AnalyticsTab({ insights, events }: { insights: InsightsState; ev
             <Metric
               icon="people-outline"
               label="Attendance"
-              value={percent(totals.fillRate)}
-              detail={`${totals.attendees.toLocaleString()} of ${totals.capacity.toLocaleString()}`}
+              value={totals.capacity ? percent(totals.fillRate) : "—"}
+              detail={totals.capacity ? `${totals.attendees.toLocaleString()} of ${totals.capacity.toLocaleString()}` : "Capacity not set"}
             />
           </View>
         ) : (
@@ -704,7 +706,7 @@ export function AnalyticsTab({ insights, events }: { insights: InsightsState; ev
                   {e.title}
                 </Text>
                 <Text style={[styles.eventMeta, { color: colors.mutedForeground }]}>
-                  {compact(e.views)} views · {compact(e.saves)} saves · {compact(e.websiteClicks)} clicks · {e.attendees}/{e.capacity} attending
+                  {compact(e.views)} views · {compact(e.saves)} saves · {compact(e.websiteClicks)} clicks · {e.capacity ? `${e.attendees}/${e.capacity} attending` : `${e.attendees} attending · capacity not set`}
                 </Text>
                 <View style={[styles.bar, { backgroundColor: colors.border }]}>
                   <View

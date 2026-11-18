@@ -39,8 +39,8 @@
       [
         "@config-plugins/react-native-webrtc",
         {
-          "cameraPermission": "Allow Eventis to share your camera when you host or join a Live on stage.",
-          "microphonePermission": "Allow Eventis to share your voice when you host or join a Live on stage."
+          "cameraPermission": "Allow Eventis to share your camera during in-app video calls and Live broadcasts.",
+          "microphonePermission": "Allow Eventis to share your voice during in-app calls and Live broadcasts."
         }
       ],
       "expo-font",
@@ -55,7 +55,7 @@
         {
           "photosPermission": "Allow Eventis to attach photos to your messages.",
           "cameraPermission": "Allow Eventis to take photos for your messages and of your ID when you verify your age.",
-          "microphonePermission": "Allow Eventis to use your microphone for voice messages and Live rooms."
+          "microphonePermission": "Allow Eventis to use your microphone for voice messages, in-app calls, and Live rooms."
         }
       ],
       "expo-web-browser",
@@ -89,7 +89,7 @@
         "expo-camera",
         {
           "cameraPermission": "Allow Eventis to preview your camera before going live.",
-          "microphonePermission": "Allow Eventis to share your voice during Live broadcasts.",
+          "microphonePermission": "Allow Eventis to share your voice during in-app calls and Live broadcasts.",
           "recordAudioAndroid": true
         }
       ],

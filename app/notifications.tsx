@@ -33,55 +33,6 @@ export interface AppNotification {
   eventId?: string;
 }
 
-const DEMO_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: "notif_1",
-    category: "events",
-    title: "Upcoming Event Tomorrow",
-    message: "Neon Pulse Music Festival starts tomorrow at 18:00 at BK Arena. Have your digital pass ready at Gate 2.",
-    timeAgo: "25m ago",
-    isRead: false,
-    iconName: "calendar",
-    iconColor: "#6E96FF",
-    iconBg: "rgba(110, 150, 255, 0.16)",
-    eventId: "evt_1",
-  },
-  {
-    id: "notif_2",
-    category: "events",
-    title: "Ticket Confirmed",
-    message: "Your VIP pass for FutureTech Summit 2026 has been issued. Tap to view QR barcode and entry instructions.",
-    timeAgo: "2h ago",
-    isRead: false,
-    iconName: "ticket",
-    iconColor: "#10B981",
-    iconBg: "rgba(16, 185, 129, 0.16)",
-    eventId: "evt_2",
-  },
-  {
-    id: "notif_3",
-    category: "organizers",
-    title: "New Story Moment",
-    message: "Kigali Jazz posted 3 backstage moments for tonight's Jazz Under The Stars live sessions.",
-    timeAgo: "3h ago",
-    isRead: false,
-    iconName: "sparkles",
-    iconColor: "#F59E0B",
-    iconBg: "rgba(245, 158, 11, 0.16)",
-  },
-  {
-    id: "notif_4",
-    category: "activity",
-    title: "Event Shared With You",
-    message: "Sarah K. sent you Kigali Culinary Weekend. Check out the guest chefs and tasting menu schedule.",
-    timeAgo: "5h ago",
-    isRead: true,
-    iconName: "paper-plane",
-    iconColor: "#8B5CF6",
-    iconBg: "rgba(139, 92, 246, 0.16)",
-  },
-];
-
 const CATEGORY_TABS: { label: string; value: NotificationCategory }[] = [
   { label: "All", value: "all" },
   { label: "Events", value: "events" },
@@ -126,7 +77,6 @@ export default function NotificationsScreen() {
   const apiMode = !!ctx && USE_PROFILE_API;
   const [selectedCategory, setSelectedCategory] = useState<NotificationCategory>("all");
   const [refreshing, setRefreshing] = useState(false);
-  const [demo, setDemo] = useState<AppNotification[]>(DEMO_NOTIFICATIONS);
 
   useFocusEffect(useCallback(() => {
     if (apiMode) void ctx?.refresh();
@@ -153,10 +103,10 @@ export default function NotificationsScreen() {
     });
   }, [apiMode, ctx]);
 
-  const notifications = apiMode ? apiNotifications : demo;
+  const notifications = apiNotifications;
 
   const unreadCount = useMemo(
-    () => apiMode ? (ctx?.unreadCount ?? 0) : notifications.filter((n) => !n.isRead).length,
+    () => apiMode ? (ctx?.unreadCount ?? 0) : 0,
     [apiMode, ctx?.unreadCount, notifications]
   );
 
@@ -168,14 +118,12 @@ export default function NotificationsScreen() {
   const handleMarkAllRead = useCallback(() => {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     if (apiMode) void ctx?.markAllRead();
-    else setDemo((prev) => prev.map((n) => ({ ...n, isRead: true })));
   }, [apiMode, ctx]);
 
   const handlePressNotification = useCallback(
     (item: AppNotification) => {
       if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       if (apiMode) void ctx?.markRead(item.id);
-      else setDemo((prev) => prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)));
       if (item.eventId) router.push(`/event/${item.eventId}` as any);
     },
     [apiMode, ctx, router]
@@ -185,7 +133,6 @@ export default function NotificationsScreen() {
     setRefreshing(true);
     try {
       if (apiMode) await ctx?.refresh();
-      else await new Promise((r) => setTimeout(r, 500));
     } finally {
       setRefreshing(false);
     }
@@ -323,7 +270,7 @@ export default function NotificationsScreen() {
             <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
               {apiMode
                 ? "You're all caught up. New updates will appear here and as a pop-up when they arrive."
-                : "You're all caught up. Connect to the live API to receive real notifications here."}
+                : "Notifications will appear here when they are available."}
             </Text>
             <Pressable style={[styles.emptyCtaBtn, { backgroundColor: colors.primary }]} onPress={() => router.push("/(tabs)" as any)}>
               <Ionicons name="compass" size={16} color="#FFFFFF" />

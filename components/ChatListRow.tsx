@@ -58,10 +58,16 @@ export function ChatListRow({
           pressed && { backgroundColor: colors.secondary },
         ]}
       >
-        <Image
-          source={{ uri: contact.avatarUrl }}
-          style={[styles.avatar, { backgroundColor: colors.secondary }]}
-        />
+        {contact.avatarUrl ? (
+          <Image
+            source={{ uri: contact.avatarUrl }}
+            style={[styles.avatar, { backgroundColor: colors.secondary }]}
+          />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: colors.secondary }]}>
+            <Ionicons name="person" size={23} color={colors.mutedForeground} />
+          </View>
+        )}
         <View style={[styles.copy, { borderBottomColor: colors.border }]}>
           <View style={styles.line}>
             <Text
@@ -160,6 +166,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   avatar: { width: 52, height: 52, borderRadius: 26 },
+  avatarFallback: { alignItems: "center", justifyContent: "center" },
   copy: {
     flex: 1,
     minWidth: 0,
