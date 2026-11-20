@@ -8,6 +8,7 @@ export default function OrganiserLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="subscribe" />
       <Stack.Screen name="setup" />
+      <Stack.Screen name="payments" />
     </Stack>
   );
 }

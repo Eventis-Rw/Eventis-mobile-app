@@ -12,6 +12,7 @@ import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import {
   createOrganisation,
   deleteOrganisation as removeOrganisation,
+  fetchMyOrganiserSubscriptions,
   startSubscription,
   updateOrganisation as saveOrganisation,
   type DemoOutcome,
@@ -182,6 +183,13 @@ interface AuthContextType {
   ) => Promise<SubscriptionResult>;
   /** Spends one post from a pay-per-post pack; does nothing for unlimited plans. */
   consumePost: () => Promise<void>;
+  /**
+   * Re-reads the organiser subscription from the server. Approving a manual
+   * payment (services/manualPaymentsService.ts) activates the plan out of
+   * band, so this is how the app picks that up (see app/organiser/payments.tsx).
+   * A no-op for demo and offline phone sessions, which have no server account.
+   */
+  refreshOrganiserSubscription: () => Promise<void>;
   setupOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
   updateOrganisation: (input: OrganisationInput, demoShouldFail?: boolean) => Promise<void>;
   switchOrganisation: (organisationId: string) => Promise<void>;
@@ -583,6 +591,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [user, persistUser]);
 
+  const refreshOrganiserSubscription = useCallback(async () => {
+    if (!user) return;
+    const token = await getToken();
+    if (user.isDemo || !token || token.startsWith("demo_token_")) return;
+    try {
+      const rows = await fetchMyOrganiserSubscriptions();
+      // Newest wins when more than one is active (shouldn't normally happen).
+      const active = rows.find((row) => row.status === "ACTIVE");
+      const organiserSubscription: OrganiserSubscription | undefined = active
+        ? {
+            id: active.id,
+            planId: active.planId,
+            status: "active",
+            ...(active.expiresAt ? { renewsAt: active.expiresAt } : {}),
+            ...(active.postsRemaining !== null ? { postsRemaining: active.postsRemaining } : {}),
+          }
+        : undefined;
+      await persistUser({
+        ...user,
+        organiserSubscription,
+        isBusinessAccount: organiserSubscription ? true : user.isBusinessAccount,
+        accountType: organiserSubscription && user.accountType !== "business" ? "individual" : user.accountType,
+      });
+    } catch {
+      // Keep whatever the app already had; the tracking screen lets the member retry.
+    }
+  }, [user, persistUser]);
+
   // The active organisation alias keeps existing organiser screens compatible
   // while the collection supports owning and switching between organisations.
   const setupOrganisation = useCallback(
@@ -678,6 +714,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         markPhoneVerified,
         subscribeAsOrganiser,
         consumePost,
+        refreshOrganiserSubscription,
         setupOrganisation,
         updateOrganisation,
         switchOrganisation,

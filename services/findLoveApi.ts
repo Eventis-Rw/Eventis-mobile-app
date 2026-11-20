@@ -9,7 +9,7 @@ import {
   type AgeVerificationStatus,
   type IdDocumentType,
 } from "@/utils/findLoveAgeVerification";
-import { normalizeMembership } from "@/utils/findLoveMembership";
+import type { LoveAccountType, MembershipInterval } from "@/utils/findLoveMembership";
 import { appendLocalFile } from "@/utils/formDataFile";
 import { LOVE_NEIGHBORHOODS, type LoveGender, type LoveInterestedIn, type LoveRelationshipGoal } from "@/utils/findLoveProfile";
 
@@ -18,9 +18,11 @@ import { LOVE_NEIGHBORHOODS, type LoveGender, type LoveInterestedIn, type LoveRe
  * maps their shapes to the ones the screens already use. findLoveService.ts
  * calls these only when EXPO_PUBLIC_USE_FINDLOVE_API=true.
  *
- * PAYMENTS STAY MOCKED: the backend has no membership on the profile yet, so
- * the membership (and the member's own age-range preference, which the backend
- * doesn't store either) live in AsyncStorage on this device.
+ * The member's own age-range preference isn't stored by the backend, so it
+ * lives in AsyncStorage on this device. Membership is real: it is read from
+ * GET /findlove/subscription (see apiFetchFindLoveSubscription), which the
+ * server updates once a manual payment (services/manualPaymentsService.ts)
+ * is approved.
  */
 
 const BASE = "/api/v1/findlove";
@@ -111,12 +113,11 @@ async function toPhotoKeys(photoUrls: string[]): Promise<string[]> {
   return keys;
 }
 
-// ---- Local mock: membership and age-range preference ---------------------------------
+// ---- Local mock: age-range preference (the backend doesn't store it yet) -------------
 
 const LOCAL_EXTRAS_KEY = "@eventis_love_api_local_extras_v1";
 
 interface LocalExtras {
-  membership?: LoveMembership;
   ageRange?: LoveAgeRange;
 }
 
@@ -135,9 +136,78 @@ async function writeLocalExtras(userId: string, patch: LocalExtras): Promise<voi
   await AsyncStorage.setItem(LOCAL_EXTRAS_KEY, JSON.stringify({ ...all, [userId]: { ...all[userId], ...patch } }));
 }
 
-/** MOCK PAYMENT: turns a plan on for this device only. */
-export async function activateMockMembership(userId: string, membership: LoveMembership): Promise<void> {
-  await writeLocalExtras(userId, { membership });
+// ---- Membership and installment plans ----------------------------------------------
+
+interface ApiAccountSubscriptionResponse {
+  account_type: "private" | "public";
+  has_active_subscription: boolean;
+  subscription: { account_type: "private" | "public"; expires_at: string } | null;
+}
+
+/**
+ * GET /findlove/subscription -> the member's real membership. An active
+ * subscription wins; otherwise the account's chosen (unpaid) type, Public by
+ * default. This is what reload() in MyLoveProfileContext relies on to pick up
+ * a membership the moment an admin approves a manual payment.
+ */
+export async function apiFetchFindLoveSubscription(): Promise<LoveMembership> {
+  const reply = await api.get<ApiAccountSubscriptionResponse>(`${BASE}/subscription`);
+  if (reply?.has_active_subscription && reply.subscription) {
+    return {
+      type: reply.subscription.account_type === "private" ? "private" : "public",
+      status: "active",
+      expiresAt: reply.subscription.expires_at,
+    };
+  }
+  return { type: reply?.account_type === "private" ? "private" : "public", status: "pending_payment" };
+}
+
+export interface ApiInstallmentPlan {
+  id: string;
+  accountType: LoveAccountType;
+  interval: MembershipInterval;
+  durationDays: number;
+  priceMinor: string;
+  currency: string;
+}
+
+const INTERVAL_TO_API: Record<MembershipInterval, "weekly" | "monthly" | "yearly"> = {
+  week: "weekly",
+  month: "monthly",
+  year: "yearly",
+};
+const INTERVAL_FROM_API: Record<string, MembershipInterval> = { weekly: "week", monthly: "month", yearly: "year" };
+
+/** GET /installments?account_type=public|private (active only) -> the real, paid plans. */
+export async function apiFetchInstallmentPlans(accountType: LoveAccountType): Promise<ApiInstallmentPlan[]> {
+  const reply = await api.get<{ items?: Record<string, unknown>[] }>(
+    `/api/v1/installments?account_type=${encodeURIComponent(accountType)}`,
+  );
+  return (reply?.items ?? [])
+    .map((row): ApiInstallmentPlan | null => {
+      const id = String(row.id ?? "");
+      const interval = INTERVAL_FROM_API[String(row.interval)];
+      if (!id || !interval) return null;
+      return {
+        id,
+        accountType: row.account_type === "private" ? "private" : "public",
+        interval,
+        durationDays: Number(row.duration_days ?? 0),
+        priceMinor: String(row.price_minor ?? "0"),
+        currency: String(row.currency ?? "RWF"),
+      };
+    })
+    .filter((plan): plan is ApiInstallmentPlan => plan !== null);
+}
+
+/** The active installment plan for `accountType`/`interval`, or null when none is on offer. */
+export async function apiFindInstallmentPlan(
+  accountType: LoveAccountType,
+  interval: MembershipInterval,
+): Promise<ApiInstallmentPlan | null> {
+  const plans = await apiFetchInstallmentPlans(accountType);
+  const apiInterval = INTERVAL_TO_API[interval];
+  return plans.find((plan) => INTERVAL_TO_API[plan.interval] === apiInterval) ?? null;
 }
 
 // ---- Age verification -------------------------------------------------------------
@@ -209,11 +279,16 @@ export async function apiFetchMyProfile(userId: string): Promise<Record<string, 
 
 async function withLocalExtras(userId: string, row: Record<string, unknown>): Promise<Record<string, unknown>> {
   const local = (await readLocalExtras())[userId] ?? {};
+  // Membership is never mocked: it comes straight from the server so an
+  // admin's approval of a manual payment shows up on the next reload().
+  const membership = await apiFetchFindLoveSubscription().catch(
+    (): LoveMembership => ({ type: "public", status: "pending_payment" }),
+  );
   return {
     ...row,
     photoUrls: photoUrlsOf(row),
     relationshipGoal: GOAL_FROM_API[String(row.relationshipGoal)] ?? undefined,
-    membership: normalizeMembership(local.membership),
+    membership,
     ageRange: local.ageRange,
     updatedAt: row.lastActiveAt ?? row.createdAt,
   };
@@ -246,10 +321,7 @@ export async function apiSaveMyProfile(userId: string, input: MyLoveProfileInput
 
   // Not stored by the backend yet: kept on this device.
   const ageRange = isAnyAgeRange(input.ageRange) ? undefined : input.ageRange;
-  await writeLocalExtras(userId, {
-    ageRange,
-    ...(isNew ? { membership: { type: input.accountType ?? "public", status: "pending_payment" } } : {}),
-  });
+  await writeLocalExtras(userId, { ageRange });
   return withLocalExtras(userId, row);
 }
 
