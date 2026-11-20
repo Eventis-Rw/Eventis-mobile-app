@@ -34,7 +34,7 @@ export function ProfileSection({ title, actionLabel, onAction, children }: Profi
 
 export interface ProfileStat {
   label: string;
-  value: number;
+  value: number | string;
   icon: IconName;
   onPress?: () => void;
 }
