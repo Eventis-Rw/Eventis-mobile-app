@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -7,17 +8,27 @@ import { ActivityIndicator, BackHandler, Platform, Pressable, StyleSheet, Text, 
 import { LoveScreenShell } from "@/components/love/LoveScreenShell";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { Section } from "@/components/love/LoveProfileForm";
+import { ReceiptPhotoPicker } from "@/components/payments/ReceiptPhotoPicker";
 import { COUNTRIES, PhoneInput, type Country } from "@/components/PhoneInput";
-import { SectionState } from "@/components/profile/ProfileSection";
+import { InlineError, SectionState } from "@/components/profile/ProfileSection";
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
 import { describeError } from "@/services/organiserService";
+import { apiFetchInstallmentPlans, apiFindInstallmentPlan, type ApiInstallmentPlan } from "@/services/findLoveApi";
 import {
   USE_FINDLOVE_API,
   type LoveDemoOutcome,
   type LovePaymentMethod,
 } from "@/services/findLoveService";
+import {
+  fetchManualPaymentMethods,
+  formatMinorAmount,
+  submitManualPayment,
+  uploadPaymentReceipt,
+  type ManualPaymentMethod,
+  type ManualPaymentSubmission,
+} from "@/services/manualPaymentsService";
 import {
   formatMembershipPrice,
   MEMBERSHIP_BENEFITS,
@@ -27,8 +38,6 @@ import {
   type MembershipInterval,
 } from "@/utils/findLoveMembership";
 import { formatDateOfBirth } from "@/utils/findLoveProfile";
-
-type Phase = "form" | "processing" | "succeeded" | "pending" | "failed" | "cancelled";
 
 const METHODS: { id: LovePaymentMethod; label: string; badge: string; color: string }[] = [
   { id: "mtn_momo", label: "MTN MoMo", badge: "*182#", color: "#F59E0B" },
@@ -44,6 +53,8 @@ const TYPE_DESCRIPTION: Record<LoveAccountType, string> = {
   private: "Connect with anyone, including Private members.",
 };
 
+const PROVIDER_LABEL: Record<ManualPaymentMethod["provider"], string> = { mtn_momo: "MTN MoMo", airtel_money: "Airtel Money" };
+
 /** Splits a stored number like "+250 788 587 420" into a known country and the local digits. */
 function splitPhone(phone?: string): { country: Country; local: string } {
   const compact = (phone ?? "").replace(/\s/g, "");
@@ -54,6 +65,416 @@ function splitPhone(phone?: string): { country: Country; local: string } {
 }
 
 /**
+ * FindLove membership checkout. Two entirely separate flows, picked once at
+ * the top so neither one's hooks or JSX ever mix:
+ *  - ManualMembershipCheckout (EXPO_PUBLIC_USE_FINDLOVE_API=true): the real
+ *    manual-payment flow (pick a method, pay out of band, upload a
+ *    screenshot, wait for admin review).
+ *  - DemoMembershipCheckout (flag off): the original local demo, untouched.
+ */
+export default function LoveMembershipScreen() {
+  return USE_FINDLOVE_API ? <ManualMembershipCheckout /> : <DemoMembershipCheckout />;
+}
+
+// ---------------------------------------------------------------------------
+// Real flow: manual payment (pick plan -> pick method & pay -> upload receipt -> submitted)
+// ---------------------------------------------------------------------------
+
+type RealStep = "plan" | "method" | "upload" | "result";
+
+function ManualMembershipCheckout() {
+  const colors = useColors();
+  const router = useRouter();
+  const { from, interval } = useLocalSearchParams<{ from?: string; interval?: string }>();
+  const { user } = useAuth();
+  const { myProfile, status, hasMembership, reload } = useMyLoveProfile();
+
+  const [chosenType, setChosenType] = useState<LoveAccountType | null>(null);
+  const [period, setPeriod] = useState<MembershipInterval>(
+    MEMBERSHIP_INTERVALS.find((option) => option.id === interval)?.id ?? "month",
+  );
+  const [step, setStep] = useState<RealStep>("plan");
+  const [resolvingPlan, setResolvingPlan] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [realPlan, setRealPlan] = useState<ApiInstallmentPlan | null>(null);
+
+  // The account-type/billing-period picker shows live prices (and picks them
+  // up the moment an admin changes a plan), instead of a hardcoded table.
+  const [planCatalog, setPlanCatalog] = useState<Record<LoveAccountType, ApiInstallmentPlan[]>>({
+    public: [],
+    private: [],
+  });
+  const [planCatalogLoading, setPlanCatalogLoading] = useState(true);
+  const [planCatalogError, setPlanCatalogError] = useState<string | null>(null);
+
+  const loadPlanCatalog = async () => {
+    setPlanCatalogLoading(true);
+    setPlanCatalogError(null);
+    try {
+      const [publicPlans, privatePlans] = await Promise.all([
+        apiFetchInstallmentPlans("public"),
+        apiFetchInstallmentPlans("private"),
+      ]);
+      setPlanCatalog({ public: publicPlans, private: privatePlans });
+    } catch (err) {
+      setPlanCatalogError(describeError(err, "We couldn't load membership prices."));
+    } finally {
+      setPlanCatalogLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPlanCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const planFor = (accountType: LoveAccountType, intervalId: MembershipInterval) =>
+    planCatalog[accountType].find((row) => row.interval === intervalId);
+  const periodLabelFor = (intervalId: MembershipInterval) =>
+    MEMBERSHIP_INTERVALS.find((option) => option.id === intervalId)?.periodLabel ?? intervalId;
+
+  const [methods, setMethods] = useState<ManualPaymentMethod[]>([]);
+  const [methodsError, setMethodsError] = useState<string | null>(null);
+  const [selectedMethodId, setSelectedMethodId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const [receiptUri, setReceiptUri] = useState<string | undefined>();
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submission, setSubmission] = useState<ManualPaymentSubmission | null>(null);
+
+  useEffect(() => {
+    if (!submitting) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => true);
+    return () => sub.remove();
+  }, [submitting]);
+
+  const leave = () => {
+    if (from === "create" || !router.canGoBack()) router.replace("/love" as any);
+    else router.back();
+  };
+
+  if (!user || status !== "ready" || !myProfile) {
+    return (
+      <LoveScreenShell title="Membership" onBack={leave}>
+        {status === "loading" || status === "idle" ? (
+          <SectionState kind="loading" message="Loading your membership…" />
+        ) : (
+          <SectionState
+            kind="empty"
+            icon="heart-outline"
+            title="Create your FindLove profile first"
+            message="Your membership is added to your FindLove profile."
+            actionLabel="Create profile"
+            onAction={() => router.replace("/love/create" as any)}
+          />
+        )}
+      </LoveScreenShell>
+    );
+  }
+
+  const type: LoveAccountType = chosenType ?? (from === "upgrade" ? "private" : myProfile.membership.type);
+  const plan = planFor(type, period);
+  const price = plan ? formatMinorAmount(plan.priceMinor, plan.currency) : null;
+  const periodLabel = periodLabelFor(period);
+
+  const goToMethods = async () => {
+    setPlanError(null);
+    setResolvingPlan(true);
+    try {
+      const found = await apiFindInstallmentPlan(type, period);
+      if (!found) {
+        setPlanError("This plan isn't available right now. Try a different billing period.");
+        return;
+      }
+      const list = await fetchManualPaymentMethods("findlove");
+      setRealPlan(found);
+      setMethods(list);
+      setSelectedMethodId(list[0]?.id ?? null);
+      setMethodsError(list.length ? null : "No payment method is available right now. Please try again later.");
+      setStep("method");
+    } catch (err) {
+      setPlanError(describeError(err, "We couldn't load this plan. Please try again."));
+    } finally {
+      setResolvingPlan(false);
+    }
+  };
+
+  const reloadMethods = async () => {
+    setMethodsError(null);
+    try {
+      const list = await fetchManualPaymentMethods("findlove");
+      setMethods(list);
+      setSelectedMethodId(list[0]?.id ?? null);
+      if (!list.length) setMethodsError("No payment method is available right now. Please try again later.");
+    } catch (err) {
+      setMethodsError(describeError(err, "We couldn't load payment methods. Please try again."));
+    }
+  };
+
+  const copyPhone = async (phone: string) => {
+    try {
+      await Clipboard.setStringAsync(phone);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can fail on web without a user gesture; nothing to show for it.
+    }
+  };
+
+  const submit = async () => {
+    if (!receiptUri || !selectedMethodId || !realPlan) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const receiptUploadId = await uploadPaymentReceipt(receiptUri);
+      const created = await submitManualPayment({
+        platform: "findlove",
+        installmentPlanId: realPlan.id,
+        paymentMethodId: selectedMethodId,
+        receiptUploadId,
+      });
+      setSubmission(created);
+      setStep("result");
+      void reload();
+      if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      setSubmitError(describeError(err, "We couldn't submit your payment. Please try again."));
+      if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (step === "result" && submission) {
+    return (
+      <LoveScreenShell title="Membership" onBack={leave}>
+        <View style={styles.status}>
+          <View style={[styles.statusIcon, { backgroundColor: colors.secondary }]}>
+            <Ionicons name="time-outline" size={30} color={colors.primary} />
+          </View>
+          <Text style={[styles.statusTitle, { color: colors.foreground }]}>Payment submitted</Text>
+          <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
+            Reference <Text style={{ fontFamily: "Inter_700Bold" }}>{submission.reference}</Text>. We've sent your
+            {" "}
+            {submission.plan.name} payment screenshot for review. You'll get an email as soon as it's approved or if we
+            need anything else.
+          </Text>
+          <PrimaryButton label="Track this payment" onPress={() => router.push("/love/payments" as any)} />
+          <TextButton label="Back to FindLove" onPress={leave} />
+        </View>
+      </LoveScreenShell>
+    );
+  }
+
+  if (step === "upload") {
+    return (
+      <LoveScreenShell title="Membership" onBack={() => setStep("method")} stepLabel="Upload receipt">
+        <Stack.Screen options={{ gestureEnabled: !submitting }} />
+        <Text style={[styles.lead, { color: colors.foreground }]}>Add your payment screenshot</Text>
+        <Text style={[styles.leadText, { color: colors.mutedForeground }]}>
+          A clear screenshot of the mobile money confirmation is enough. An admin reviews it and your {TYPE_LABEL[type]}
+          {" "}
+          membership starts as soon as it's approved.
+        </Text>
+        <ReceiptPhotoPicker
+          uri={receiptUri}
+          onPicked={(uri) => {
+            setPhotoError(null);
+            setReceiptUri(uri);
+          }}
+          onError={setPhotoError}
+          colors={colors}
+        />
+        {photoError ? <InlineError message={photoError} /> : null}
+        {submitError ? <InlineError message={submitError} /> : null}
+        <PrimaryButton
+          label={submitting ? "Submitting…" : "Submit for review"}
+          onPress={() => void submit()}
+          busy={submitting}
+          disabled={!receiptUri}
+        />
+      </LoveScreenShell>
+    );
+  }
+
+  if (step === "method") {
+    const selectedMethod = methods.find((m) => m.id === selectedMethodId) ?? null;
+    return (
+      <LoveScreenShell title="Membership" onBack={() => setStep("plan")} stepLabel="Pay and continue">
+        {methodsError && !methods.length ? (
+          <SectionState kind="error" message={methodsError} onRetry={() => void reloadMethods()} />
+        ) : (
+          <>
+            {methods.length > 1 ? (
+              <Section title="Pay with">
+                <View style={styles.methods} accessibilityRole="radiogroup">
+                  {methods.map((m) => {
+                    const selected = m.id === selectedMethodId;
+                    return (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => setSelectedMethodId(m.id)}
+                        style={[styles.method, { backgroundColor: colors.card, borderColor: selected ? colors.primary : colors.border }]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: selected }}
+                      >
+                        <Ionicons name={selected ? "radio-button-on" : "radio-button-off"} size={20} color={selected ? colors.primary : colors.mutedForeground} />
+                        <Text style={[styles.methodLabel, { color: colors.foreground }]}>{PROVIDER_LABEL[m.provider]}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </Section>
+            ) : null}
+
+            {selectedMethod && realPlan ? (
+              <Section title="Pay this number">
+                <View style={[styles.instructionsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.instructionsRow}>
+                    <Ionicons name="phone-portrait-outline" size={20} color={colors.primary} />
+                    <View style={styles.instructionsCopy}>
+                      <Text style={[styles.instructionsLabel, { color: colors.mutedForeground }]}>
+                        {PROVIDER_LABEL[selectedMethod.provider]}
+                        {selectedMethod.accountName ? ` · ${selectedMethod.accountName}` : ""}
+                      </Text>
+                      <Text style={[styles.instructionsValue, { color: colors.foreground }]}>{selectedMethod.phoneNumber}</Text>
+                    </View>
+                    <Pressable
+                      onPress={() => void copyPhone(selectedMethod.phoneNumber)}
+                      style={[styles.copyBtn, { backgroundColor: colors.secondary }]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Copy phone number"
+                    >
+                      <Ionicons name={copied ? "checkmark" : "copy-outline"} size={16} color={colors.foreground} />
+                    </Pressable>
+                  </View>
+                  <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                  <View style={styles.instructionsRow}>
+                    <Ionicons name="cash-outline" size={20} color={colors.primary} />
+                    <View style={styles.instructionsCopy}>
+                      <Text style={[styles.instructionsLabel, { color: colors.mutedForeground }]}>Amount to pay</Text>
+                      <Text style={[styles.instructionsValue, { color: colors.foreground }]}>{formatMinorAmount(realPlan.priceMinor, realPlan.currency)}</Text>
+                    </View>
+                  </View>
+                  {selectedMethod.instructions ? (
+                    <>
+                      <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                      <Text style={[styles.instructionsText, { color: colors.mutedForeground }]}>{selectedMethod.instructions}</Text>
+                    </>
+                  ) : null}
+                </View>
+              </Section>
+            ) : null}
+
+            <PrimaryButton label="I've paid — upload screenshot" onPress={() => setStep("upload")} disabled={!selectedMethodId} />
+          </>
+        )}
+      </LoveScreenShell>
+    );
+  }
+
+  // step === "plan"
+  return (
+    <LoveScreenShell title="Membership" onBack={leave} stepLabel={from === "create" ? "Last step" : undefined}>
+      {hasMembership ? (
+        <View style={[styles.activeBanner, { backgroundColor: colors.secondary }]}>
+          <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+          <Text style={[styles.activeBannerText, { color: colors.foreground }]}>
+            You already have an active {TYPE_LABEL[myProfile.membership.type]} membership
+            {myProfile.membership.expiresAt ? ` until ${formatDateOfBirth(myProfile.membership.expiresAt.slice(0, 10))}` : ""}.
+          </Text>
+        </View>
+      ) : null}
+
+      <Section title="Account type">
+        <View style={styles.types} accessibilityRole="radiogroup">
+          {(["public", "private"] as LoveAccountType[]).map((option) => {
+            const selected = type === option;
+            const optionPlan = planFor(option, period);
+            return (
+              <Pressable
+                key={option}
+                onPress={() => setChosenType(option)}
+                style={[styles.typeOption, { backgroundColor: colors.card, borderColor: selected ? colors.primary : colors.border }]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+              >
+                <View style={styles.typeHead}>
+                  <MembershipBadge type={option} size="sm" />
+                  <Ionicons name={selected ? "radio-button-on" : "radio-button-off"} size={20} color={selected ? colors.primary : colors.mutedForeground} />
+                </View>
+                <Text style={[styles.typeText, { color: colors.mutedForeground }]}>{TYPE_DESCRIPTION[option]}</Text>
+                <Text style={[styles.typeFrom, { color: colors.foreground }]}>
+                  {optionPlan ? `${formatMinorAmount(optionPlan.priceMinor, optionPlan.currency)} / ${periodLabel}` : "Not available"}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.periodHeading, { color: colors.foreground }]}>Choose a billing period</Text>
+        <View style={[styles.periods, { backgroundColor: colors.secondary }]} accessibilityRole="radiogroup">
+          {MEMBERSHIP_INTERVALS.map((option) => {
+            const selected = period === option.id;
+            return (
+              <Pressable
+                key={option.id}
+                onPress={() => setPeriod(option.id)}
+                style={[styles.periodTab, selected && { backgroundColor: colors.card }]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+              >
+                <Text style={[styles.periodTabText, { color: selected ? colors.foreground : colors.mutedForeground }]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Section>
+
+      <View style={[styles.plan, { backgroundColor: colors.card, borderColor: type === "private" ? "#D4A017" : colors.border }]}>
+        <MembershipBadge type={type} />
+        <Text style={[styles.price, { color: colors.foreground }]}>
+          {price ?? "Not available"}
+          <Text style={[styles.period, { color: colors.mutedForeground }]}> / {periodLabel}</Text>
+        </Text>
+        <View style={styles.benefits}>
+          {MEMBERSHIP_BENEFITS[type].map((benefit) => (
+            <View key={benefit} style={styles.benefit}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+              <Text style={[styles.benefitText, { color: colors.foreground }]}>{benefit}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {planCatalogError ? <InlineError message={planCatalogError} /> : null}
+      {planError ? <InlineError message={planError} /> : null}
+      {planCatalogError ? (
+        <TextButton label="Try again" onPress={() => void loadPlanCatalog()} />
+      ) : (
+        <PrimaryButton
+          label={planCatalogLoading ? "Loading…" : resolvingPlan ? "Loading…" : "Continue"}
+          onPress={() => void goToMethods()}
+          busy={resolvingPlan || planCatalogLoading}
+          disabled={!plan}
+        />
+      )}
+      <Text style={[styles.note, { color: colors.mutedForeground }]}>
+        Your {TYPE_LABEL[type].toUpperCase()} membership starts only once we confirm and approve your payment.
+      </Text>
+    </LoveScreenShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Demo flow (EXPO_PUBLIC_USE_FINDLOVE_API off): unchanged local, mocked checkout.
+// ---------------------------------------------------------------------------
+
+type Phase = "form" | "processing" | "succeeded" | "pending" | "failed" | "cancelled";
+
+/**
  * FindLove membership: pick Public or Private and a weekly, monthly or yearly
  * period (same periods for both, only the price differs), then pay with mobile
  * money. The plan turns on only when the server confirms the payment. Opened
@@ -61,7 +482,7 @@ function splitPhone(phone?: string): { country: Country; local: string } {
  * upgrade prompt (from=upgrade, which preselects Private). Paid members can
  * switch between Public and Private from the same screen.
  */
-export default function LoveMembershipScreen() {
+function DemoMembershipCheckout() {
   const colors = useColors();
   const router = useRouter();
   const { from, interval } = useLocalSearchParams<{ from?: string; interval?: string }>();
@@ -339,15 +760,16 @@ export default function LoveMembershipScreen() {
   );
 }
 
-function PrimaryButton({ label, onPress, busy }: { label: string; onPress: () => void; busy?: boolean }) {
+function PrimaryButton({ label, onPress, busy, disabled }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean }) {
   const colors = useColors();
+  const off = busy || disabled;
   return (
     <Pressable
       onPress={onPress}
-      disabled={busy}
-      style={({ pressed }) => [styles.primary, { backgroundColor: colors.primary, opacity: busy || pressed ? 0.85 : 1 }]}
+      disabled={off}
+      style={({ pressed }) => [styles.primary, { backgroundColor: disabled ? colors.disabled : colors.primary, opacity: busy || pressed ? 0.85 : 1 }]}
       accessibilityRole="button"
-      accessibilityState={{ busy }}
+      accessibilityState={{ busy, disabled }}
     >
       <Text style={styles.primaryText}>{label}</Text>
     </Pressable>
@@ -398,4 +820,16 @@ const styles = StyleSheet.create({
   goldIcon: { backgroundColor: "rgba(212,160,23,0.16)" },
   statusTitle: { fontSize: 22, fontFamily: "Inter_700Bold", textAlign: "center" },
   statusText: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", textAlign: "center", maxWidth: 420 },
+  lead: { fontSize: 22, letterSpacing: -0.6, fontFamily: "Inter_700Bold" },
+  leadText: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: -8 },
+  activeBanner: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, padding: 12 },
+  activeBannerText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium" },
+  instructionsCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 12 },
+  instructionsRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  instructionsCopy: { flex: 1, minWidth: 0 },
+  instructionsLabel: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  instructionsValue: { fontSize: 16, fontFamily: "Inter_700Bold", marginTop: 2 },
+  instructionsText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
+  copyBtn: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  divider: { height: StyleSheet.hairlineWidth },
 });

@@ -9,6 +9,7 @@ import { MembershipBadge } from "@/components/love/MembershipBadge";
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
+import { USE_FINDLOVE_API } from "@/services/findLoveService";
 import { cheapestPlan, formatMembershipPrice } from "@/utils/findLoveMembership";
 import { countryName, formatDateOfBirth } from "@/utils/findLoveProfile";
 
@@ -53,6 +54,9 @@ export default function LoveMeScreen() {
       value: verification.status === "verified" ? "Verified" : "Pending",
       onPress: () => router.push("/love/verify" as any),
     },
+    ...(USE_FINDLOVE_API
+      ? [{ icon: "receipt-outline" as const, label: "Payment history", onPress: () => router.push("/love/payments" as any) }]
+      : []),
   ];
 
   return (

@@ -11,6 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
+import { USE_ORGANISER_API } from "@/services/organiserService";
 
 const TOOLS = [
   {
@@ -193,6 +194,21 @@ export default function BecomeOrganiserScreen() {
           <Ionicons name="swap-horizontal-outline" size={20} color={palette.accent} />
           <Text style={[styles.noteText, { color: palette.muted }]}>Your personal Eventis account stays available. Switch between personal and organiser without signing out.</Text>
         </View>
+
+        {USE_ORGANISER_API ? (
+          <Pressable
+            onPress={() => router.push("/organiser/payments" as any)}
+            style={({ pressed }) => [styles.note, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }, pressed && styles.pressed]}
+            accessibilityRole="button"
+          >
+            <Ionicons name="receipt-outline" size={20} color={palette.accent} />
+            <View style={styles.flex}>
+              <Text style={[styles.noteText, { color: palette.text, fontFamily: "Inter_700Bold" }]}>Payment history</Text>
+              <Text style={[styles.noteText, { color: palette.muted }]}>Track a plan payment you submitted for review.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={palette.muted} />
+          </Pressable>
+        ) : null}
 
         <Pressable
           onPress={continueFlow}

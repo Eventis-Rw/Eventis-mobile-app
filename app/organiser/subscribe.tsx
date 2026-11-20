@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -20,6 +21,7 @@ import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { OrganiserSurface } from "@/components/OrganiserSurface";
 import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
+import { ReceiptPhotoPicker } from "@/components/payments/ReceiptPhotoPicker";
 import { COUNTRIES, PhoneInput, type Country } from "@/components/PhoneInput";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
@@ -37,6 +39,16 @@ import {
   type SubscriptionInterval,
   type SubscriptionPlan,
 } from "@/services/organiserService";
+import {
+  fetchManualPaymentMethods,
+  formatMinorAmount,
+  submitManualPayment,
+  uploadPaymentReceipt,
+  type ManualPaymentMethod,
+  type ManualPaymentSubmission,
+} from "@/services/manualPaymentsService";
+
+const PROVIDER_LABEL: Record<ManualPaymentMethod["provider"], string> = { mtn_momo: "MTN MoMo", airtel_money: "Airtel Money" };
 
 type Phase = "form" | "processing" | "succeeded" | "failed" | "cancelled";
 
@@ -75,7 +87,405 @@ function computeExpiry(interval: SubscriptionInterval, duration: number): Date |
 
 const formatDate = (date: Date) => date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
+/**
+ * Organiser plan checkout. Two entirely separate flows, picked once at the
+ * top so neither one's hooks or JSX ever mix:
+ *  - ManualSubscribeCheckout (EXPO_PUBLIC_USE_ORGANISER_API=true): the real
+ *    manual-payment flow (pick a method, pay out of band, upload a
+ *    screenshot, wait for admin review).
+ *  - DemoSubscribeCheckout (flag off): the original local demo, untouched.
+ */
 export default function OrganiserSubscribeScreen() {
+  return USE_ORGANISER_API ? <ManualSubscribeCheckout /> : <DemoSubscribeCheckout />;
+}
+
+// ---------------------------------------------------------------------------
+// Real flow: manual payment (pick plan -> pick method & pay -> upload receipt -> submitted)
+// ---------------------------------------------------------------------------
+
+type RealStep = "plan" | "method" | "upload" | "result";
+
+function ManualSubscribeCheckout() {
+  const colors = useOrganiserColors();
+  const palette = useOrganiserPalette();
+  const insets = useAppSafeAreaInsets();
+  const router = useRouter();
+  const { refreshOrganiserSubscription } = useAuth();
+
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+
+  const [step, setStep] = useState<RealStep>("plan");
+  const [methods, setMethods] = useState<ManualPaymentMethod[]>([]);
+  const [methodsError, setMethodsError] = useState<string | null>(null);
+  const [selectedMethodId, setSelectedMethodId] = useState<string | null>(null);
+  const [resolvingMethods, setResolvingMethods] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const [receiptUri, setReceiptUri] = useState<string | undefined>();
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submission, setSubmission] = useState<ManualPaymentSubmission | null>(null);
+
+  const loadPlans = useCallback(async () => {
+    setPlansLoading(true);
+    setPlansError(null);
+    try {
+      const list = await fetchSubscriptionPlans();
+      setPlans(list);
+      setSelectedPlanId((current) => current ?? list.find((p) => p.recommended)?.id ?? list[0]?.id ?? null);
+    } catch (error) {
+      setPlansError(describeError(error, "We couldn't load subscription plans."));
+    } finally {
+      setPlansLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPlans();
+  }, [loadPlans]);
+
+  useEffect(() => {
+    if (!submitting) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => true);
+    return () => sub.remove();
+  }, [submitting]);
+
+  const activePlan = plans.find((p) => p.id === selectedPlanId) ?? null;
+
+  const goToMethods = async () => {
+    if (!activePlan) return;
+    setResolvingMethods(true);
+    setMethodsError(null);
+    try {
+      const list = await fetchManualPaymentMethods("organiser");
+      setMethods(list);
+      setSelectedMethodId(list[0]?.id ?? null);
+      if (!list.length) setMethodsError("No payment method is available right now. Please try again later.");
+      setStep("method");
+    } catch (error) {
+      setMethodsError(describeError(error, "We couldn't load payment methods. Please try again."));
+    } finally {
+      setResolvingMethods(false);
+    }
+  };
+
+  const reloadMethods = async () => {
+    setMethodsError(null);
+    try {
+      const list = await fetchManualPaymentMethods("organiser");
+      setMethods(list);
+      setSelectedMethodId(list[0]?.id ?? null);
+      if (!list.length) setMethodsError("No payment method is available right now. Please try again later.");
+    } catch (error) {
+      setMethodsError(describeError(error, "We couldn't load payment methods. Please try again."));
+    }
+  };
+
+  const copyPhone = async (phone: string) => {
+    try {
+      await Clipboard.setStringAsync(phone);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can fail on web without a user gesture; nothing to show for it.
+    }
+  };
+
+  const submit = async () => {
+    if (!receiptUri || !selectedMethodId || !activePlan) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const receiptUploadId = await uploadPaymentReceipt(receiptUri);
+      const created = await submitManualPayment({
+        platform: "organiser",
+        organiserPlanId: activePlan.id,
+        paymentMethodId: selectedMethodId,
+        receiptUploadId,
+      });
+      setSubmission(created);
+      setStep("result");
+      void refreshOrganiserSubscription();
+      if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setSubmitError(describeError(error, "We couldn't submit your payment. Please try again."));
+      if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (step === "result" && submission) {
+    return (
+      <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+        <OrganiserAtmosphere />
+        <OrganiserFlowHeader title="Choose access" step={2} canGoBack={false} />
+        <ScrollView contentContainerStyle={[styles.statusWrap, { paddingBottom: insets.bottom + 24 }]}>
+          <Animated.View entering={FadeIn} style={styles.status}>
+            <View style={[styles.statusIconWrap, { backgroundColor: `${colors.primary}20`, borderColor: `${colors.primary}40` }]}>
+              <Ionicons name="time-outline" size={48} color={colors.primary} />
+            </View>
+            <Text style={[styles.statusTitle, { color: colors.foreground }]}>Payment submitted</Text>
+            <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
+              Reference {submission.reference} · {formatMinorAmount(submission.amountMinor, submission.currency)}
+              {"\n\n"}
+              We've sent your {submission.plan.name} payment screenshot for review. You'll get an email as soon as
+              it's approved or if we need anything else.
+            </Text>
+            <View style={styles.statusActions}>
+              <Pressable
+                style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]}
+                onPress={() => router.push("/organiser/payments" as any)}
+              >
+                <Text style={styles.primaryPayBtnText}>Track this payment</Text>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+              </Pressable>
+              <Pressable
+                onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
+                style={styles.cancelSheetBtn}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.cancelSheetText, { color: colors.mutedForeground }]}>Back to Discover</Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  if (step === "upload") {
+    return (
+      <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+        <OrganiserAtmosphere />
+        <Stack.Screen options={{ gestureEnabled: !submitting }} />
+        <OrganiserFlowHeader title="Upload receipt" step={2} canGoBack={false} />
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
+          {!submitting ? (
+            <Pressable onPress={() => setStep("method")} style={styles.backLink} accessibilityRole="button">
+              <Ionicons name="chevron-back" size={16} color={palette.accent} />
+              <Text style={[styles.backLinkText, { color: palette.accent }]}>Back to payment details</Text>
+            </Pressable>
+          ) : null}
+          <Text style={[styles.title, { color: palette.text, fontSize: 22 }]}>Add your payment screenshot</Text>
+          <Text style={[styles.subtitle, { color: palette.muted }]}>
+            A clear screenshot of the mobile money confirmation is enough. An admin reviews it and your organiser
+            access starts as soon as it's approved.
+          </Text>
+          <ReceiptPhotoPicker
+            uri={receiptUri}
+            onPicked={(uri) => {
+              setPhotoError(null);
+              setReceiptUri(uri);
+            }}
+            onError={setPhotoError}
+            colors={colors}
+          />
+          {photoError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{photoError}</Text> : null}
+          {submitError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{submitError}</Text> : null}
+          <Pressable
+            disabled={!receiptUri || submitting}
+            style={[styles.primaryPayBtn, { backgroundColor: colors.primary, opacity: !receiptUri || submitting ? 0.6 : 1 }]}
+            onPress={() => void submit()}
+          >
+            {submitting ? <ActivityIndicator color="#fff" /> : <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />}
+            <Text style={styles.primaryPayBtnText}>{submitting ? "Submitting…" : "Submit for review"}</Text>
+          </Pressable>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  if (step === "method") {
+    const selectedMethod = methods.find((m) => m.id === selectedMethodId) ?? null;
+    return (
+      <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+        <OrganiserAtmosphere />
+        <OrganiserFlowHeader title="Pay and continue" step={2} canGoBack={false} />
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
+          <Pressable onPress={() => setStep("plan")} style={styles.backLink} accessibilityRole="button">
+            <Ionicons name="chevron-back" size={16} color={palette.accent} />
+            <Text style={[styles.backLinkText, { color: palette.accent }]}>Back to plans</Text>
+          </Pressable>
+          {methodsError && !methods.length ? (
+            <OrganiserSurface style={[styles.errorCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+              <Ionicons name="cloud-offline-outline" size={36} color={colors.destructive} />
+              <Text style={[styles.statusText, { color: colors.mutedForeground }]}>{methodsError}</Text>
+              <Pressable style={[styles.smallBtn, { backgroundColor: colors.primary }]} onPress={() => void reloadMethods()} accessibilityRole="button">
+                <Text style={styles.smallBtnText}>Try again</Text>
+              </Pressable>
+            </OrganiserSurface>
+          ) : (
+            <>
+              {methods.length > 1 ? (
+                <OrganiserSurface style={[styles.sectionCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+                  <Text style={[styles.sectionTitle, { color: palette.text }]}>Pay with</Text>
+                  <View style={styles.methodsGrid}>
+                    {methods.map((m) => {
+                      const isSelected = m.id === selectedMethodId;
+                      return (
+                        <Pressable
+                          key={m.id}
+                          onPress={() => setSelectedMethodId(m.id)}
+                          style={[
+                            styles.methodCard,
+                            { backgroundColor: isSelected ? palette.blueSoft : palette.surfaceRaised, borderColor: isSelected ? palette.blue : palette.line },
+                          ]}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: isSelected }}
+                        >
+                          <View style={styles.methodHeader}>
+                            <View style={[styles.methodRadioDot, { borderColor: isSelected ? palette.blue : palette.line }]}>
+                              {isSelected ? <View style={[styles.methodRadioInner, { backgroundColor: palette.blue }]} /> : null}
+                            </View>
+                          </View>
+                          <Text style={[styles.methodLabel, { color: palette.text }]}>{PROVIDER_LABEL[m.provider]}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </OrganiserSurface>
+              ) : null}
+
+              {selectedMethod && activePlan ? (
+                <OrganiserSurface style={[styles.summaryBox, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+                  <SummaryRow
+                    label="Send to"
+                    value={
+                      selectedMethod.accountName
+                        ? `${PROVIDER_LABEL[selectedMethod.provider]} · ${selectedMethod.accountName}`
+                        : PROVIDER_LABEL[selectedMethod.provider]
+                    }
+                  />
+                  <View style={styles.summaryItem}>
+                    <Text style={[styles.summaryItemLabel, { color: colors.mutedForeground }]}>Phone number</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Text style={[styles.summaryItemValue, { color: colors.foreground }]}>{selectedMethod.phoneNumber}</Text>
+                      <Pressable
+                        onPress={() => void copyPhone(selectedMethod.phoneNumber)}
+                        style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: palette.surfaceRaised }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Copy phone number"
+                      >
+                        <Ionicons name={copied ? "checkmark" : "copy-outline"} size={15} color={colors.foreground} />
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+                  <SummaryRow label="Amount to pay" value={formatPlanPrice(activePlan)} isBold />
+                  {selectedMethod.instructions ? (
+                    <>
+                      <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+                      <Text style={[styles.statusText, { color: colors.mutedForeground, textAlign: "left" }]}>{selectedMethod.instructions}</Text>
+                    </>
+                  ) : null}
+                </OrganiserSurface>
+              ) : null}
+
+              <Pressable
+                disabled={!selectedMethodId}
+                style={[styles.primaryPayBtn, { backgroundColor: colors.primary, opacity: selectedMethodId ? 1 : 0.6 }]}
+                onPress={() => setStep("upload")}
+              >
+                <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.primaryPayBtnText}>I've paid — upload screenshot</Text>
+              </Pressable>
+            </>
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // step === "plan"
+  return (
+    <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+      <OrganiserAtmosphere />
+      <OrganiserFlowHeader title="Choose access" step={2} />
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.title, { color: palette.text }]}>Choose your organiser access</Text>
+        <Text style={[styles.subtitle, { color: palette.muted }]}>
+          Pay once for a few posts, or subscribe to keep posting. Complete payment with Mobile Money.
+        </Text>
+
+        {plansLoading ? (
+          <View style={styles.inlineState}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={[styles.statusText, { color: colors.mutedForeground }]}>Loading plans…</Text>
+          </View>
+        ) : plansError ? (
+          <OrganiserSurface style={[styles.errorCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+            <Ionicons name="cloud-offline-outline" size={36} color={colors.destructive} />
+            <Text style={[styles.statusText, { color: colors.mutedForeground }]}>{plansError}</Text>
+            <Pressable style={[styles.smallBtn, { backgroundColor: colors.primary }]} onPress={() => void loadPlans()} accessibilityRole="button">
+              <Text style={styles.smallBtnText}>Try again</Text>
+            </Pressable>
+          </OrganiserSurface>
+        ) : plans.length === 0 ? (
+          <OrganiserSurface style={[styles.errorCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+            <Ionicons name="pricetags-outline" size={36} color={colors.mutedForeground} />
+            <Text style={[styles.statusText, { color: colors.mutedForeground }]}>No plans are available right now.</Text>
+          </OrganiserSurface>
+        ) : (
+          <View style={{ gap: 10 }}>
+            {plans.map((plan) => {
+              const selected = plan.id === selectedPlanId;
+              return (
+                <Pressable
+                  key={plan.id}
+                  onPress={() => setSelectedPlanId(plan.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                >
+                  <OrganiserSurface
+                    style={[styles.mainPlanCard, { padding: 16, backgroundColor: selected ? palette.blueSoft : palette.surface, borderColor: selected ? palette.blue : palette.line }]}
+                  >
+                    <View style={styles.planCardHeader}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={styles.planTitleRow}>
+                          <Text style={[styles.planCardTitle, { color: palette.text, fontSize: 17 }]}>{plan.name}</Text>
+                          {plan.badge ? (
+                            <View style={styles.planBadgeWrap}>
+                              <Text style={[styles.planBadgeText, { color: palette.accent }]}>{plan.badge}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={[styles.priceSubtext, { color: palette.muted, marginTop: 4 }]}>{formatPlanPrice(plan)}</Text>
+                      </View>
+                      <Ionicons name={selected ? "radio-button-on" : "radio-button-off"} size={22} color={selected ? palette.blue : palette.muted} />
+                    </View>
+                  </OrganiserSurface>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        <Pressable
+          disabled={!activePlan}
+          style={[styles.primaryPayBtn, { backgroundColor: colors.primary, marginTop: 4, opacity: activePlan ? 1 : 0.6 }]}
+          onPress={() => void goToMethods()}
+        >
+          {resolvingMethods ? <ActivityIndicator color="#fff" /> : <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />}
+          <Text style={styles.primaryPayBtnText}>{resolvingMethods ? "Loading…" : "Continue"}</Text>
+        </Pressable>
+        <Text style={[styles.guaranteeText, { color: palette.muted }]}>
+          Your organiser access starts only once we confirm and approve your payment.
+        </Text>
+      </ScrollView>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Demo flow (EXPO_PUBLIC_USE_ORGANISER_API off): unchanged local, mocked checkout.
+// ---------------------------------------------------------------------------
+
+function DemoSubscribeCheckout() {
   const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
@@ -1364,5 +1774,21 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
+  },
+  errorText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    marginTop: -6,
+  },
+  backLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    marginTop: -4,
+  },
+  backLinkText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
 });

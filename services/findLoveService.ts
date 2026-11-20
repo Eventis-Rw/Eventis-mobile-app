@@ -11,7 +11,6 @@ import {
   type MyLoveProfileInput,
 } from "@/constants/loveProfiles";
 import {
-  activateMockMembership,
   apiConnections,
   apiDiscover,
   apiFetchAgeVerification,
@@ -69,9 +68,11 @@ import {
  * FindLove data: member profiles and connection requests.
  *
  * BACKEND STATUS: wired to Eventis-api /api/v1/findlove/* (services/findLoveApi.ts)
- * for age verification, profile, discover and connections. Membership payments
- * stay MOCKED on the device. Without EXPO_PUBLIC_USE_FINDLOVE_API=true this
- * service runs a local demo; with it, API errors are surfaced, never replaced by demo data.
+ * for age verification, profile, discover and connections. Membership is bought
+ * through the manual-payment flow (services/manualPaymentsService.ts, driven from
+ * app/love/membership.tsx) rather than through buyMembership() below once
+ * EXPO_PUBLIC_USE_FINDLOVE_API=true. Without that flag this service runs a local
+ * demo; with it, API errors are surfaced, never replaced by demo data.
  *
  * Screens and contexts never call `api` for FindLove directly, so the endpoint
  * paths and response mapping here are the single integration point.
@@ -585,16 +586,12 @@ function readPayment(value: unknown): { paymentId: string; status: string; messa
   };
 }
 
-// INTEGRATION POINT:
-//   POST /api/v1/love-profiles/me/membership/checkout { planId, paymentMethod, payerPhone }
-//     -> { paymentId, status }
-//   GET  /api/v1/love-profiles/me/membership/payments/:paymentId
-//     -> { status: "pending" | "succeeded" | "failed" | "cancelled", message? }
-// Mobile money is asynchronous (the payer approves a USSD prompt), so the
-// payment is polled until it is final. The server activates the plan only once
-// the payment provider confirms; callers then reload the profile to read the
-// membership rather than trusting this result.
-// planId is findlove_<public|private>_<week|month|year>; the server owns the price.
+// Superseded by the manual-payment flow (services/manualPaymentsService.ts,
+// driven from app/love/membership.tsx) once EXPO_PUBLIC_USE_FINDLOVE_API=true:
+// the member picks a payment method, uploads a receipt and an admin approves
+// it out of band, so there is no single "pay now" call to make any more. This
+// function keeps the OLD mocked, instant-result checkout for the local demo
+// (flag off) only; membership.tsx never calls it when the flag is on.
 export async function buyMembership(
   userId: string,
   input: { type: LoveAccountType; interval: MembershipInterval; paymentMethod: LovePaymentMethod; payerPhone: string },
@@ -603,16 +600,8 @@ export async function buyMembership(
   const { type, interval, ...payer } = input;
   const plan = membershipPlan(type, interval);
   if (USE_FINDLOVE_API) {
-    // PAYMENTS STAY MOCKED (no real checkout yet): activate the plan on this device only.
     void payer;
-    await wait(2200);
-    if (demoOutcome === "failed") {
-      return { status: "failed", message: "The payment was declined. Check your balance and try again." };
-    }
-    if (demoOutcome === "cancelled") return { status: "cancelled" };
-    const expiresAt = new Date(Date.now() + plan.periodDays * 24 * 60 * 60 * 1000).toISOString();
-    await activateMockMembership(userId, { type: plan.type, status: "active", expiresAt });
-    return { status: "succeeded" };
+    throw new Error("Use the manual payment flow (app/love/membership.tsx) to buy a FindLove membership.");
   }
   {
     // Local demo (EXPO_PUBLIC_USE_FINDLOVE_API off).
