@@ -101,6 +101,9 @@ export async function refreshSession(): Promise<string> {
 function isAuthEndpoint(path: string): boolean {
   return [
     "/api/v1/auth/login",
+    "/api/v1/auth/email/send-code",
+    "/api/v1/auth/email/verify-code",
+    "/api/v1/auth/social",
     "/api/v1/auth/signup",
     "/api/v1/auth/signup/send-otp",
     "/api/v1/auth/signup/verify-otp",

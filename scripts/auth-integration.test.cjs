@@ -142,3 +142,15 @@ test("an invalid refresh token clears both stored tokens", async () => {
   assert.equal(await client.getToken(), null);
   assert.equal(await client.getRefreshToken(), null);
 });
+
+for (const endpoint of ["/api/v1/auth/email/send-code", "/api/v1/auth/email/verify-code", "/api/v1/auth/social"]) {
+  test(`${endpoint} failures do not refresh an unrelated existing session`, async () => {
+    const client = loadApiClient();
+    await client.setAuthTokens("old-access", "old-refresh");
+    const requests = [];
+    global.fetch = async (url) => { requests.push(url); return response(401, { message: "Invalid credentials" }); };
+    await assert.rejects(client.api.post(endpoint, {}), (error) => error.status === 401);
+    assert.deepEqual(requests, [`http://localhost:3000${endpoint}`]);
+    assert.equal(await client.getRefreshToken(), "old-refresh");
+  });
+}

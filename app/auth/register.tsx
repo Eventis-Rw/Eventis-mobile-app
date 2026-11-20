@@ -1,3 +1,4 @@
+import { AuthMethods } from "@/components/AuthMethods";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -186,6 +187,7 @@ export default function RegisterScreen() {
             </Text>
           </Pressable>
         </Animated.View>
+        <AuthMethods busy={loading} onBusyChange={setLoading} onError={setSubmitError} onEmail={() => router.push({ pathname: "/auth/email", params: { mode: "register" } })} />
       </View>
 
         {/* Footer Link to Sign In */}

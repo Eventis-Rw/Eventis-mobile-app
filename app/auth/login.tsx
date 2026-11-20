@@ -1,3 +1,4 @@
+import { AuthMethods } from "@/components/AuthMethods";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -110,12 +111,13 @@ export default function LoginScreen() {
               }}
               selectedCountry={selectedCountry}
               onSelectCountry={setSelectedCountry}
-              error={error}
               placeholder="7XX XXX XXX"
             />
           </Animated.View>
 
           <PinInput value={pin} onChangeText={(value) => { setPin(value); setPinError(""); }} error={pinError} />
+
+          {error ? <Text accessibilityRole="alert" style={{ color: colors.destructive }}>{error}</Text> : null}
 
           {/* Submit Button */}
           <Animated.View
@@ -136,6 +138,7 @@ export default function LoginScreen() {
               </Text>
             </Pressable>
           </Animated.View>
+          <AuthMethods busy={loading} onBusyChange={setLoading} onError={setError} onEmail={() => router.push({ pathname: "/auth/email", params: { mode: "login" } })} />
         </View>
 
         {/* Footer Link to Register (Anchored to bottom) */}

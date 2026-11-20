@@ -8,6 +8,7 @@ import React, {
 } from "react";
 
 import { DEMO_AUTH, type LoginInput, type SignupInput } from "@/constants/auth";
+import { getAppleCredential, getGoogleCredential } from "@/services/socialAuth";
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import {
   createOrganisation,
@@ -74,7 +75,8 @@ export interface User {
 
 interface ApiUser {
   id: string;
-  phone: string;
+  phone?: string | null;
+  isPhoneVerified?: boolean;
   displayName?: string | null;
   firstName?: string | null;
   username?: string | null;
@@ -111,11 +113,13 @@ function mapApiUser(remote: ApiUser, cached?: User): User {
       remote.firstName ??
       remote.username ??
       previous?.username ??
-      remote.phone,
+      remote.email ??
+      remote.phone ??
+      "Eventis Explorer",
     email: remote.email !== undefined ? remote.email ?? "" : previous?.email ?? "",
-    phone: remote.phone,
+    phone: remote.phone || undefined,
     avatarUrl: remote.avatarUrl ?? previous?.avatarUrl,
-    isPhoneVerified: true,
+    isPhoneVerified: remote.isPhoneVerified ?? Boolean(remote.phone),
     isBusinessAccount: hasPublisherRole || previous?.isBusinessAccount === true,
     accountType,
     bio: remote.bio !== undefined ? remote.bio ?? undefined : previous?.bio,
@@ -161,6 +165,9 @@ interface AuthContextType {
   login: (input: LoginInput) => Promise<void>;
   register: (data: SignupInput) => Promise<void>;
   resendSignupOTP: () => Promise<void>;
+  sendEmailCode: (input: { email: string; purpose: "login" | "register"; username?: string }) => Promise<{ challengeId: string; retryAfterSeconds: number }>;
+  verifyEmailCode: (input: { email: string; challengeId: string; code: string }) => Promise<void>;
+  signInWithSocial: (provider: "google" | "apple") => Promise<void>;
   completeOnboarding: () => Promise<void>;
   exploreDemo: () => Promise<void>;
   logout: () => Promise<void>;
@@ -427,6 +434,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
   }, [persistUser, signInWithPhoneSession, user]);
+
+  const acceptSession = useCallback(async (data: ApiAuthSession) => {
+    if (!data.tokens?.accessToken || !data.tokens?.refreshToken || !data.user?.id) {
+      throw new Error("Invalid sign-in response. Please try again.");
+    }
+    await setAuthTokens(data.tokens.accessToken, data.tokens.refreshToken);
+    try {
+      const nextUser = mapApiUser(data.user);
+      const savedEvents = await fetchSavedEventIds().catch(() => nextUser.savedEvents);
+      await persistUser({ ...nextUser, savedEvents });
+      setPendingSignup(null);
+      setPendingOTPContext(null);
+    } catch (error) {
+      await clearToken();
+      throw error;
+    }
+  }, [persistUser]);
+
+  const sendEmailCode = useCallback(async (input: { email: string; purpose: "login" | "register"; username?: string }) => {
+    return api.post<{ challengeId: string; retryAfterSeconds: number }>("/api/v1/auth/email/send-code", {
+      ...input, email: input.email.trim().toLowerCase(),
+    });
+  }, []);
+
+  const verifyEmailCode = useCallback(async (input: { email: string; challengeId: string; code: string }) => {
+    const session = await api.post<ApiAuthSession>("/api/v1/auth/email/verify-code", input);
+    await acceptSession(session);
+  }, [acceptSession]);
+
+  const signInWithSocial = useCallback(async (provider: "google" | "apple") => {
+    const credential = await (provider === "google" ? getGoogleCredential() : getAppleCredential());
+    if (!credential) return;
+    const session = await api.post<ApiAuthSession>("/api/v1/auth/social", credential);
+    await acceptSession(session);
+  }, [acceptSession]);
 
   const verifyOTP = useCallback(
     async (code: string, phone?: string, fullName?: string): Promise<boolean> => {
@@ -701,6 +743,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         resendSignupOTP,
+        sendEmailCode,
+        verifyEmailCode,
+        signInWithSocial,
         completeOnboarding,
         exploreDemo,
         logout,
