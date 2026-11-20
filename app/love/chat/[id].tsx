@@ -231,7 +231,9 @@ export default function LoveChatScreen() {
           <View style={styles.nameRow}>
             <Text style={[styles.name, { color: colors.foreground }]} numberOfLines={1}>{profile.username}</Text>
             <MembershipBadge type={profile.accountType} size="sm" iconOnly />
-            <View style={[styles.demoBadge, { backgroundColor: colors.glass }]}><Text style={[styles.demoText, { color: colors.primary }]}>DEMO</Text></View>
+            {!USE_FINDLOVE_API ? (
+              <View style={[styles.demoBadge, { backgroundColor: colors.glass }]}><Text style={[styles.demoText, { color: colors.primary }]}>DEMO</Text></View>
+            ) : null}
           </View>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
         </View>
@@ -250,7 +252,12 @@ export default function LoveChatScreen() {
       <View style={[styles.verificationNote, { backgroundColor: colors.secondary }]}>
         <Ionicons name={notice ? "information-circle-outline" : "shield-checkmark-outline"} size={15} color={notice ? colors.primary : colors.success} />
         <Text style={[styles.verificationText, { color: notice ? colors.foreground : colors.mutedForeground }]} accessibilityLiveRegion="polite">
-          {notice ?? (connected ? "Demo chat · Phone verification will be required in production" : "You can send one message before you connect")}
+          {notice ??
+            (connected
+              ? USE_FINDLOVE_API
+                ? "Phone verification will be required in production"
+                : "Demo chat · Phone verification will be required in production"
+              : "You can send one message before you connect")}
         </Text>
       </View>
 

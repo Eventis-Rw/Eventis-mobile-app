@@ -73,6 +73,24 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/x-tiff": "tiff",
 };
 
+// Extensions the API accepts for each mime type (storage.service.ts's own expectedExt map).
+// The picker's reported fileName and mimeType can disagree (e.g. an iOS asset named
+// "IMG_1234.HEIC" whose mimeType comes back "image/jpeg" after OS-level transcoding),
+// so the extension actually sent must be reconciled to the mime type, not trusted as is.
+const ACCEPTABLE_IMAGE_EXTENSIONS: Record<string, string[]> = {
+  "image/jpeg": ["jpg", "jpeg"],
+  "image/png": ["png"],
+  "image/webp": ["webp"],
+  "image/gif": ["gif"],
+  "image/avif": ["avif"],
+  "image/heic": ["heic"],
+  "image/heif": ["heif"],
+  "image/bmp": ["bmp"],
+  "image/x-ms-bmp": ["bmp"],
+  "image/tiff": ["tiff", "tif"],
+  "image/x-tiff": ["tiff", "tif"],
+};
+
 function inferImageMimeType(uri: string, name?: string) {
   const extension = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(name ?? uri)?.[1]?.toLowerCase();
   const byExtension: Record<string, string> = {
@@ -84,11 +102,19 @@ function inferImageMimeType(uri: string, name?: string) {
 }
 
 function imageFileName(input: EventWriteInput, mimeType: string) {
+  const fallbackExt = IMAGE_EXTENSIONS[mimeType] ?? "jpg";
+  const acceptableExts = ACCEPTABLE_IMAGE_EXTENSIONS[mimeType] ?? [fallbackExt];
+  const withMimeMatchingExtension = (name: string) => {
+    const currentExt = /\.([a-z0-9]+)$/i.exec(name)?.[1]?.toLowerCase();
+    if (currentExt && acceptableExts.includes(currentExt)) return name;
+    return `${name.replace(/\.[a-z0-9]+$/i, "")}.${fallbackExt}`;
+  };
+
   const suppliedName = input.imageFileName?.trim();
-  if (suppliedName) return suppliedName.replace(/[\\/]/g, "_");
+  if (suppliedName) return withMimeMatchingExtension(suppliedName.replace(/[\\/]/g, "_"));
   const leaf = input.image.split(/[\\/]/).pop()?.split(/[?#]/)[0];
-  if (leaf && /\.[a-z0-9]{2,5}$/i.test(leaf)) return leaf;
-  return `cover.${IMAGE_EXTENSIONS[mimeType] ?? "jpg"}`;
+  if (leaf && /\.[a-z0-9]{2,5}$/i.test(leaf)) return withMimeMatchingExtension(leaf);
+  return `cover.${fallbackExt}`;
 }
 
 async function appendCoverImage(form: FormData, input: EventWriteInput) {
