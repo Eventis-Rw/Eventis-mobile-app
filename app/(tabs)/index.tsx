@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { type ComponentRef, useCallback, useMemo, useRef, useState } from "react";
 import {
+  AppState,
   Image,
   FlatList,
   Linking,
@@ -82,7 +83,28 @@ export default function HomeScreen() {
     }
   }, [refreshEvents]);
 
-  const categoryScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  useFocusEffect(
+    useCallback(() => {
+      // Recheck the feed while the landing page is open, so a dropped
+      // connection recovers on its own when the API becomes reachable again.
+      const interval = setInterval(() => {
+        if (AppState.currentState === "active") void refreshEvents();
+      }, 30_000);
+      const appState = AppState.addEventListener("change", (state) => {
+        if (state === "active") void refreshEvents();
+      });
+      const onOnline = () => void refreshEvents();
+      if (Platform.OS === "web") window.addEventListener("online", onOnline);
+
+      return () => {
+        clearInterval(interval);
+        appState.remove();
+        if (Platform.OS === "web") window.removeEventListener("online", onOnline);
+      };
+    }, [refreshEvents]),
+  );
+
+  const categoryScrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const categoryLayouts = useRef<Record<string, { x: number; width: number }>>({});
 
   const selectCategory = useCallback(
@@ -290,7 +312,7 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <EventCard event={item} variant="feed" inset={0} source={selectedCategory === "All" ? "home" : "category"} onMediaReady={feedAnalytics.onMediaReady} onTrackingBlocked={setCardCovered} />
         )}
-        ListHeaderComponent={renderBody()}
+        ListHeaderComponent={renderBody() ?? undefined}
         ListFooterComponent={visibleEvents.length ? (
           <Text style={{ color: colors.mutedForeground, textAlign: "center", paddingVertical: 20 }}>
             {visibleCount < filtered.length ? "Scroll for more events" : "You're all caught up"}

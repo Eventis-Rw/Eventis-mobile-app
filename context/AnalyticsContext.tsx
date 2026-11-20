@@ -3,6 +3,19 @@ import { AppState, Platform } from "react-native";
 import type { Event } from "@/constants/events";
 import { useAuth } from "@/context/AuthContext";
 import { ANALYTICS_KEY, getAnalyticsRecords, recordAnalytics, subscribeAnalytics, type AnalyticsInput, type AnalyticsRecord, type AnalyticsSource, type AnalyticsType } from "@/services/analyticsService";
+import { api } from "@/utils/apiClient";
+
+const SERVER_ANALYTICS_TYPES: Partial<Record<AnalyticsType, "IMPRESSION" | "VIEW" | "CLICK" | "SAVE" | "SHARE" | "WEBSITE_CLICK">> = {
+  feed_view: "IMPRESSION",
+  detail_view: "VIEW",
+  save: "SAVE",
+  share: "SHARE",
+  link_copy: "CLICK",
+  directions_click: "CLICK",
+  website_click: "WEBSITE_CLICK",
+  story_event_click: "CLICK",
+};
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type AnalyticsState = {
   records: AnalyticsRecord[]; loading: boolean; error: string | null; foreground: boolean;
@@ -36,8 +49,15 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
   const track = useCallback((input: Omit<AnalyticsInput, "viewerId">) => {
     if (!foreground) return;
-    void recordAnalytics({ ...input, viewerId: user?.id }).catch(() => setError("Activity couldn't be saved on this device."));
-  }, [user?.id, foreground]);
+    const serverType = input.entityType === "event" ? SERVER_ANALYTICS_TYPES[input.type] : undefined;
+    void recordAnalytics({ ...input, viewerId: user?.id }).then((recorded) => {
+      if (!recorded || !serverType || !UUID.test(input.entityId) || user?.isDemo) return;
+      return api.post(`/api/v1/events/${input.entityId}/analytics`, {
+        type: serverType,
+        source: input.source,
+      }).catch(() => undefined);
+    }).catch(() => setError("Activity couldn't be saved on this device."));
+  }, [user?.id, user?.isDemo, foreground]);
   const trackEvent = useCallback((event: Event, type: AnalyticsType, source: AnalyticsSource) => {
     const ownName = user?.organisation?.name ?? user?.businessName;
     if ((event.ownerId && event.ownerId === user?.id) || (ownName && ownName.trim().toLowerCase() === event.organizer.trim().toLowerCase())) return;

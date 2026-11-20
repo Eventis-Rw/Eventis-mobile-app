@@ -18,7 +18,7 @@ export const API_BASE = getApiBase();
 /** How long any single HTTP request may take before the client gives up. */
 const REQUEST_TIMEOUT_MS = 15_000;
 /** Uploads can be several MiB, so give media transfers more time. */
-const UPLOAD_TIMEOUT_MS = 60_000;
+const UPLOAD_TIMEOUT_MS = 90_000;
 
 export async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);

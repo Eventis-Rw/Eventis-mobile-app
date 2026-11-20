@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -47,6 +48,8 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadedOnce = useRef(false);
+  const refreshInFlight = useRef(false);
 
   const refreshEvents = useCallback(async () => {
     if (!user) {
@@ -54,13 +57,17 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    if (!loadedOnce.current) setIsLoading(true);
     setError(null);
     try {
       setEvents(await fetchEvents());
+      loadedOnce.current = true;
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : "Couldn't load events");
     } finally {
+      refreshInFlight.current = false;
       setIsLoading(false);
     }
   }, [user]);

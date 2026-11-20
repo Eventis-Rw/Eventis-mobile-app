@@ -1,95 +1,126 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { Track, type Participant } from "livekit-client";
-import React, { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import type { Participant } from "livekit-client";
+import React, { useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import type { LiveVoice } from "@/hooks/useLiveBroadcast";
 import type { LivePerson } from "@/services/liveState";
+import { liveStageMembers, type LiveStageMember, type LiveStageActions } from "@/services/liveStage";
 import { BroadcastVideo } from "./BroadcastVideo";
 import { LiveAvatar, liveColors as c } from "./LivePrimitives";
 import { LiveSpeakingAvatar, LiveSpeakingBars } from "./LiveSpeakingIndicator";
 
-type StageMember = {
-  participant?: Participant;
-  person: LivePerson;
-  isHost: boolean;
-  hasVideo: boolean;
-  microphone: boolean;
-  speaking: boolean;
-};
-
-function StageTile({ member, revision, compact, showTag, mode }: {
-  member: StageMember; revision: number; compact: boolean; showTag: boolean; mode: "video" | "voice";
+function StageTile({ member, revision, compact, shared, demo, actions }: {
+  member: LiveStageMember; revision: number; compact: boolean; shared: boolean;
+  demo: boolean; actions: LiveStageActions;
 }) {
-  const { participant, person, isHost, hasVideo, microphone, speaking } = member;
-  const status = !participant ? "Connecting" : !microphone ? "Muted" : speaking ? "Speaking" : "Listening";
-  return <View testID={`live-stage-${isHost ? "host" : "guest"}`}
+  const [height, setHeight] = useState(200);
+  const { participant, person, isHost, hasVideo, microphone, speaking, cameraPending } = member;
+  const status = demo ? (isHost ? "Host" : "Guest") : !participant ? "Joining…" : !microphone ? "Muted" : speaking ? "Speaking" : "Listening";
+  const video = hasVideo && participant;
+  const own = person.id === actions.ownId;
+  const canManage = shared && (actions.isHost || own);
+  const avatarSize = compact ? Math.max(30, Math.min(56, height * .29)) : Math.max(48, Math.min(88, height * .29));
+  return <View testID={`live-stage-${isHost ? "host" : "guest"}`} onLayout={event => setHeight(event.nativeEvent.layout.height)}
     accessibilityLabel={`${person.name}, ${isHost ? "host" : "guest"}, ${status.toLowerCase()}`}
-    style={[styles.tile, showTag && styles.sharedTile, showTag && speaking && styles.speakingTile]}>
-    {hasVideo && participant ? <BroadcastVideo participant={participant} revision={revision} /> : <LinearGradient colors={["#17263C", "#080D19", "#111827"]} style={styles.fallback}>
-      <LiveSpeakingAvatar speaking={speaking}><LiveAvatar person={person} size={compact ? 52 : 88} /></LiveSpeakingAvatar>
-      <View style={styles.nameRow}><Text numberOfLines={1} style={styles.name}>{person.name}{participant?.isLocal ? " · You" : ""}</Text>{isHost ? <Text style={styles.host}>HOST</Text> : null}</View>
-      <View style={styles.status}>
-        {speaking ? <LiveSpeakingBars speaking /> : <Ionicons name={microphone ? "mic-outline" : "mic-off-outline"} size={13} color={participant && !microphone ? c.redSoft : "#BCC6D7"} />}
-        <Text style={[styles.hint, speaking && styles.activeText, participant && !microphone && styles.mutedText]}>
-          {!participant ? "Waiting for connection…" : status}
-        </Text>
-      </View>
-      {mode === "video" ? <Text style={styles.cameraHint}>Camera is off</Text> : null}
-    </LinearGradient>}
-    {showTag && hasVideo ? <View style={[styles.tag, isHost ? { bottom: 12 } : { top: 12 }, speaking && styles.speakingTag]}>
-      {speaking ? <LiveSpeakingBars speaking /> : <Ionicons name={microphone ? "mic" : "mic-off"} size={12} color={microphone ? "#FFF" : c.redSoft} />}
-      <Text numberOfLines={1} style={styles.tagText}>{person.name}{participant?.isLocal ? " · You" : ""}</Text>
-      {isHost ? <Text style={styles.host}>HOST</Text> : null}
+    style={[styles.tile, shared && styles.sharedTile, speaking && shared && styles.speakingTile]}>
+    {video ? <BroadcastVideo participant={participant} revision={revision} /> : <View style={styles.fallback}>
+      <LiveSpeakingAvatar size={compact ? "small" : "large"} speaking={speaking}><LiveAvatar person={person} size={avatarSize} /></LiveSpeakingAvatar>
+      {cameraPending ? <ActivityIndicator size="small" color={c.blue} accessibilityLabel="Loading camera" /> : !compact ? <Text style={styles.hint}>{!participant && !demo ? "Joining the stage…" : "Camera off"}</Text> : null}
+    </View>}
+    <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button"
+      accessibilityLabel={`Like ${person.name}'s video`} onPress={actions.onLike} />
+    {isHost && shared ? <View pointerEvents="none" style={styles.hostBadge}><Text style={styles.hostText}>LIVE creator</Text></View> : null}
+    {shared ? <View pointerEvents="box-none" style={styles.namePlate}>
+      <Pressable disabled={!canManage} accessibilityRole={canManage ? "button" : undefined}
+        accessibilityLabel={canManage ? own ? "Your stage controls" : `Manage ${person.name}` : person.name}
+        onPress={() => actions.onMember(person)} hitSlop={8} style={styles.namePill}>
+        <Text numberOfLines={1} style={styles.name}>{person.name}{own ? " · You" : ""}</Text>
+        {canManage ? <Ionicons name="chevron-down" size={10} color="#FFF" /> : null}
+      </Pressable>
+      <View pointerEvents="none">{speaking ? <LiveSpeakingBars speaking /> : <Ionicons name={microphone ? "mic" : "mic-off"} size={12} color={microphone ? "#FFF" : "#D8DBE4"} />}</View>
     </View> : null}
   </View>;
 }
 
-/** Snapshot mutable SDK values on media/speaker events so every tile receives fresh primitives. */
-export function LiveBroadcastStage({ participants, revision, hostId, host, guests, mode, connected }: {
-  participants: Participant[]; revision: number; hostId: string; host: LivePerson; guests: LivePerson[]; mode: "video" | "voice"; connected: boolean;
-}) {
-  const members = useMemo(() => {
-    const ids = [hostId, ...participants.filter(p => p.identity !== hostId).map(p => p.identity)];
-    return ids.map(id => {
-      const participant = participants.find(p => p.identity === id);
-      const camera = participant?.getTrackPublication(Track.Source.Camera);
-      const microphone = !!participant?.isMicrophoneEnabled;
-      return {
-        participant,
-        person: id === hostId ? host : guests.find(p => p.id === id) ?? { id, name: participant?.name || "Guest" },
-        isHost: id === hostId,
-        hasVideo: !!camera?.track && !camera.isMuted,
-        microphone,
-        speaking: connected && microphone && !!participant?.isSpeaking,
-      };
-    });
-  }, [participants, revision, hostId, host, guests, connected]);
-  const [leader, ...guestMembers] = members;
-  const shared = guestMembers.length > 0;
-  return <View testID="live-broadcast-stage" style={styles.canvas}>
-    <View style={{ flex: guestMembers.length > 1 ? 1.15 : 1 }}><StageTile member={leader} revision={revision} compact={guestMembers.length > 1} showTag={shared} mode={mode} /></View>
-    {shared ? <View style={styles.guests}>{guestMembers.map(member => <View key={member.person.id} style={{ width: guestMembers.length === 1 ? "100%" : "50%", height: guestMembers.length > 2 ? "50%" : "100%" }}>
-      <StageTile member={member} revision={revision} compact={guestMembers.length > 1} showTag mode={mode} />
-    </View>)}</View> : null}
-  </View>;
+function AudioSeat({ member, actions, demo }: { member?: LiveStageMember; actions: LiveStageActions; demo: boolean }) {
+  const own = member?.person.id === actions.ownId;
+  const interactive = member ? actions.isHost || own : !actions.emptyDisabled;
+  const speaking = !!member?.speaking;
+  return <Pressable testID={member ? `live-stage-${member.isHost ? "host" : "guest"}` : "live-audio-open-seat"}
+    accessibilityRole={interactive ? "button" : undefined}
+    accessibilityLabel={member ? `${member.person.name}, ${member.isHost ? "host" : "guest"}${own ? ", your controls" : ""}, ${speaking ? "speaking" : member.microphone ? "listening" : "muted"}` : actions.emptyLabel}
+    accessibilityState={{ disabled: !interactive }} disabled={!interactive}
+    onPress={() => member ? actions.onMember(member.person) : actions.onEmpty()} style={styles.audioSeat}>
+    {member ? <>
+      <View style={styles.audioAvatar}>
+        <LiveSpeakingAvatar size="small" minimal speaking={speaking}><LiveAvatar person={member.person} size={60} /></LiveSpeakingAvatar>
+        {!demo && !member.microphone ? <View style={styles.audioMuted}><Ionicons name="mic-off" size={11} color="#FFF" /></View> : null}
+      </View>
+      <Text numberOfLines={1} style={styles.audioName}>{member.person.name}{own ? " · You" : ""}</Text>
+      <View style={styles.audioStatus}>
+        {speaking ? <LiveSpeakingBars speaking /> : null}
+        <Text style={[styles.audioRole, member.isHost && styles.activeText]}>{member.isHost ? "Host" : speaking ? "Speaking" : !member.participant && !demo ? "Joining…" : "Guest"}</Text>
+      </View>
+    </> : <>
+      <View style={styles.audioAdd}><Ionicons name="add" size={30} color={actions.emptyDisabled ? "#687181" : "#CBD2DF"} /></View>
+      <Text numberOfLines={2} style={styles.audioEmptyLabel}>{actions.emptyDisabled ? "Open seat" : actions.emptyLabel}</Text>
+    </>}
+  </Pressable>;
 }
 
+export function LiveBroadcastStage({ participants, revision, voice, hostId, host, guests, mode, connected, actions, demo = false, placeholderHost = false }: {
+  participants: Participant[]; revision: number; voice: LiveVoice; hostId: string; host: LivePerson; guests: LivePerson[];
+  mode: "video" | "voice"; connected: boolean; actions: LiveStageActions; demo?: boolean; placeholderHost?: boolean;
+}) {
+  "use no memo";
+  const members = useMemo(() => liveStageMembers(participants, { ...host, id: hostId }, guests, voice, connected), [participants, revision, voice, hostId, host, guests, connected]);
+  const [leader, ...others] = members;
+  const audio = mode === "voice";
+  const shared = audio || others.length > 0;
+  const tile = (member: LiveStageMember, compact: boolean) => <StageTile member={member} revision={revision} compact={compact} shared={shared} demo={demo || (placeholderHost && member.isHost)} actions={actions} />;
+  if (!shared) return <View testID="live-broadcast-stage" style={styles.canvas}>{tile(leader, false)}</View>;
+  const seats = Array.from({ length: 4 }, (_, index) => others[index]);
+  if (audio) return <View testID="live-broadcast-stage" style={[styles.canvas, styles.audioCanvas]}>
+    <View style={styles.audioGrid}>{[leader, ...seats].map((member, index) => <AudioSeat
+      key={member?.person.id ?? `empty-${index}`} member={member} actions={actions} demo={demo} />)}</View>
+  </View>;
+  // Fill the panel with connected/approved guests; camera-off guests keep
+  // their slot, while leaving the stage redistributes the available space.
+  const grid = others.length === 4;
+  return <View testID="live-broadcast-stage" style={[styles.canvas, styles.split]}>
+    <View style={styles.mainHost}>{tile(leader, false)}</View>
+    <View style={styles.guestGrid}>{others.map(member => <View key={member.person.id}
+      style={[styles.guestSeat, others.length === 1 && styles.singleGuest, { width: grid ? "50%" : "100%", height: grid ? "50%" : `${100 / others.length}%` }]}>
+      {tile(member, others.length > 1)}
+    </View>)}</View>
+  </View>;
+}
 const styles = StyleSheet.create({
-  canvas: { flex: 1, backgroundColor: "#000" },
-  tile: { flex: 1, overflow: "hidden", backgroundColor: "#080D19" },
-  sharedTile: { borderWidth: 1, borderColor: "transparent" },
+  canvas: { flex: 1, minHeight: 0, backgroundColor: "#000" },
+  split: { flexDirection: "row", paddingHorizontal: 2, gap: 2 },
+  mainHost: { flex: 1, minWidth: 0 },
+  guestGrid: { flex: 1, flexDirection: "row", flexWrap: "wrap", minWidth: 0 },
+  guestSeat: { padding: 1 },
+  singleGuest: { padding: 0 },
+  tile: { flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden", backgroundColor: "#414141" },
+  sharedTile: { borderRadius: 10, borderWidth: 1, borderColor: "transparent" },
   speakingTile: { borderColor: c.blue },
-  guests: { flex: 1, flexDirection: "row", flexWrap: "wrap", backgroundColor: "#000" },
-  fallback: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 16 },
-  name: { color: "#FFF", fontFamily: "Inter_600SemiBold", fontSize: 16, flexShrink: 1 },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 5, maxWidth: "100%" },
-  status: { flexDirection: "row", alignItems: "center", gap: 5 },
-  hint: { color: "#BCC6D7", fontFamily: "Inter_500Medium", fontSize: 12 },
+  fallback: { flex: 1, justifyContent: "center", alignItems: "center", padding: 4, paddingBottom: 22 },
+  hostBadge: { position: "absolute", top: 4, left: 4, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 8, backgroundColor: "#0006" },
+  hostText: { color: "#FFF", fontSize: 9, fontFamily: "Inter_500Medium" },
+  namePlate: { position: "absolute", bottom: 5, left: 4, right: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 3 },
+  namePill: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 3, backgroundColor: "#0007" },
+  name: { flexShrink: 1, color: "#FFF", fontSize: 10, fontFamily: "Inter_500Medium" },
+  hint: { color: "#AAB4C7", fontSize: 10, fontFamily: "Inter_500Medium" },
   activeText: { color: c.blue },
-  mutedText: { color: c.redSoft },
-  cameraHint: { color: "#8492AA", fontFamily: "Inter_400Regular", fontSize: 11 },
-  tag: { position: "absolute", left: 10, maxWidth: "85%", flexDirection: "row", alignItems: "center", gap: 5, padding: 6, borderRadius: 10, borderWidth: 1, borderColor: "transparent", backgroundColor: "#080D19BB" },
-  speakingTag: { borderColor: "#38BDF866", backgroundColor: "#0A2A3EEB" },
-  tagText: { color: "#FFF", fontSize: 11, fontFamily: "Inter_600SemiBold", flexShrink: 1, textShadowColor: "#000", textShadowRadius: 5 },
-  host: { color: "#FFF", fontSize: 8, fontWeight: "700", backgroundColor: "#EF4444CC", paddingHorizontal: 5, paddingVertical: 3, borderRadius: 4 },
+  audioCanvas: { paddingHorizontal: 12, paddingTop: 28 },
+  audioGrid: { flexDirection: "row", flexWrap: "wrap", rowGap: 26 },
+  audioSeat: { width: "33.333%", minHeight: 112, alignItems: "center", paddingHorizontal: 4 },
+  audioAvatar: { position: "relative" },
+  audioMuted: { position: "absolute", right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: "#333A47", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#000" },
+  audioAdd: { width: 60, height: 60, margin: 8, borderRadius: 30, backgroundColor: "#1D1D20", alignItems: "center", justifyContent: "center" },
+  audioName: { maxWidth: "100%", color: "#E1E5ED", fontSize: 11, fontFamily: "Inter_500Medium", textAlign: "center", marginTop: 3 },
+  audioStatus: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, marginTop: 4, height: 14 },
+  audioRole: { color: "#7E8A9F", fontSize: 9, fontFamily: "Inter_500Medium" },
+  audioEmptyLabel: { color: "#8690A2", fontSize: 10, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 3 },
 });

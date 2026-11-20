@@ -10,7 +10,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, Platform, Share } from "react-native";
+import { AppState, Linking, Platform } from "react-native";
 import { io, type Socket } from "socket.io-client";
 
 import { useAuth } from "@/context/AuthContext";
@@ -91,7 +91,7 @@ interface ChatContextValue {
   ) => Promise<void>;
   simulateIncoming: (conversationId: string) => Promise<void>;
   typingConversationId: string | null;
-  notification: { conversationId: string; text: string } | null;
+  notification: { conversationId: string; text: string; senderId?: string } | null;
   dismissNotification: () => void;
   setActiveConversation: (id: string | null) => void;
   inviteContact: (contactId: string) => Promise<void>;
@@ -143,6 +143,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [notification, setNotification] = useState<{
     conversationId: string;
     text: string;
+    senderId?: string;
   } | null>(null);
   const activeConversation = useRef<string | null>(null);
   const conversationsRef = useRef<ChatConversation[]>(conversations);
@@ -348,9 +349,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       current.map((item) => (item.id === contactId ? contact : item)),
     );
     if (contact.inviteUrl) {
-      await Share.share({
-        message: `Join me on Eventis so we can chat: ${contact.inviteUrl}`,
-      }).catch(() => undefined);
+      const body = encodeURIComponent(`Join me on Eventis so we can chat: ${contact.inviteUrl}`);
+      const separator = Platform.OS === "ios" ? "&" : "?";
+      const url = `sms:${contact.phone.replace(/[^+\d]/g, "")}${separator}body=${body}`;
+      await Linking.openURL(url).catch(() => undefined);
     }
   }, []);
 
@@ -497,6 +499,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           setNotification({
             conversationId,
             text: realtimePreview(payload),
+            ...(payload.senderId ? { senderId: payload.senderId } : {}),
           });
         }
       });
@@ -640,4 +643,8 @@ export function useChat() {
   const context = useContext(ChatContext);
   if (!context) throw new Error("useChat must be used within ChatProvider");
   return context;
+}
+
+export function useChatOptional() {
+  return useContext(ChatContext);
 }

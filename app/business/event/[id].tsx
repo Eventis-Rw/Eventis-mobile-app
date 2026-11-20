@@ -166,8 +166,8 @@ export default function ManageEventScreen() {
         <ProfileStatGrid
           stats={[
             { label: "Attending", value: event.attendees, icon: "people-outline" },
-            { label: "Capacity", value: event.capacity, icon: "grid-outline" },
-            { label: "% full", value: fill, icon: "pie-chart-outline" },
+            { label: "Capacity", value: event.capacity || "Not set", icon: "grid-outline" },
+            { label: "% full", value: event.capacity ? fill : "—", icon: "pie-chart-outline" },
           ]}
         />
 

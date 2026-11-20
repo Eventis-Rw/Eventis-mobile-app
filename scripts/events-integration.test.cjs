@@ -49,8 +49,9 @@ const api = {
   },
   patch: async (url, body) => {
     calls.push({ method: "PATCH", url, body });
-    return record({ title: body.title });
+    return record({ title: body.title, status: body.status ?? "published" });
   },
+  delete: async (url) => { calls.push({ method: "DELETE", url }); },
   patchForm: async (url, body) => {
     calls.push({ method: "PATCH_FORM", url, body });
     return record();
@@ -81,6 +82,8 @@ function loadEventApi() {
           CATEGORIES: ["All", "Music", "Sports", "Business", "Food", "Tech", "Art", "Nightlife", "Community"],
         };
       }
+      if (name === "expo-file-system") return { File: class FakeFile {} };
+      if (name === "react-native") return { Platform: { OS: "web" } };
       if (name === "@/utils/apiClient") return { api };
       throw new Error(`Unexpected dependency: ${name}`);
     },
@@ -112,6 +115,7 @@ function loadPublisherService(eventApi) {
         };
       }
       if (name === "@/services/eventApi") return eventApi;
+      if (name === "@/services/eventAnalyticsService") return { fetchEventAnalytics: async () => ({}) };
       if (name === "@/services/profileService") return { USE_PROFILE_API: false };
       if (name === "@/utils/apiClient") return { api };
       throw new Error(`Unexpected dependency: ${name}`);
@@ -134,8 +138,9 @@ beforeEach(() => {
   };
   api.patch = async (url, body) => {
     calls.push({ method: "PATCH", url, body });
-    return record({ title: body.title });
+    return record({ title: body.title, status: body.status ?? "published" });
   };
+  api.delete = async (url) => { calls.push({ method: "DELETE", url }); };
   api.patchForm = async (url, body) => {
     calls.push({ method: "PATCH_FORM", url, body });
     return record();
@@ -175,6 +180,18 @@ test("published events are loaded using the backend's paginated response envelop
   assert.equal(events.length, 2);
 });
 
+test("organiser events use the owner-only endpoint so paused events remain manageable", async () => {
+  const { listApiPublisherEvents } = loadEventApi();
+  api.get = async (url) => {
+    calls.push({ method: "GET", url });
+    return { items: [record(), record({ id: "paused-1", event_id: "paused-1", status: "paused" })], page: 1, limit: 100, total: 2 };
+  };
+
+  const events = await listApiPublisherEvents();
+  assert.equal(calls[0].url, "/api/v1/events/me/events?page=1&limit=100");
+  assert.equal(events[1].status, "paused");
+});
+
 test("create uploads the cover and sends the backend's event field names", async () => {
   const { createApiEvent } = loadEventApi();
   const input = {
@@ -200,7 +217,7 @@ test("create uploads the cover and sends the backend's event field names", async
   assert.equal(call.body.parts.get("price_minor").value, "5000");
   assert.equal(call.body.parts.get("booking_url").value, "https://tickets.eventis.rw");
   assert.equal(call.body.parts.get("status").value, "published");
-  assert.equal(call.body.parts.get("cover_image").filename, "cover.jpg");
+  assert.equal(call.body.parts.get("cover_image").filename, "event-cover.jpg");
 });
 
 test("updates use PATCH and omit unsupported image/status fields when unchanged", async () => {
@@ -272,4 +289,24 @@ test("publisher detail reads only return events owned by the active user", async
   assert.equal(owned.id, "event-1");
   assert.equal(notOwned, undefined);
   assert.equal(calls[0].url, "/api/v1/events/event-1");
+});
+
+test("pause and resume PATCH the existing event route with the API status", async () => {
+  const eventApi = loadEventApi();
+  const publisherService = loadPublisherService(eventApi);
+
+  const paused = await publisherService.setPublisherEventStatus("poster-1", "event-1", "paused");
+  assert.equal(calls[0].url, "/api/v1/events/event-1");
+  assert.deepEqual(calls[0].body, { status: "paused" });
+  assert.equal(paused.status, "paused");
+
+  const resumed = await publisherService.setPublisherEventStatus("poster-1", "event-1", "published");
+  assert.deepEqual(calls[1].body, { status: "published" });
+  assert.equal(resumed.status, "published");
+});
+
+test("delete sends the server event ID to the backend delete endpoint", async () => {
+  const publisherService = loadPublisherService(loadEventApi());
+  await publisherService.deletePublisherEvent("poster-1", "event-1");
+  assert.deepEqual(calls[0], { method: "DELETE", url: "/api/v1/events/event-1" });
 });

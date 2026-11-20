@@ -10,8 +10,13 @@ const { createLiveState, reduceLive, activeRooms, tickLiveState, refreshLiveSamp
 const now = Date.UTC(2026, 9, 27, 12);
 const host = { id: 'host', name: 'Host' }, viewer = { id: 'viewer', name: 'Viewer' };
 const draft = { title: 'Our room', mode: 'voice', chatEnabled: true, giftsEnabled: true };
+// Leave two slots open when testing creation and queue behavior.
+function stateWithSpace() {
+  const state = createLiveState(now);
+  return { ...state, rooms: state.rooms.slice(0, 3) };
+}
 function fixture() {
-  let state = reduceLive(createLiveState(now), host, { type: 'start', draft }, now);
+  let state = reduceLive(stateWithSpace(), host, { type: 'start', draft }, now);
   const roomId = state.rooms[0].id;
   const run = (actor, action, at = now) => state = reduceLive(state, actor, { roomId, ...action }, at);
   run(viewer, { type: 'join' });
@@ -25,7 +30,7 @@ test('eligibility combines all free criteria; verification never bypasses safety
   assert.equal(liveEligibility({ ...facts, verifiedOrganizer: true, suspended: true }, now).eligible, false);
 });
 test('creation is immutable, rejects empty titles and repeated/daily sessions', () => {
-  const original = createLiveState(now);
+  const original = stateWithSpace();
   const next = reduceLive(original, host, { type: 'start', draft }, now);
   assert.equal(original.rooms.length, 3); assert.equal(next.rooms.length, 4);
   assert.throws(() => reduceLive(original, host, { type: 'start', draft: { ...draft, title: ' ' } }, now), /title/);
@@ -35,7 +40,7 @@ test('creation is immutable, rejects empty titles and repeated/daily sessions', 
   assert.equal(activeRooms(reduceLive(ended, host, { type: 'start', draft }, now + 86400000), now + 86400000).length, 1);
 });
 test('capacity queues FIFO, duplicate joins do not duplicate queue; cancel releases position', () => {
-  let state = createLiveState(now);
+  let state = stateWithSpace();
   const people = Array.from({ length: 5 }, (_, i) => ({ id: `p${i}`, name: `P${i}` }));
   for (const p of people) state = reduceLive(state, p, { type: 'start', draft }, now);
   assert.equal(activeRooms(state, now).length, 5); assert.equal(state.queue.length, 3);
@@ -97,10 +102,23 @@ test('hosts and guests cannot self-gift and host can pause gifting', () => {
   f.run(viewer, { type: 'request' }); f.run(host, { type: 'accept', person: viewer }); assert.throws(() => f.run(viewer, gift), /cannot gift/);
 });
 test('daily gifting cap is enforced independently of available balance', () => {
-  const f = fixture(); f.state.wallets.viewer = 2000;
-  f.run(viewer, { type: 'gift', giftId: 'encore', transactionId: 'a' }); f.run(viewer, { type: 'gift', giftId: 'encore', transactionId: 'b' });
-  assert.throws(() => f.run(viewer, { type: 'gift', giftId: 'spark', transactionId: 'c' }), /daily/);
-  assert.equal(f.state.wallets.viewer, 1000);
+  const f = fixture(); f.state.wallets.viewer = 100000;
+  f.run(viewer, { type: 'gift', giftId: 'galaxy', transactionId: 'a' }); f.run(viewer, { type: 'gift', giftId: 'sports_car', transactionId: 'b' });
+  assert.throws(() => f.run(viewer, { type: 'gift', giftId: 'finger_heart', transactionId: 'c' }), /daily/);
+  assert.equal(f.state.wallets.viewer, 100000 - 44999 - 5000);
+});
+test('top-ups credit the wallet once per payment and are persisted', () => {
+  const f = fixture(); const topUp = { type: 'topUp', paymentId: 'pay_1', coins: 700, priceRwf: 10000 };
+  f.run(viewer, topUp); f.run(viewer, topUp);
+  assert.equal(f.state.wallets.viewer, 500 + 700);
+  assert.equal(f.state.purchases.length, 1);
+  assert.throws(() => f.run(viewer, { ...topUp, paymentId: 'pay_2', coins: 0 }), /unavailable/);
+  assert.deepEqual(api.readLiveState(JSON.stringify(f.state), now), f.state);
+  assert.throws(() => api.readLiveState(JSON.stringify({ ...f.state, purchases: [{ id: 'x' }] }), now), /could not be read/);
+});
+test('every gift has a unique id and a positive whole coin price', () => {
+  assert.equal(new Set(api.LIVE_GIFTS.map(g => g.id)).size, api.LIVE_GIFTS.length);
+  assert.ok(api.LIVE_GIFTS.every(g => Number.isSafeInteger(g.coins) && g.coins > 0));
 });
 test('wall-clock expiration works after backgrounding and persisted reloads', () => {
   const f = fixture(); const reloaded = JSON.parse(JSON.stringify(f.state));
@@ -132,7 +150,7 @@ test('reopening restores expired, ended and missing sample rooms without resetti
   const original = JSON.parse(JSON.stringify(f.state));
   const reopenedAt = now + 86400000;
   const reopened = refreshLiveSamples(api.readLiveState(JSON.stringify(f.state), reopenedAt), reopenedAt);
-  assert.deepEqual(activeRooms(reopened, reopenedAt).map(room => room.id).sort(), ['sample_0', 'sample_1', 'sample_2']);
+  assert.deepEqual(activeRooms(reopened, reopenedAt).map(room => room.id).sort(), ['sample_0', 'sample_1', 'sample_2', 'sample_3', 'sample_4']);
   assert.equal(reopened.wallets.viewer, 400);
   for (const field of ['wallets', 'transactions', 'starts', 'queue']) assert.deepEqual(reopened[field], original[field]);
   assert.ok(reopened.rooms.find(room => room.id === f.roomId).endedAt);
@@ -143,8 +161,16 @@ test('repeated sample refreshes keep one card each and preserve current chat wit
   let state = createLiveState(now);
   state = reduceLive(state, viewer, { type: 'join', roomId: 'sample_0' }, now);
   state = reduceLive(state, viewer, { type: 'message', roomId: 'sample_0', text: 'Still here' }, now);
+  // Emulate the old persisted collection, including outdated names/photos and only three rooms.
+  state.rooms = state.rooms.slice(0, 3);
+  state.rooms[0].host.avatar = 'https://example.test/old.jpg';
+  state.rooms[0].title = 'Old preview title';
   state = refreshLiveSamples(refreshLiveSamples(state, now + 1000), now + 2000);
-  assert.equal(state.rooms.length, 3);
+  assert.equal(state.rooms[0].title, 'Backstage pre-show');
+  assert.equal(state.rooms[0].host.avatar, undefined);
+  assert.equal(state.rooms[0].previewViewers, 1200);
+  assert.equal(state.rooms[0].audience.length, 1);
+  assert.equal(state.rooms.length, 5);
   assert.equal(state.rooms.find(room => room.id === 'sample_0').messages[0].text, 'Still here');
   assert.equal(state.rooms[0].endsAt, now + 2000 + LIVE_LIMITS.durationMs);
   const room = state.rooms[0];

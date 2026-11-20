@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   RecordingPresets,
@@ -10,7 +10,7 @@ import {
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import React, {
+import React, { type ComponentRef,
   useCallback,
   useEffect,
   useMemo,
@@ -22,7 +22,6 @@ import {
   FlatList,
   Image,
   Keyboard,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -51,6 +50,7 @@ import {
 import { ChatVideoBubble } from "@/components/ChatVideoBubble";
 import { VoiceNoteBubble } from "@/components/VoiceNoteBubble";
 import { useChat } from "@/context/ChatContext";
+import { useCall } from "@/context/CallContext";
 import { useChatColors } from "@/hooks/useChatColors";
 import { useChatBottomInset } from "@/hooks/useChatBottomInset";
 import {
@@ -135,15 +135,7 @@ function MessageBubble({
         leftThreshold={32}
         overshootLeft={false}
         overshootRight={false}
-        renderLeftActions={() => (
-          <View style={styles.swipeReply}>
-            <Ionicons
-              name="arrow-undo"
-              size={23}
-              color={colors.mutedForeground}
-            />
-          </View>
-        )}
+        renderLeftActions={() => <View style={styles.swipeReply} />}
         onSwipeableOpen={() => {
           swipe.current?.close();
           onReply();
@@ -213,7 +205,7 @@ function MessageBubble({
                 </Text>
                 <Text
                   numberOfLines={2}
-                  style={[styles.smallText, { color: colors.foreground }]}
+                  style={[styles.quoteText, { color: colors.foreground }]}
                 >
                   {message.replyTo.text || "Attachment"}
                 </Text>
@@ -262,16 +254,16 @@ function MessageBubble({
                 })}
               </Text>
               {own ? (
-                <Ionicons
+                <MaterialCommunityIcons
                   accessibilityLabel={`Message status: ${message.status}`}
                   name={
                     message.status === "pending"
-                      ? "time-outline"
+                      ? "clock-outline"
                       : ["delivered", "read"].includes(message.status)
-                        ? "checkmark-done"
-                        : "checkmark"
+                        ? "check-all"
+                        : "check"
                   }
-                  size={14}
+                  size={15}
                   color={
                     message.status === "read"
                       ? colors.receipt
@@ -299,6 +291,7 @@ export default function ConversationScreen() {
   const { viewport, measureViewport, bottomInset } =
     useChatBottomInset(keyboardVisible);
   const chat = useChat();
+  const callActions = useCall();
   const audioRecorder = useAudioRecorder({
     ...RecordingPresets.HIGH_QUALITY,
     directory: "document",
@@ -313,12 +306,12 @@ export default function ConversationScreen() {
     contact?.isInAddressBook === false ? contact.phone : contact?.name;
   const allMessages = chat.messagesByConversation[id] ?? [];
   const list = useRef<FlatList<ChatMessage>>(null);
-  const menuButton = useRef<React.ComponentRef<typeof View>>(null);
+  const menuButton = useRef<ComponentRef<typeof View>>(null);
   const jumpRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jumpAttempts = useRef(0);
   const nearBottom = useRef(true);
   const [showLatest, setShowLatest] = useState(false);
-  const input = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const input = useRef<ComponentRef<typeof TextInput>>(null);
   const [composer, setComposer] = useState("");
   const [composerSelection, setComposerSelection] = useState({
     start: 0,
@@ -629,14 +622,23 @@ export default function ConversationScreen() {
     setAttachOpen(true);
   };
 
-  const startCall = () => {
-    if (!contact) return;
-    const phone = contact.phone.replace(/[^\d+]/g, "");
-    if (!phone) {
-      setNotice("No phone number is available for this contact.");
+  const startCall = (type: "VOICE" | "VIDEO") => {
+    if (!conversation || !contact) return;
+    if (chat.isDemoMode) {
+      setNotice("Sign in with an Eventis account to call people in the app.");
       return;
     }
-    void run(() => Linking.openURL(`tel:${phone}`));
+    if (!contact.isEventisUser) {
+      setNotice("In-app calls are available with Eventis members only.");
+      return;
+    }
+    if (contact.blocked) {
+      setNotice("Unblock this contact before calling.");
+      return;
+    }
+    void callActions.startCall(conversation.id, type, contactDisplayName || contact.name).catch((error) => {
+      setNotice(error instanceof Error ? error.message : "The call could not be started.");
+    });
   };
 
   const toggleEmojiPicker = () => {
@@ -910,7 +912,28 @@ export default function ConversationScreen() {
             accessibilityLabel={`View ${contact.name}'s contact details`}
             style={styles.profile}
           >
-            <Image source={{ uri: contact.avatarUrl }} style={styles.avatar} />
+            <View style={styles.avatarWrap}>
+              {contact.avatarUrl ? (
+                <Image source={{ uri: contact.avatarUrl }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <Ionicons name="person" size={20} color={colors.mutedForeground} />
+                </View>
+              )}
+              {contact.isOnline !== undefined ? (
+                <View
+                  style={[
+                    styles.presenceDot,
+                    {
+                      backgroundColor: contact.isOnline
+                        ? colors.success
+                        : colors.mutedForeground,
+                      borderColor: colors.background,
+                    },
+                  ]}
+                />
+              ) : null}
+            </View>
             <View style={{ flex: 1 }}>
               <Text
                 style={[styles.title, { color: colors.foreground }]}
@@ -931,14 +954,18 @@ export default function ConversationScreen() {
                       : contact.isOnline
                         ? "Online · demo"
                         : "Offline · demo"
-                    : "On Eventis"}
+                    : contact.isOnline === undefined
+                      ? "On Eventis"
+                      : contact.isOnline
+                        ? "Online"
+                        : "Offline"}
               </Text>
             </View>
           </Pressable>
           <Pressable
-            onPress={startCall}
+            onPress={() => startCall("VOICE")}
             accessibilityRole="button"
-            accessibilityLabel={`Call ${contactDisplayName}`}
+            accessibilityLabel={`Voice call ${contactDisplayName} in Eventis`}
             style={styles.iconButton}
           >
             <Ionicons
@@ -946,6 +973,14 @@ export default function ConversationScreen() {
               size={21}
               color={colors.foreground}
             />
+          </Pressable>
+          <Pressable
+            onPress={() => startCall("VIDEO")}
+            accessibilityRole="button"
+            accessibilityLabel={`Video call ${contactDisplayName} in Eventis`}
+            style={styles.iconButton}
+          >
+            <Ionicons name="videocam-outline" size={21} color={colors.foreground} />
           </Pressable>
           <Pressable
             ref={menuButton}
@@ -1625,11 +1660,11 @@ export default function ConversationScreen() {
         onRequestClose={() => setImagePreview(null)}
       >
         <View style={[styles.center, { backgroundColor: "#000000" }]}>
-          <Image
-            source={{ uri: imagePreview ?? "" }}
+          {imagePreview ? <Image
+            source={{ uri: imagePreview }}
             style={styles.fullImage}
             resizeMode="contain"
-          />
+          /> : null}
           <Pressable
             onPress={() => setImagePreview(null)}
             accessibilityRole="button"
@@ -1663,6 +1698,17 @@ const styles = StyleSheet.create({
   },
   profile: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
   avatar: { width: 42, height: 42, borderRadius: 21 },
+  avatarFallback: { alignItems: "center", justifyContent: "center", backgroundColor: "#25283A" },
+  avatarWrap: { position: "relative" },
+  presenceDot: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+  },
   title: { fontFamily: "Inter_600SemiBold", fontSize: 16 },
   smallText: { fontFamily: "Inter_400Regular", fontSize: 11, lineHeight: 17 },
   searchRow: {
@@ -1727,8 +1773,16 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     overflow: "hidden",
   },
-  quote: { borderLeftWidth: 3, padding: 8, borderRadius: 7, marginBottom: 7 },
-  quoteAuthor: { fontFamily: "Inter_700Bold", fontSize: 11 },
+  quote: {
+    borderLeftWidth: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 8,
+    marginBottom: 7,
+    minWidth: 112,
+  },
+  quoteAuthor: { fontFamily: "Inter_700Bold", fontSize: 12, lineHeight: 17 },
+  quoteText: { fontFamily: "Inter_400Regular", fontSize: 13, lineHeight: 18 },
   messageImage: {
     width: 210,
     height: 180,
@@ -1746,9 +1800,12 @@ const styles = StyleSheet.create({
   typing: { paddingHorizontal: 20, paddingVertical: 8, fontSize: 12 },
   composerContext: {
     marginHorizontal: 12,
-    padding: 10,
+    marginTop: 8,
+    marginBottom: 2,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
     borderLeftWidth: 3,
-    borderRadius: 10,
+    borderRadius: 9,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,

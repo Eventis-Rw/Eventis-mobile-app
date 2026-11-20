@@ -4,9 +4,10 @@ import type { Event, EventCategory } from "@/constants/events";
 import {
   createApiEvent,
   getApiEvent,
-  listApiEvents,
+  listApiPublisherEvents,
   mapApiEvent,
   updateApiEvent,
+  updateApiEventStatus,
   USE_EVENTS_API,
 } from "@/services/eventApi";
 import { fetchEventAnalytics } from "@/services/eventAnalyticsService";
@@ -34,6 +35,8 @@ export interface PublisherEvent extends Event {
 export interface PublisherEventInput {
   /** Remote URL, local media URI, or bundled demo image key. */
   image: string;
+  imageMimeType?: string;
+  imageFileName?: string;
   title: string;
   description: string;
   category: Exclude<EventCategory, "All">;
@@ -65,7 +68,7 @@ export function validateEventInput(input: PublisherEventInput, today = localDate
   }
   if (input.date < today) return "The event date can't be in the past.";
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.time)) return "Enter the time as HH:MM, e.g. 18:30.";
-  if (!Number.isInteger(input.capacity) || input.capacity < 1) return "Capacity must be at least 1.";
+  if (!Number.isInteger(input.capacity) || input.capacity < 0) return "Enter a valid capacity, or leave it blank.";
   if (input.isPaid) {
     if (!(input.price > 0)) return "Paid events need a ticket price.";
     if (!isWebsite(input.websiteUrl)) return "Paid events need your payment website (https://…).";
@@ -237,7 +240,7 @@ export async function fetchDemoPublishedEvents(): Promise<PublisherEvent[]> {
 
 export async function fetchPublisherEvents(userId: string): Promise<PublisherEvent[]> {
   if (USE_EVENTS_API) {
-    const records = await listApiEvents();
+    const records = await listApiPublisherEvents();
     return records
       .filter((record) => record.poster_id === userId)
       .map((record) => toPublisherEvent(record));
@@ -326,25 +329,29 @@ function toPublisherEvent(
   };
 }
 
-// INTEGRATION POINT: PATCH /api/v1/events/:id/status { status } -> { event: PublisherEvent }
 export async function setPublisherEventStatus(
   userId: string,
   eventId: string,
   status: PublisherEventStatus,
 ): Promise<PublisherEvent> {
+  if (USE_EVENTS_API) {
+    const record = await updateApiEventStatus(eventId, status);
+    return toPublisherEvent(record);
+  }
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
     return mutateDemoEvent(userId, eventId, (e) => ({ ...e, status }));
   }
-  const resp = await api.patch<{ event: PublisherEvent }>(
-    `/api/v1/events/${encodeURIComponent(eventId)}/status`,
-    { status },
-  );
+  const resp = await api.patch<{ event: PublisherEvent }>(`/api/v1/events/${encodeURIComponent(eventId)}/status`, { status });
   return resp.event;
 }
 
 // INTEGRATION POINT: DELETE /api/v1/events/:id
 export async function deletePublisherEvent(userId: string, eventId: string): Promise<void> {
+  if (USE_EVENTS_API) {
+    await api.delete(`/api/v1/events/${encodeURIComponent(eventId)}`);
+    return;
+  }
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
     const all = await readJson<PublisherEvent[]>(EVENTS_KEY, []);

@@ -26,6 +26,7 @@ export interface EventAnalyticsOverview {
   eventViews: number;
   savedEvents: number;
   events: EventAnalyticsRow[];
+  sources: Array<{ source: string | null; impressions: number; views: number }>;
   daily: Array<{
     date: string;
     impressions: number;
@@ -75,6 +76,15 @@ export async function fetchEventAnalytics(days = 30): Promise<EventAnalyticsOver
         viewsCount: count(row.viewsCount),
         saves: count(row.saves),
         counts: eventCounts(row.counts),
+      }];
+    }),
+    sources: (Array.isArray(raw?.sources) ? raw.sources : []).flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Record<string, unknown>;
+      return [{
+        source: typeof row.source === "string" ? row.source : null,
+        impressions: count(row.impressions),
+        views: count(row.views),
       }];
     }),
     daily: (Array.isArray(raw?.daily) ? raw.daily : []).flatMap((item) => {
