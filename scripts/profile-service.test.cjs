@@ -52,6 +52,7 @@ const customer = load("utils/customerProfile.ts", (name) => {
 const publisher = load("services/publisherService.ts", (name) => {
   if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
   if (name === "@/services/eventApi") return { USE_EVENTS_API: false };
+  if (name === "@/services/eventAnalyticsService") return { fetchEventAnalytics: async () => ({ events: [] }) };
   if (name === "@/utils/apiClient") return apiStub;
   if (name === "@/services/profileService") return profile;
 });
@@ -89,7 +90,7 @@ test("notification preferences default sensibly and persist per user", async () 
   const reloaded = await profile.fetchNotificationPreferences("u1");
   assert.equal(reloaded.promotional, true);
   assert.equal(reloaded.categoryUpdates, false);
-  assert.equal(reloaded.bookingUpdates, true);
+  assert.equal(reloaded.eventUpdates, true);
 
   assert.equal((await profile.fetchNotificationPreferences("u2")).promotional, false);
 });
@@ -364,7 +365,8 @@ test("event input validation covers dates, times, capacity and paid rules", () =
   assert.match(publisher.validateEventInput(eventInput({ date: "2099-02-31" }), today), /YYYY-MM-DD/);
   assert.equal(publisher.validateEventInput(eventInput({ date: "2096-02-29", time: "23:59" }), today), null);
   assert.match(publisher.validateEventInput(eventInput({ time: "24:00" }), today), /HH:MM/);
-  assert.match(publisher.validateEventInput(eventInput({ capacity: 0 }), today), /Capacity/);
+  assert.equal(publisher.validateEventInput(eventInput({ capacity: 0 }), today), null);
+  assert.match(publisher.validateEventInput(eventInput({ capacity: -1 }), today), /capacity/i);
   assert.match(publisher.validateEventInput(eventInput({ isPaid: true, price: 0 }), today), /price/);
   assert.match(
     publisher.validateEventInput(eventInput({ isPaid: true, price: 5000, websiteUrl: "tickets" }), today),

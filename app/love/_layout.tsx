@@ -41,6 +41,7 @@ function LoveStack() {
       <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
       <Stack.Screen name="wallet" options={{ animation: "slide_from_bottom" }} />
       <Stack.Screen name="membership" options={{ animation: "slide_from_bottom" }} />
+      <Stack.Screen name="payments" options={{ animation: "slide_from_bottom" }} />
     </Stack>
   );
 }

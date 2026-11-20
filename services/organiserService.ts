@@ -3,14 +3,17 @@ import { api, ApiError } from "@/utils/apiClient";
 /**
  * Organiser onboarding: subscription + organisation setup.
  *
- * BACKEND STATUS: the API's `org` and `payments` modules are scaffolds only and
- * there is no subscription contract yet. Until they ship, this service runs a
- * local demo (same approach as `utils/eventsService.ts`). Set
- * EXPO_PUBLIC_USE_ORGANISER_API=true to call the endpoints below instead.
+ * BACKEND STATUS: without EXPO_PUBLIC_USE_ORGANISER_API=true this service runs
+ * a fully local demo (same approach as `utils/eventsService.ts`). With it,
+ * fetchSubscriptionPlans() reads the real GET /api/v1/organisations/plans,
+ * but buying a plan goes through the manual-payment flow
+ * (services/manualPaymentsService.ts, driven from app/organiser/subscribe.tsx)
+ * rather than startSubscription() below, since payment review now happens out
+ * of band on the backend.
  *
  * Screens talk to this file only (via AuthContext), so the endpoint paths and
- * response mapping here are the single integration point to update once the
- * real contracts exist.
+ * response mapping here are the single integration point to update once more
+ * of the real contracts exist.
  */
 export const USE_ORGANISER_API = process.env.EXPO_PUBLIC_USE_ORGANISER_API === "true";
 
@@ -154,19 +157,89 @@ const DEMO_PLANS: SubscriptionPlan[] = [
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// INTEGRATION POINT: GET /api/v1/organisers/plans -> SubscriptionPlan[]
+/** The backend's organiser plan interval, mapped to this file's. */
+const INTERVAL_FROM_API: Record<string, SubscriptionInterval> = {
+  PAY_PER_POST: "post",
+  MONTHLY: "month",
+  QUARTERLY: "quarter",
+  YEARLY: "year",
+};
+
+function normalizeRemotePlan(value: unknown): SubscriptionPlan | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const id = String(row.id ?? "");
+  const interval = INTERVAL_FROM_API[String(row.interval)];
+  if (!id || !interval) return null;
+  return {
+    id,
+    name: String(row.name ?? "Organiser plan"),
+    // Despite the field's name, priceMinor is the whole RWF price (e.g. 2180
+    // means RWF 2,180), not cents — same convention as FindLove's installment
+    // plans (see services/manualPaymentsService.ts's formatMinorAmount).
+    price: Number(BigInt(String(row.priceMinor ?? "0"))),
+    interval,
+    features: Array.isArray(row.features) ? row.features.map(String) : [],
+    recommended: Boolean(row.recommended),
+    // The real plan has one fixed term; the demo's multi-duration bundles don't apply.
+    durations: [1],
+    badge: typeof row.badge === "string" && row.badge ? row.badge : undefined,
+  };
+}
+
+// GET /api/v1/organisations/plans (public) -> { items: OrganiserPlan[] }
 export async function fetchSubscriptionPlans(): Promise<SubscriptionPlan[]> {
   if (!USE_ORGANISER_API) {
     await wait(500);
     return DEMO_PLANS;
   }
-  return api.get<SubscriptionPlan[]>("/api/v1/organisers/plans");
+  const reply = await api.get<{ items?: unknown[] }>("/api/v1/organisations/plans");
+  return (reply?.items ?? []).map(normalizeRemotePlan).filter((plan): plan is SubscriptionPlan => plan !== null);
 }
 
-// INTEGRATION POINT: POST /api/v1/organisers/subscriptions -> SubscriptionResult
-// Mobile money is asynchronous (the payer approves a USSD prompt). If the API
-// answers with a pending payment, poll it here until it is terminal so the
-// screens keep receiving a final SubscriptionResult.
+export interface RemoteOrganiserSubscription {
+  id: string;
+  planId: string;
+  status: "PENDING" | "ACTIVE" | "EXPIRED" | "CANCELLED";
+  startsAt: string | null;
+  expiresAt: string | null;
+  postsRemaining: number | null;
+}
+
+function normalizeRemoteSubscription(value: unknown): RemoteOrganiserSubscription | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const id = String(row.id ?? "");
+  if (!id) return null;
+  const status = ["PENDING", "ACTIVE", "EXPIRED", "CANCELLED"].includes(String(row.status))
+    ? (row.status as RemoteOrganiserSubscription["status"])
+    : "PENDING";
+  return {
+    id,
+    planId: String(row.planId ?? ""),
+    status,
+    startsAt: typeof row.startsAt === "string" ? row.startsAt : null,
+    expiresAt: typeof row.expiresAt === "string" ? row.expiresAt : null,
+    postsRemaining: typeof row.postsRemaining === "number" ? row.postsRemaining : null,
+  };
+}
+
+/**
+ * GET /api/v1/me/organiser-subscriptions. Used to pick up a subscription an
+ * admin just activated by approving a manual payment out of band (see
+ * AuthContext's refreshOrganiserSubscription), not by this file's own
+ * startSubscription flow.
+ */
+export async function fetchMyOrganiserSubscriptions(): Promise<RemoteOrganiserSubscription[]> {
+  const reply = await api.get<{ items?: unknown[] }>("/api/v1/me/organiser-subscriptions");
+  return (reply?.items ?? []).map(normalizeRemoteSubscription).filter((row): row is RemoteOrganiserSubscription => row !== null);
+}
+
+// Superseded by the manual-payment flow (services/manualPaymentsService.ts,
+// driven from app/organiser/subscribe.tsx) once EXPO_PUBLIC_USE_ORGANISER_API=true:
+// the member picks a payment method, uploads a receipt and an admin approves
+// it out of band. This function keeps the OLD mocked, instant-result checkout
+// for the local demo (flag off) only; subscribe.tsx never calls it when the flag is on.
 export async function startSubscription(
   input: {
     planId: string;
@@ -200,11 +273,7 @@ export async function startSubscription(
     }
     return { status: "succeeded", subscription };
   }
-  try {
-    return await api.post<SubscriptionResult>("/api/v1/organisers/subscriptions", input);
-  } catch (error) {
-    return { status: "failed", message: describeError(error, "We couldn't reach the payment service.") };
-  }
+  throw new Error("Use the manual payment flow (app/organiser/subscribe.tsx) to buy an organiser plan.");
 }
 
 // INTEGRATION POINT: logo upload. The contracts expect files to go through a
