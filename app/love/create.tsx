@@ -11,8 +11,9 @@ import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
+import { useFindLovePlans } from "@/hooks/useFindLovePlans";
 import { describeError } from "@/services/organiserService";
-import { LoveProfileInputError } from "@/services/findLoveService";
+import { LoveProfileInputError, USE_FINDLOVE_API } from "@/services/findLoveService";
 import { isAgeVerified } from "@/utils/findLoveAgeVerification";
 import { isAdult, MIN_LOVE_AGE, validateLoveCountry, validateLoveGender, validateLoveInterestedIn, validateLoveUsername } from "@/utils/findLoveProfile";
 
@@ -26,6 +27,7 @@ export default function CreateLoveProfileScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { myProfile, status, save, verification } = useMyLoveProfile();
+  const catalog = useFindLovePlans(USE_FINDLOVE_API && !!user && !myProfile && isAgeVerified(verification));
 
   const [values, setValues] = useState<LoveProfileFormValues>({ username: "", photoUrls: [] });
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -33,6 +35,7 @@ export default function CreateLoveProfileScreen() {
   const [serverErrors, setServerErrors] = useState<LoveProfileFormErrors>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const hasPlan = !USE_FINDLOVE_API || (!catalog.loading && !catalog.error && catalog.plans.some((plan) => plan.accountType === values.accountType && plan.interval === (values.membershipInterval ?? "month")));
 
   const errors = useMemo<LoveProfileFormErrors>(() => {
     const shown = (key: keyof LoveProfileFormErrors) => submitAttempted || touched[key];
@@ -110,6 +113,7 @@ export default function CreateLoveProfileScreen() {
   const dateOfBirth = verification.dateOfBirth ?? "";
 
   const submit = async () => {
+    if (!hasPlan) return;
     setSubmitAttempted(true);
     setSaveError(null);
     const hasErrors =
@@ -138,7 +142,7 @@ export default function CreateLoveProfileScreen() {
       // Public and Private are both paid plans: FindLove opens once the payment is confirmed.
       router.replace({
         pathname: "/love/membership",
-        params: { from: "create", interval: values.membershipInterval ?? "month" },
+        params: { from: "create", interval: values.membershipInterval ?? "month", accountType: values.accountType },
       } as any);
     } catch (err) {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -196,14 +200,18 @@ export default function CreateLoveProfileScreen() {
           onBlur={(field) => setTouched((t) => ({ ...t, [field]: true }))}
           phone={user.phone}
           showAccountType
+          membershipPlans={catalog.plans}
+          membershipPlansLoading={catalog.loading}
+          membershipPlansError={catalog.error}
+          onRetryPlans={catalog.retry}
           disabled={saving}
         />
         <Pressable
           onPress={() => void submit()}
-          disabled={saving}
+          disabled={saving || !hasPlan}
           style={({ pressed }) => [
             styles.primaryBtn,
-            { backgroundColor: colors.primary, opacity: saving || pressed ? 0.85 : 1, marginBottom: insets.bottom + 24 },
+            { backgroundColor: colors.primary, opacity: !hasPlan ? 0.5 : saving || pressed ? 0.85 : 1, marginBottom: insets.bottom + 24 },
           ]}
           accessibilityRole="button"
           accessibilityState={{ busy: saving }}

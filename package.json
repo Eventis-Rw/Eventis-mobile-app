@@ -14,7 +14,7 @@
     "test:events-api": "node scripts/events-integration.test.cjs",
     "test:status": "node --test scripts/status-service.test.cjs",
     "test:chat": "node scripts/chat-service.test.cjs",
-    "test:profile": "node scripts/profile-service.test.cjs",
+    "test:profile": "node --test scripts/profile-service.test.cjs scripts/profile-api-contract.test.cjs",
     "test:findlove": "node scripts/findlove-service.test.cjs",
     "test:analytics": "node scripts/analytics.test.cjs",
     "test:live": "node --test scripts/live.test.cjs scripts/live-broadcast.test.cjs",

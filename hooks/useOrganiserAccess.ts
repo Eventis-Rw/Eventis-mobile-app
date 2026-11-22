@@ -11,7 +11,7 @@ import { useAuth, type User } from "@/context/AuthContext";
 export type OrganiserStep = "intro" | "setup" | "ready";
 
 export function getOrganiserStep(user: User | null): OrganiserStep {
-  if (user?.isBusinessAccount) return "ready";
+  if (user?.organisation || user?.organisations?.length) return "ready";
   if (user?.organiserSubscription?.status === "active") return "setup";
   return "intro";
 }

@@ -85,11 +85,13 @@ type RealStep = "plan" | "method" | "upload" | "result";
 function ManualMembershipCheckout() {
   const colors = useColors();
   const router = useRouter();
-  const { from, interval } = useLocalSearchParams<{ from?: string; interval?: string }>();
+  const { from, interval, accountType: requestedType } = useLocalSearchParams<{ from?: string; interval?: string; accountType?: string }>();
   const { user } = useAuth();
   const { myProfile, status, hasMembership, reload } = useMyLoveProfile();
 
-  const [chosenType, setChosenType] = useState<LoveAccountType | null>(null);
+  const [chosenType, setChosenType] = useState<LoveAccountType | null>(
+    requestedType === "public" || requestedType === "private" ? requestedType : null,
+  );
   const [period, setPeriod] = useState<MembershipInterval>(
     MEMBERSHIP_INTERVALS.find((option) => option.id === interval)?.id ?? "month",
   );

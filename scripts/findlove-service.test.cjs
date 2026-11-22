@@ -483,6 +483,7 @@ test("real mode creates with POST, updates with PATCH + PUT photos and reads the
   assert.deepEqual(apiCalls.map((call) => [call[0], call[1]]), [
     ["PATCH", "/api/v1/findlove/profile"],
     ["PUT", "/api/v1/findlove/profile/photos"],
+    ["GET", "/api/v1/findlove/subscription"],
   ]);
   assert.equal(apiCalls[0][2].username, undefined, "the username can't change");
   assert.deepEqual(apiCalls[1][2], { photoKeys: ["love/a.jpg"] });
@@ -818,33 +819,21 @@ test("real mode: 403 on connect means membership required", async () => {
   await assert.rejects(real.requestLoveConnection("p"), (err) => !(err instanceof real.MembershipRequiredError) && /Boom/.test(err.message));
 });
 
-test("real mode: a new profile waits for payment on the chosen plan (membership is mocked on the device)", async () => {
-  apiHandler = withUploads(() => apiProfileRow());
+test("real mode: membership comes from the server, including after a profile edit", async () => {
+  let subscription = { account_type: "private", has_active_subscription: false };
+  apiHandler = withUploads((method, path) => path.endsWith("/subscription") ? subscription : apiProfileRow());
   const created = await real.saveMyLoveProfile("u1", { ...validInput, accountType: "private" }, true);
-  const create = apiCalls.find((call) => call[0] === "POST");
-  assert.equal(create[2].accountType, undefined, "the backend has no account type yet");
   assert.deepEqual(created.membership, { type: "private", status: "pending_payment" });
-
-  // Saving again never changes the membership.
+  subscription = { account_type: "private", has_active_subscription: true, subscription: { account_type: "private", expires_at: "2030-01-01T00:00:00.000Z" } };
   const updated = await real.saveMyLoveProfile("u1", { ...validInput, accountType: "public" }, false);
-  assert.deepEqual(updated.membership, { type: "private", status: "pending_payment" });
+  assert.deepEqual(updated.membership, { type: "private", status: "active", expiresAt: "2030-01-01T00:00:00.000Z" });
+  assertOnlyLocalExtras();
 });
 
-test("real mode: payments stay mocked and never call a payment API", { timeout: 20_000 }, async () => {
-  apiHandler = withUploads(() => apiProfileRow());
-  await real.saveMyLoveProfile("u1", validInput, true);
+test("real mode requires receipt checkout and cannot activate a membership on the device", async () => {
   apiCalls = [];
-  const payer = { paymentMethod: "airtel_money", payerPhone: "+250730000000" };
-  assert.deepEqual(await real.buyMembership("u1", { type: "private", interval: "year", ...payer }), { status: "succeeded" });
-  assert.deepEqual(apiCalls, [], "no request leaves the device");
-  apiHandler = async () => apiProfileRow();
-  const membership = (await real.fetchMyLoveProfile("u1")).membership;
-  assert.equal(membership.type, "private");
-  assert.equal(membership.status, "active");
-  assert.ok(Date.parse(membership.expiresAt) > Date.now());
-
-  assert.equal((await real.buyMembership("u1", { type: "public", interval: "week", ...payer }, "failed")).status, "failed");
-  assert.deepEqual(await real.buyMembership("u1", { type: "public", interval: "week", ...payer }, "cancelled"), { status: "cancelled" });
+  await assert.rejects(real.buyMembership("u1", { type: "private", interval: "year", paymentMethod: "airtel_money", payerPhone: "+250730000000" }), /manual payment flow/i);
+  assert.deepEqual(apiCalls, []);
   assertOnlyLocalExtras();
 });
 
