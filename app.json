@@ -98,7 +98,15 @@
       ],
       "expo-image",
       "expo-status-bar",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "-dontwarn livekit.org.jni_zero.**\n-dontwarn org.webrtc.**\n-keep class livekit.org.jni_zero.** { *; }\n-keep class org.webrtc.** { *; }"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
