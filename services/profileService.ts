@@ -1,19 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { api, ApiError } from "@/utils/apiClient";
+import { appendLocalFile } from "@/utils/formDataFile";
 
 /**
- * Profile & settings data that the core auth/bookings/events APIs don't cover:
- * notification preferences, discovery preferences, saved organisers, reviews
- * and business verification.
- *
- * BACKEND STATUS: the API's `identity`, `notification` and `org` modules are
- * scaffolds only. Until they ship, this service runs a local demo that persists
- * to device storage per user (same approach as `organiserService.ts`). Set
- * EXPO_PUBLIC_USE_PROFILE_API=true to call the proposed endpoints below instead.
- *
- * Screens never call `api` for these features directly, so the endpoint paths
- * and response mapping here are the single integration point.
+ * Profile and settings API adapters. With EXPO_PUBLIC_USE_PROFILE_API disabled,
+ * the demonstration uses per-user device storage.
  */
 export const USE_PROFILE_API = process.env.EXPO_PUBLIC_USE_PROFILE_API === "true";
 
@@ -332,16 +324,50 @@ export async function updateNotificationPreferences(
 // Discovery preferences
 // ---------------------------------------------------------------------------
 
-// INTEGRATION POINT: GET /api/v1/users/me/preferences -> DiscoveryPreferences
+interface ApiCategory { id: string; name: string; slug: string }
+interface ApiDiscoveryPreferences { preferredLocation: string | null; categoryIds: string[] }
+
+async function fetchCategoryCatalog(): Promise<ApiCategory[]> {
+  const reply = await api.get<{ items: ApiCategory[] }>("/api/v1/events/categories");
+  return reply.items;
+}
+
+function categoryName(category: ApiCategory): string {
+  return ({ arts: "Art", food: "Food" } as Record<string, string>)[category.slug] ?? category.name;
+}
+
+function categoryIds(names: string[], catalog: ApiCategory[]): string[] {
+  return [...new Set(names.map((name) => {
+    const key = name.trim().toLowerCase();
+    const category = catalog.find((row) =>
+      categoryName(row).toLowerCase() === key || row.name.toLowerCase() === key || row.slug === key,
+    );
+    if (!category) throw new Error(`The category "${name}" is no longer available. Choose another category.`);
+    return category.id;
+  }))];
+}
+
+function categoryNames(ids: string[], catalog: ApiCategory[]): string[] {
+  const selected = new Set(ids);
+  return catalog.filter((row) => selected.has(row.id)).map(categoryName);
+}
+
+function mapDiscovery(value: ApiDiscoveryPreferences, catalog: ApiCategory[]): DiscoveryPreferences {
+  return { categories: categoryNames(value.categoryIds, catalog), location: value.preferredLocation ?? undefined };
+}
+
 export async function fetchDiscoveryPreferences(userId: string): Promise<DiscoveryPreferences> {
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
     return readLocal(userId, "preferences", DEFAULT_DISCOVERY_PREFERENCES);
   }
-  return api.get<DiscoveryPreferences>("/api/v1/users/me/preferences");
+  const [value, catalog] = await Promise.all([
+    api.get<ApiDiscoveryPreferences>("/api/v1/me/preferences"), fetchCategoryCatalog(),
+  ]);
+  return mapDiscovery(value, catalog);
 }
 
-// INTEGRATION POINT: PUT /api/v1/users/me/preferences -> DiscoveryPreferences
+// The API stores category UUIDs and uses PATCH for preference updates.
 export async function updateDiscoveryPreferences(
   userId: string,
   preferences: DiscoveryPreferences,
@@ -354,24 +380,36 @@ export async function updateDiscoveryPreferences(
     await wait(DEMO_LATENCY_MS);
     return writeLocal(userId, "preferences", clean);
   }
-  return api.put<DiscoveryPreferences>("/api/v1/users/me/preferences", clean);
+  const catalog = await fetchCategoryCatalog();
+  const value = await api.patch<ApiDiscoveryPreferences>("/api/v1/me/preferences", {
+    categoryIds: categoryIds(clean.categories, catalog), preferredLocation: clean.location ?? null,
+  });
+  return mapDiscovery(value, catalog);
 }
 
 // ---------------------------------------------------------------------------
 // Publisher profile
 // ---------------------------------------------------------------------------
 
-// INTEGRATION POINT: GET /api/v1/users/me/publisher-profile -> PublisherProfile
+type ApiPublisherProfile = Omit<PublisherProfile, "categories" | "taxId"> & { categoryIds: string[] };
+
+function mapPublisher(value: ApiPublisherProfile | null, catalog: ApiCategory[]): PublisherProfile {
+  return { ...DEFAULT_PUBLISHER_PROFILE, ...value, categories: categoryNames(value?.categoryIds ?? [], catalog), socialLinks: value?.socialLinks ?? {} };
+}
+
 export async function fetchPublisherProfile(userId: string): Promise<PublisherProfile> {
   if (!USE_PROFILE_API) {
     await wait(DEMO_LATENCY_MS);
     const stored = await readLocal<Partial<PublisherProfile>>(userId, "publisher-profile", {});
     return { ...DEFAULT_PUBLISHER_PROFILE, ...stored, socialLinks: { ...stored.socialLinks } };
   }
-  return api.get<PublisherProfile>("/api/v1/users/me/publisher-profile");
+  const [value, catalog] = await Promise.all([
+    api.get<ApiPublisherProfile | null>("/api/v1/me/publisher-profile"), fetchCategoryCatalog(),
+  ]);
+  return mapPublisher(value, catalog);
 }
 
-// INTEGRATION POINT: PATCH /api/v1/users/me/publisher-profile -> PublisherProfile
+// API profile fields use category IDs; a new publisher can have no profile yet.
 export async function updatePublisherProfile(
   userId: string,
   patch: Partial<PublisherProfile>,
@@ -381,7 +419,16 @@ export async function updatePublisherProfile(
     const current = await fetchPublisherProfile(userId);
     return writeLocal(userId, "publisher-profile", { ...current, ...patch });
   }
-  return api.patch<PublisherProfile>("/api/v1/users/me/publisher-profile", patch);
+  const catalog = await fetchCategoryCatalog();
+  const { categories, ...fields } = patch;
+  const value = await api.patch<ApiPublisherProfile>("/api/v1/me/publisher-profile", {
+    ...Object.fromEntries(Object.entries(fields)
+      // The API never returns the full TIN. A blank replacement keeps it intact.
+      .filter(([key, value]) => key !== "taxId" || value !== undefined)
+      .map(([key, value]) => [key, value ?? null])),
+    ...(categories ? { categoryIds: categoryIds(categories, catalog) } : {}),
+  });
+  return mapPublisher(value, catalog);
 }
 
 // ---------------------------------------------------------------------------
@@ -537,7 +584,8 @@ export async function fetchBusinessVerification(
     );
     return { status: "unverified", ...stored, requirements };
   }
-  return api.get<BusinessVerification>(`/api/v1/organisations/${encodeURIComponent(organisationId)}/verification`);
+  const value = await api.get<ApiBusinessVerification | null>(`/api/v1/organisations/${encodeURIComponent(organisationId)}/business-verification`);
+  return mapBusinessVerification(value, phoneVerified);
 }
 
 // INTEGRATION POINT: POST /api/v1/organisations/:id/verification -> BusinessVerification
@@ -560,12 +608,31 @@ export async function submitBusinessVerification(
     };
     return writeLocal(userId, `verification:${organisationId}`, verification);
   }
-  // TODO: upload `registrationDocumentUri` via the presigned upload endpoint and send its key.
+  const form = new FormData();
+  form.append("purpose", "VERIFICATION_DOC");
+  await appendLocalFile(form, "file", input.registrationDocumentUri, "registration.jpg", "image/jpeg");
+  const upload = await api.postForm<{ key: string }>("/api/v1/uploads", form);
   const { registrationDocumentUri: _localDocument, ...body } = input;
-  return api.post<BusinessVerification>(
-    `/api/v1/organisations/${encodeURIComponent(organisationId)}/verification`,
-    body,
+  const value = await api.post<ApiBusinessVerification>(
+    `/api/v1/organisations/${encodeURIComponent(organisationId)}/business-verification`,
+    { ...body, taxId: body.taxId.replace(/\s/g, ""), documentKey: upload.key },
   );
+  return mapBusinessVerification(value, true);
+}
+
+interface ApiBusinessVerification {
+  status: "PENDING" | "VERIFIED" | "REJECTED";
+  rejectionReason: string | null;
+  submittedAt: string;
+}
+
+function mapBusinessVerification(value: ApiBusinessVerification | null, phoneVerified: boolean): BusinessVerification {
+  return {
+    status: value?.status.toLowerCase() as BusinessVerificationStatus ?? "unverified",
+    requirements: baseRequirements(phoneVerified).map((requirement) => ({ ...requirement, completed: requirement.id === "phone" ? phoneVerified : !!value })),
+    submittedAt: value?.submittedAt,
+    rejectionReason: value?.rejectionReason ?? undefined,
+  };
 }
 
 /**

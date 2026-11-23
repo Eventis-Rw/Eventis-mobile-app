@@ -1,0 +1,46 @@
+{
+  "branch": "fix/existing-flow-repairs",
+  "repositories": [
+    "Eventis-mobile-app",
+    "Eventis-api",
+    "eventis-admin"
+  ],
+  "api_unit_tests": {
+    "passed": 175,
+    "failed": 0
+  },
+  "local_flow_tests": {
+    "passed": 5,
+    "failed": 0
+  },
+  "typechecks": [
+    "mobile passed",
+    "api passed",
+    "admin passed"
+  ],
+  "browser_checks": [
+    "publisher profile save and reload",
+    "discovery preferences save and reload",
+    "new applicant document preview and approval",
+    "manual receipts included in membership revenue",
+    "organiser subscriptions page",
+    "settings and roles page",
+    "live profile membership prices",
+    "Public selection carried from profile creation to checkout at RWF 25,000/month"
+  ],
+  "limits": [
+    "Local testing only; synthetic users and receipts",
+    "Repository-wide lint and dependency-boundary checks still report existing issues",
+    "Bookings and tickets excluded at user request"
+  ],
+  "screenshots": [
+    "fix-profile-saved.png",
+    "fix-discovery-preferences.png",
+    "fix-admin-first-applicant-document.png",
+    "fix-admin-payments.png",
+    "fix-admin-subscriptions.png",
+    "fix-admin-settings.png",
+    "fix-live-profile-prices.png",
+    "fix-public-plan-checkout.png"
+  ]
+}

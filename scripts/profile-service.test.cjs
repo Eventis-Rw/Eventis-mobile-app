@@ -40,6 +40,7 @@ function load(relPath, resolve) {
 const profile = load("services/profileService.ts", (name) => {
   if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: storage };
   if (name === "@/utils/apiClient") return apiStub;
+  if (name === "@/utils/formDataFile") return { appendLocalFile: async () => {} };
 });
 const { getAccountCapabilities } = load("utils/accountCapabilities.ts", (name) => {
   if (name === "@/services/profileService") return profile;

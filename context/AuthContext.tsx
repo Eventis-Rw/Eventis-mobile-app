@@ -11,9 +11,13 @@ import { DEMO_AUTH, type LoginInput, type SignupInput } from "@/constants/auth";
 import { getAppleCredential, getGoogleCredential } from "@/services/socialAuth";
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import {
+  activeOrganiserSubscription,
   createOrganisation,
   deleteOrganisation as removeOrganisation,
   fetchMyOrganiserSubscriptions,
+  fetchMyOrganisations,
+  selectActiveOrganisation,
+  USE_ORGANISER_API,
   startSubscription,
   updateOrganisation as saveOrganisation,
   type DemoOutcome,
@@ -237,6 +241,23 @@ function normaliseOrganisationState(user: User): User {
   };
 }
 
+async function hydrateOrganiserState(user: User): Promise<User> {
+  if (!USE_ORGANISER_API || user.isDemo) return user;
+  const [remote, subscriptions] = await Promise.all([fetchMyOrganisations(), fetchMyOrganiserSubscriptions()]);
+  const organiserSubscription = activeOrganiserSubscription(subscriptions);
+  return normaliseOrganisationState({
+    ...user,
+    organisations: remote.organisations,
+    organisation: undefined,
+    activeOrganisationId: remote.activeOrganisationId ?? user.activeOrganisationId,
+    organiserSubscription,
+    isBusinessAccount: remote.organisations.length > 0,
+    accountType: remote.organisations.length > 0 ? "business" : organiserSubscription ? "individual" : user.accountType,
+    businessName: undefined,
+    businessWebsite: undefined,
+  });
+}
+
 const DEFAULT_USER: User = {
   id: "usr_eventis_01",
   username: "Jean Luc",
@@ -285,7 +306,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (token && !token.startsWith("demo_token_")) {
           const remote = await api.get<ApiUser>("/api/v1/auth/me");
-          const mapped = mapApiUser(remote, cachedUser ?? undefined);
+          const mappedUser = mapApiUser(remote, cachedUser ?? undefined);
+          const mapped = await hydrateOrganiserState(mappedUser).catch(() => mappedUser);
           cachedUser = {
             ...mapped,
             savedEvents: await fetchSavedEventIds().catch(() => mapped.savedEvents),
@@ -428,7 +450,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const nextUser = mapApiUser(data.user, user ?? undefined);
       const savedEvents = await fetchSavedEventIds().catch(() => nextUser.savedEvents);
-      await persistUser({ ...nextUser, savedEvents });
+      await persistUser(await hydrateOrganiserState({ ...nextUser, savedEvents }));
     } catch (error) {
       await clearToken();
       throw error;
@@ -443,7 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const nextUser = mapApiUser(data.user);
       const savedEvents = await fetchSavedEventIds().catch(() => nextUser.savedEvents);
-      await persistUser({ ...nextUser, savedEvents });
+      await persistUser(await hydrateOrganiserState({ ...nextUser, savedEvents }));
       setPendingSignup(null);
       setPendingOTPContext(null);
     } catch (error) {
@@ -484,7 +506,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const nextUser = mapApiUser(data.user, user ?? undefined);
         const savedEvents = await fetchSavedEventIds().catch(() => nextUser.savedEvents);
-        await persistUser({ ...nextUser, savedEvents });
+        await persistUser(await hydrateOrganiserState({ ...nextUser, savedEvents }));
       } catch (error) {
         await clearToken();
         throw error;
@@ -638,24 +660,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = await getToken();
     if (user.isDemo || !token || token.startsWith("demo_token_")) return;
     try {
-      const rows = await fetchMyOrganiserSubscriptions();
-      // Newest wins when more than one is active (shouldn't normally happen).
-      const active = rows.find((row) => row.status === "ACTIVE");
-      const organiserSubscription: OrganiserSubscription | undefined = active
-        ? {
-            id: active.id,
-            planId: active.planId,
-            status: "active",
-            ...(active.expiresAt ? { renewsAt: active.expiresAt } : {}),
-            ...(active.postsRemaining !== null ? { postsRemaining: active.postsRemaining } : {}),
-          }
-        : undefined;
-      await persistUser({
-        ...user,
-        organiserSubscription,
-        isBusinessAccount: organiserSubscription ? true : user.isBusinessAccount,
-        accountType: organiserSubscription && user.accountType !== "business" ? "individual" : user.accountType,
-      });
+      await persistUser(await hydrateOrganiserState(user));
     } catch {
       // Keep whatever the app already had; the tracking screen lets the member retry.
     }
@@ -667,6 +672,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (input: OrganisationInput, demoShouldFail?: boolean) => {
       if (!user) throw new Error("Sign in to set up an organisation.");
       const organisation = await createOrganisation(input, demoShouldFail);
+      await selectActiveOrganisation(organisation.id);
       const organisations = [...getOrganisations(user), organisation];
       await persistUser({
         ...user,
@@ -704,6 +710,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     const organisation = getOrganisations(user).find((candidate) => candidate.id === organisationId);
     if (!organisation) throw new Error("That organisation is no longer available.");
+    await selectActiveOrganisation(organisation.id);
     await persistUser({
       ...user,
       activeOrganisationId: organisation.id,

@@ -40,7 +40,7 @@ export default function OrganisationSetupScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
-  const { user, setupOrganisation } = useAuth();
+  const { user, isLoading, setupOrganisation } = useAuth();
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
 
   const [values, setValues] = useState<OrganisationFormValues>(() =>
@@ -55,6 +55,9 @@ export default function OrganisationSetupScreen() {
   const [demoFail, setDemoFail] = useState(false);
 
   const step = getOrganiserStep(user);
+  if (isLoading) {
+    return <View style={[styles.root, { backgroundColor: palette.canvas }]}><ActivityIndicator color={palette.accent} accessibilityLabel="Loading organiser access" /></View>;
+  }
   // Setup is only reachable after paying; deep links without a subscription start from the beginning.
   if (!completed && step === "intro") {
     return <Redirect href={{ pathname: "/organiser" as any, params: from ? { from } : {} }} />;

@@ -8,6 +8,9 @@ import { CountryPicker } from "@/components/love/CountryPicker";
 import { InlineError } from "@/components/profile/ProfileSection";
 import { MembershipBadge } from "@/components/love/MembershipBadge";
 import type { LoveAccountType } from "@/constants/loveProfiles";
+import type { ApiInstallmentPlan } from "@/services/findLoveApi";
+import { USE_FINDLOVE_API } from "@/services/findLoveService";
+import { formatMinorAmount } from "@/services/manualPaymentsService";
 import { useColors } from "@/hooks/useColors";
 import { formatMembershipPrice, MEMBERSHIP_INTERVALS, membershipPlan, type MembershipInterval } from "@/utils/findLoveMembership";
 import {
@@ -44,13 +47,23 @@ interface Props {
   phone?: string;
   /** Create only: lets the member pick Public or Private and a billing period. */
   showAccountType?: boolean;
+  membershipPlans?: ApiInstallmentPlan[];
+  membershipPlansLoading?: boolean;
+  membershipPlansError?: string;
+  onRetryPlans?: () => void;
   disabled?: boolean;
 }
 
 /** Fields shared by "Create profile" and "Edit profile". */
-export function LoveProfileForm({ values, errors, onChange, onBlur, phone, showAccountType, disabled }: Props) {
+export function LoveProfileForm({ values, errors, onChange, onBlur, phone, showAccountType, disabled, membershipPlans, membershipPlansLoading, membershipPlansError, onRetryPlans }: Props) {
   const colors = useColors();
   const selectedInterval = values.membershipInterval ?? "month";
+  const priceLabel = (type: LoveAccountType) => {
+    if (!USE_FINDLOVE_API) return periodPrice(type, selectedInterval);
+    const plan = membershipPlans?.find((row) => row.accountType === type && row.interval === selectedInterval);
+    return plan ? `${formatMinorAmount(plan.priceMinor, plan.currency)} / ${MEMBERSHIP_INTERVALS.find((row) => row.id === selectedInterval)?.periodLabel}`
+      : membershipPlansLoading ? "Loading prices…" : "Not available";
+  };
   const set = <K extends keyof LoveProfileFormValues>(key: K, value: LoveProfileFormValues[K]) =>
     onChange({ ...values, [key]: value });
 
@@ -191,9 +204,10 @@ export function LoveProfileForm({ values, errors, onChange, onBlur, phone, showA
 
       {showAccountType ? (
         <Section title="Account type">
+          {membershipPlansError ? <View><InlineError message={membershipPlansError} /><Pressable onPress={onRetryPlans} accessibilityRole="button"><Text style={{ color: colors.primary }}>Retry membership prices</Text></Pressable></View> : null}
           <AccountTypeOption
             type="public"
-            title={periodPrice("public", selectedInterval)}
+            title={priceLabel("public")}
             description="Discover everyone and connect with Public members."
             selected={values.accountType === "public"}
             onPress={() => set("accountType", "public")}
@@ -201,7 +215,7 @@ export function LoveProfileForm({ values, errors, onChange, onBlur, phone, showA
           />
           <AccountTypeOption
             type="private"
-            title={periodPrice("private", selectedInterval)}
+            title={priceLabel("private")}
             description="Connect with anyone, including Private members."
             selected={values.accountType === "private"}
             onPress={() => set("accountType", "private")}

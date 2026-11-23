@@ -87,6 +87,26 @@ export interface Organisation {
   verificationStatus?: "verified" | "pending" | "rejected";
 }
 
+function normalizeOrganisation(value: Organisation & { logoKey?: string; verificationStatus?: string }): Organisation {
+  if (!value?.id) throw new Error("The organisation response is incomplete. Please reload your organisations.");
+  const verificationStatus = value.verificationStatus?.toLowerCase();
+  return {
+    ...value,
+    logoUrl: value.logoUrl ?? (value.logoKey?.startsWith("http") ? value.logoKey : undefined),
+    verificationStatus: verificationStatus === "verified" || verificationStatus === "pending" || verificationStatus === "rejected"
+      ? verificationStatus : undefined,
+  };
+}
+
+export async function fetchMyOrganisations(): Promise<{ organisations: Organisation[]; activeOrganisationId?: string }> {
+  const reply = await api.get<{ items: Organisation[]; activeOrganisationId?: string | null }>("/api/v1/me/organisations");
+  return { organisations: reply.items.map(normalizeOrganisation), activeOrganisationId: reply.activeOrganisationId ?? undefined };
+}
+
+export async function selectActiveOrganisation(organisationId: string): Promise<void> {
+  if (USE_ORGANISER_API) await api.put("/api/v1/me/active-organisation", { organisationId });
+}
+
 /** Only used by the local demo so failure/cancel screens can be reviewed without a backend. */
 export type DemoOutcome = "succeeded" | "failed" | "cancelled";
 
@@ -235,6 +255,17 @@ export async function fetchMyOrganiserSubscriptions(): Promise<RemoteOrganiserSu
   return (reply?.items ?? []).map(normalizeRemoteSubscription).filter((row): row is RemoteOrganiserSubscription => row !== null);
 }
 
+export function activeOrganiserSubscription(rows: RemoteOrganiserSubscription[], now = Date.now()): OrganiserSubscription | undefined {
+  const row = rows.find((item) => item.status === "ACTIVE"
+    && (!item.startsAt || Date.parse(item.startsAt) <= now)
+    && (!item.expiresAt || Date.parse(item.expiresAt) > now));
+  return row ? {
+    id: row.id, planId: row.planId, status: "active",
+    ...(row.expiresAt ? { renewsAt: row.expiresAt } : {}),
+    ...(row.postsRemaining !== null ? { postsRemaining: row.postsRemaining } : {}),
+  } : undefined;
+}
+
 // Superseded by the manual-payment flow (services/manualPaymentsService.ts,
 // driven from app/organiser/subscribe.tsx) once EXPO_PUBLIC_USE_ORGANISER_API=true:
 // the member picks a payment method, uploads a receipt and an admin approves
@@ -292,8 +323,8 @@ export async function createOrganisation(
   // TODO: upload `input.logoUri` via the presigned upload endpoint once it exists,
   // then send the returned key instead of the local URI.
   const { logoUri: _localLogo, ...body } = input;
-  const resp = await api.post<{ organisation: Organisation }>("/api/v1/organisations", body);
-  return resp.organisation;
+  const resp = await api.post<Organisation>("/api/v1/organisations", body);
+  return normalizeOrganisation(resp);
 }
 
 // INTEGRATION POINT: PATCH /api/v1/organisations/:id -> { organisation: Organisation }
@@ -312,8 +343,8 @@ export async function updateOrganisation(
   }
   const { logoUri: _localLogo, ...body } = input;
   if (!current?.id) throw new Error("Choose an organisation before saving changes.");
-  const resp = await api.patch<{ organisation: Organisation }>(`/api/v1/organisations/${current.id}`, body);
-  return resp.organisation;
+  const resp = await api.patch<Organisation>(`/api/v1/organisations/${current.id}`, body);
+  return normalizeOrganisation(resp);
 }
 
 // INTEGRATION POINT: DELETE /api/v1/organisations/:id removes one organisation.
