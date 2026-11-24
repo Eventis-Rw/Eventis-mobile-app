@@ -8,8 +8,11 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.nzizaprince5.mobile",
       "supportsTablet": false,
-      "bitcode": false
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "permissions": [
@@ -95,11 +98,30 @@
       ],
       "expo-image",
       "expo-status-bar",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "-dontwarn livekit.org.jni_zero.**\n-dontwarn org.webrtc.**\n-keep class livekit.org.jni_zero.** { *; }\n-keep class org.webrtc.** { *; }"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "2e35084e-8666-4033-b8ad-f6f2e1a567e9"
+      }
+    },
+    "owner": "muben"
   }
 }

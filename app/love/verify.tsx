@@ -1,14 +1,25 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import * as WebBrowser from "expo-web-browser";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, BackHandler, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  BackHandler,
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
+import { DateOfBirthPicker } from "@/components/love/DateOfBirthPicker";
 import { LoveScreenShell } from "@/components/love/LoveScreenShell";
-import { Section } from "@/components/love/LoveProfileForm";
-import { FormField } from "@/components/OrganisationForm";
 import { InlineError, SectionState } from "@/components/profile/ProfileSection";
+import { PRIVACY_POLICY_URL, TERMS_URL } from "@/constants/legal";
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
@@ -29,31 +40,34 @@ const SHOW_DEMO_CONTROLS = __DEV__ && !USE_FINDLOVE_API;
 const ASK_DATE_OF_BIRTH = USE_FINDLOVE_API;
 
 function dateOfBirthError(value: string): string | undefined {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) return "Use the format YYYY-MM-DD, e.g. 1998-03-15.";
-  if (!isAdult(value)) return `FindLove is only for people aged ${MIN_LOVE_AGE} and over.`;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
+    return "Use format YYYY-MM-DD, e.g. 1998-03-15.";
+  }
+  if (!isAdult(value)) {
+    return `Must be ${MIN_LOVE_AGE} or older.`;
+  }
   return undefined;
 }
 
-const TIPS = [
-  "The whole document is inside the photo",
-  "Text is sharp and easy to read",
-  "No glare, shadows or fingers over the details",
-];
-
 /**
- * ID age check, the first step of FindLove: photos of the member's ID go to
- * the server, which reads the date of birth and decides. No profile can be
- * created until the result is "verified"; the profile then uses the date of
- * birth from the ID. Opened from profile creation (from=create) or the
- * FindLove gate.
+ * ID age check, the first step of FindLove:
+ * Compact, modern, non-confusing interface that fits cleanly on screen.
  */
 export default function VerifyAgeScreen() {
   const colors = useColors();
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const { user } = useAuth();
-  const { myProfile, status, error: loadError, reload, verification, submitVerification, refreshVerification, resetDemoVerification } =
-    useMyLoveProfile();
+  const {
+    myProfile,
+    status,
+    error: loadError,
+    reload,
+    verification,
+    submitVerification,
+    refreshVerification,
+    resetDemoVerification,
+  } = useMyLoveProfile();
 
   const [capturing, setCapturing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -84,6 +98,14 @@ export default function VerifyAgeScreen() {
 
   const stepLabel = from === "create" ? "Step 1 of 2" : undefined;
 
+  const handleOpenLegalUrl = async (url: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch {
+      router.push("/love/policies" as any);
+    }
+  };
+
   if (!user) {
     return (
       <LoveScreenShell title="Verify your age" onBack={leave}>
@@ -103,7 +125,11 @@ export default function VerifyAgeScreen() {
     return (
       <LoveScreenShell title="Verify your age" onBack={leave}>
         {status === "error" ? (
-          <SectionState kind="error" message={loadError ?? "We couldn't load your age check."} onRetry={() => void reload()} />
+          <SectionState
+            kind="error"
+            message={loadError ?? "We couldn't load your age check."}
+            onRetry={() => void reload()}
+          />
         ) : (
           <SectionState kind="loading" message="Loading…" />
         )}
@@ -113,7 +139,7 @@ export default function VerifyAgeScreen() {
 
   const send = async () => {
     if (missingSides(documentType, photos).length) {
-      setError("Add a photo of every side of your ID first.");
+      setError("Please add a photo of each required side.");
       return;
     }
     if (ASK_DATE_OF_BIRTH && dateOfBirthError(dateOfBirth)) {
@@ -121,16 +147,23 @@ export default function VerifyAgeScreen() {
       return;
     }
     if (!confirmed) {
-      setError(`Tick the box to confirm you are ${MIN_LOVE_AGE} or older and this is your own ID.`);
+      setError(`Please confirm you are ${MIN_LOVE_AGE}+ and agree to the Terms & Conditions and Privacy Policy.`);
       return;
     }
     setError(null);
     setSending(true);
     try {
-      const result = await submitVerification({ documentType, photos, confirmedAdult: true, ...(ASK_DATE_OF_BIRTH ? { dateOfBirth } : {}) });
+      const result = await submitVerification({
+        documentType,
+        photos,
+        confirmedAdult: true,
+        ...(ASK_DATE_OF_BIRTH ? { dateOfBirth } : {}),
+      });
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(
-          result.status === "verified" ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning,
+          result.status === "verified"
+            ? Haptics.NotificationFeedbackType.Success
+            : Haptics.NotificationFeedbackType.Warning,
         );
       }
       setPhotos({});
@@ -158,9 +191,11 @@ export default function VerifyAgeScreen() {
       <LoveScreenShell title="Verify your age" onBack={() => undefined} stepLabel={stepLabel}>
         <Stack.Screen options={{ gestureEnabled: false }} />
         <View style={styles.status}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color="#FF2D55" />
           <Text style={[styles.statusTitle, { color: colors.foreground }]}>Checking your ID</Text>
-          <Text style={[styles.statusText, { color: colors.mutedForeground }]}>This takes a moment. Keep this screen open.</Text>
+          <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
+            This takes a moment. Keep this screen open.
+          </Text>
         </View>
       </LoveScreenShell>
     );
@@ -177,31 +212,42 @@ export default function VerifyAgeScreen() {
           ? { name: "hand-left-outline" as const, color: colors.destructive }
           : verification.status === "failed"
             ? { name: "alert-circle-outline" as const, color: colors.warning }
-            : { name: "time-outline" as const, color: colors.primary };
+            : { name: "time-outline" as const, color: "#FF2D55" };
     return (
       <LoveScreenShell title="Verify your age" onBack={leave} stepLabel={stepLabel}>
         <View style={styles.status}>
-          <View style={[styles.statusIcon, { backgroundColor: colors.secondary }]}>
+          <View style={[styles.statusIcon, { backgroundColor: "rgba(255, 45, 85, 0.12)" }]}>
             <Ionicons name={icon.name} size={32} color={icon.color} />
           </View>
-          <Text style={[styles.statusTitle, { color: colors.foreground }]} accessibilityRole="header">{copy.title}</Text>
+          <Text style={[styles.statusTitle, { color: colors.foreground }]} accessibilityRole="header">
+            {copy.title}
+          </Text>
           <Text style={[styles.statusText, { color: colors.mutedForeground }]}>{copy.message}</Text>
           {error ? <InlineError message={error} /> : null}
 
           {verification.status === "verified" ? (
-            <PrimaryButton label={myProfile ? "Continue to FindLove" : "Continue to your profile"} onPress={continueAfterVerified} />
+            <PrimaryButton
+              label={myProfile ? "Continue to FindLove" : "Continue to profile setup"}
+              onPress={continueAfterVerified}
+            />
           ) : verification.status === "failed" ? (
             <PrimaryButton label="Try again" onPress={() => setCapturing(true)} />
           ) : verification.status === "processing" || verification.status === "manual_review" ? (
             <>
-              <PrimaryButton label={checking ? "Checking…" : "Check again"} onPress={() => void checkAgain()} busy={checking} />
+              <PrimaryButton
+                label={checking ? "Checking…" : "Check again"}
+                onPress={() => void checkAgain()}
+                busy={checking}
+              />
               <TextButton label="Back to Eventis" onPress={() => router.replace("/(tabs)" as any)} />
             </>
           ) : (
             <PrimaryButton label="Back to events" onPress={() => router.replace("/(tabs)" as any)} />
           )}
 
-          {SHOW_DEMO_CONTROLS ? <TextButton label="Demo: start the ID check again" onPress={() => void resetDemoVerification()} /> : null}
+          {SHOW_DEMO_CONTROLS ? (
+            <TextButton label="Demo: start the ID check again" onPress={() => void resetDemoVerification()} />
+          ) : null}
         </View>
       </LoveScreenShell>
     );
@@ -211,34 +257,36 @@ export default function VerifyAgeScreen() {
   const ready = missingSides(documentType, photos).length === 0;
 
   return (
-    <LoveScreenShell title="Verify your age" onBack={verification.status === "failed" ? () => setCapturing(false) : leave} stepLabel={stepLabel}>
-      <Text style={[styles.lead, { color: colors.foreground }]}>Confirm you're {MIN_LOVE_AGE}+ with your ID</Text>
-      <Text style={[styles.leadText, { color: colors.mutedForeground }]}>
-        {ASK_DATE_OF_BIRTH
-          ? "FindLove is for adults only. Add photos of your ID and the date of birth printed on it."
-          : "FindLove is for adults only. We read your date of birth from your ID, so there's nothing to type."}
-      </Text>
-
-      <View style={[styles.privacy, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Ionicons name="lock-closed-outline" size={20} color={colors.success} />
-        <Text style={[styles.privacyText, { color: colors.mutedForeground }]}>
-          Your ID is only used to check your age. Your ID, date of birth and age are never shown to other members.
+    <LoveScreenShell
+      title="Verify your age"
+      onBack={verification.status === "failed" ? () => setCapturing(false) : leave}
+      stepLabel={stepLabel}
+    >
+      {/* Concise Header */}
+      <View style={styles.headerBlock}>
+        <Text style={[styles.heading, { color: colors.foreground }]}>Confirm you're 18+</Text>
+        <Text style={[styles.subheading, { color: colors.mutedForeground }]}>
+          Your ID is used solely to verify age and is strictly private.
         </Text>
       </View>
 
+      {/* Warning banner if previous attempt failed */}
       {verification.status === "failed" && verification.reason ? (
-        <View style={[styles.privacy, { backgroundColor: colors.secondary, borderColor: colors.warning }]}>
-          <Ionicons name="alert-circle-outline" size={20} color={colors.warning} />
-          <Text style={[styles.privacyText, { color: colors.foreground }]}>
-            {verification.reason} {verification.attemptsLeft} {verification.attemptsLeft === 1 ? "attempt" : "attempts"} left.
+        <View style={[styles.alertBanner, { backgroundColor: "rgba(245, 158, 11, 0.12)", borderColor: "rgba(245, 158, 11, 0.3)" }]}>
+          <Ionicons name="alert-circle" size={18} color="#F59E0B" />
+          <Text style={[styles.alertText, { color: colors.foreground }]}>
+            {verification.reason} ({verification.attemptsLeft} attempts left)
           </Text>
         </View>
       ) : null}
 
-      <Section title="Document">
-        <View style={styles.documents} accessibilityRole="radiogroup">
+      {/* 1. Document Type Segmented Selector */}
+      <View style={styles.sectionCompact}>
+        <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>DOCUMENT TYPE</Text>
+        <View style={[styles.segmentedContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {(Object.keys(ID_DOCUMENTS) as IdDocumentType[]).map((type) => {
-            const selected = documentType === type;
+            const isSelected = documentType === type;
+            const doc = ID_DOCUMENTS[type];
             return (
               <Pressable
                 key={type}
@@ -247,25 +295,40 @@ export default function VerifyAgeScreen() {
                   setPhotos({});
                   setError(null);
                 }}
-                style={[styles.document, { backgroundColor: colors.card, borderColor: selected ? colors.primary : colors.border }]}
+                style={[
+                  styles.segmentItem,
+                  isSelected && styles.segmentItemActive,
+                ]}
                 accessibilityRole="radio"
-                accessibilityState={{ checked: selected }}
+                accessibilityState={{ checked: isSelected }}
               >
-                <Ionicons name={selected ? "radio-button-on" : "radio-button-off"} size={20} color={selected ? colors.primary : colors.mutedForeground} />
-                <View style={styles.documentCopy}>
-                  <Text style={[styles.documentLabel, { color: colors.foreground }]}>{ID_DOCUMENTS[type].label}</Text>
-                  <Text style={[styles.documentText, { color: colors.mutedForeground }]}>{ID_DOCUMENTS[type].description}</Text>
-                </View>
+                <Ionicons
+                  name={type === "national_id" ? "card-outline" : "airplane-outline"}
+                  size={16}
+                  color={isSelected ? "#FFFFFF" : colors.mutedForeground}
+                />
+                <Text
+                  style={[
+                    styles.segmentText,
+                    { color: isSelected ? "#FFFFFF" : colors.mutedForeground },
+                  ]}
+                >
+                  {doc.label}
+                </Text>
               </Pressable>
             );
           })}
         </View>
-      </Section>
+      </View>
 
-      <Section title="Photos">
-        <View style={styles.slots}>
+      {/* 2. Photo Upload Slots (Side-by-side for 2 sides, centered for 1) */}
+      <View style={styles.sectionCompact}>
+        <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
+          {documentType === "national_id" ? "ID PHOTOS (FRONT & BACK)" : "PASSPORT PHOTO PAGE"}
+        </Text>
+        <View style={styles.photoRow}>
           {sides.map((side) => (
-            <PhotoSlot
+            <CompactPhotoSlot
               key={`${documentType}-${side}`}
               label={sideLabel(documentType, side)}
               uri={photos[side]}
@@ -277,56 +340,90 @@ export default function VerifyAgeScreen() {
             />
           ))}
         </View>
-        <View style={styles.tips}>
-          {TIPS.map((tip) => (
-            <View key={tip} style={styles.tip}>
-              <Ionicons name="checkmark-circle-outline" size={16} color={colors.success} />
-              <Text style={[styles.tipText, { color: colors.mutedForeground }]}>{tip}</Text>
-            </View>
-          ))}
-        </View>
-      </Section>
+      </View>
 
+      {/* 3. Date of Birth Picker (Only when required) */}
       {ASK_DATE_OF_BIRTH ? (
-        <Section title="Date of birth" hint="Exactly as printed on your ID. Other members never see it.">
-          <FormField
-            label="Date of birth"
-            placeholder="YYYY-MM-DD"
+        <View style={styles.sectionCompact}>
+          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>DATE OF BIRTH</Text>
+          <DateOfBirthPicker
             value={dateOfBirth}
-            onChangeText={(text) => {
+            onChange={(selectedDate) => {
               setError(null);
-              setDateOfBirth(text.trim());
+              setDateOfBirth(selectedDate);
             }}
-            keyboardType="numbers-and-punctuation"
-            autoCorrect={false}
-            maxLength={10}
-            error={dateOfBirth.length === 10 ? dateOfBirthError(dateOfBirth) : undefined}
+            error={dateOfBirth ? dateOfBirthError(dateOfBirth) : undefined}
           />
-        </Section>
+        </View>
       ) : null}
 
-      <Pressable
-        onPress={() => {
-          setError(null);
-          setConfirmed((c) => !c);
-        }}
-        style={[styles.confirmRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: confirmed }}
+      {/* Terms & Privacy Confirmation Row */}
+      <View
+        style={[
+          styles.confirmRow,
+          {
+            backgroundColor: colors.card,
+            borderColor: confirmed ? "#FF2D55" : colors.border,
+          },
+        ]}
       >
-        <Ionicons name={confirmed ? "checkbox" : "square-outline"} size={24} color={confirmed ? colors.primary : colors.mutedForeground} />
+        <Pressable
+          onPress={() => {
+            setError(null);
+            setConfirmed((c) => !c);
+          }}
+          hitSlop={8}
+          style={styles.checkboxTouch}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: confirmed }}
+          accessibilityLabel="I confirm I am 18 or older and agree to the Terms & Conditions and Privacy Policy"
+        >
+          <Ionicons
+            name={confirmed ? "checkbox" : "square-outline"}
+            size={22}
+            color={confirmed ? "#FF2D55" : colors.mutedForeground}
+          />
+        </Pressable>
+
         <Text style={[styles.confirmText, { color: colors.foreground }]}>
-          I confirm I am {MIN_LOVE_AGE} or older and this is my own ID.
+          I confirm I am {MIN_LOVE_AGE}+ and agree to the{" "}
+          <Text
+            style={styles.termsLink}
+            onPress={() => void handleOpenLegalUrl(TERMS_URL)}
+            accessibilityRole="link"
+          >
+            Terms & Conditions
+          </Text>
+          {" "}and{" "}
+          <Text
+            style={styles.termsLink}
+            onPress={() => void handleOpenLegalUrl(PRIVACY_POLICY_URL)}
+            accessibilityRole="link"
+          >
+            Privacy Policy
+          </Text>
+          .
         </Text>
-      </Pressable>
+      </View>
 
       {error ? <InlineError message={error} /> : null}
-      <PrimaryButton label="Send for checking" onPress={() => void send()} disabled={!ready || !confirmed || (ASK_DATE_OF_BIRTH && !!dateOfBirthError(dateOfBirth))} />
+
+      {/* Primary Action Button */}
+      <PrimaryButton
+        label={from === "create" ? "Continue to Profile Setup" : "Verify & Continue"}
+        onPress={() => void send()}
+        disabled={
+          !ready ||
+          !confirmed ||
+          (ASK_DATE_OF_BIRTH && (!dateOfBirth || !!dateOfBirthError(dateOfBirth)))
+        }
+      />
     </LoveScreenShell>
   );
 }
 
-function PhotoSlot({
+/** Compact Photo Upload Card */
+function CompactPhotoSlot({
   label,
   uri,
   onPicked,
@@ -339,67 +436,128 @@ function PhotoSlot({
 }) {
   const colors = useColors();
 
-  const take = async () => {
+  const takePhoto = async () => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        onError("Allow camera access to take a photo of your ID, or choose one from your photos.");
+        onError("Please allow camera access to take a photo of your ID.");
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8 });
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        quality: 0.85,
+      });
       if (!result.canceled) onPicked(result.assets[0].uri);
     } catch {
-      onError("We couldn't open the camera. Try choosing a photo instead.");
+      onError("Couldn't open camera. Try gallery instead.");
     }
   };
 
-  const choose = async () => {
+  const pickGallery = async () => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.85,
+      });
       if (!result.canceled) onPicked(result.assets[0].uri);
     } catch {
-      onError("We couldn't open your photos. Check photo permissions and try again.");
+      onError("Couldn't open photos. Check permissions and try again.");
     }
+  };
+
+  const handleCardPress = () => {
+    if (Platform.OS === "web") {
+      void pickGallery();
+      return;
+    }
+    Alert.alert(label, "Select photo source:", [
+      { text: "Take Photo", onPress: () => void takePhoto() },
+      { text: "Choose from Gallery", onPress: () => void pickGallery() },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   return (
-    <View style={[styles.slot, { backgroundColor: colors.card, borderColor: uri ? colors.success : colors.border }]}>
-      <View style={styles.slotHeader}>
-        <Text style={[styles.slotLabel, { color: colors.foreground }]}>{label}</Text>
-        {uri ? <Ionicons name="checkmark-circle" size={16} color={colors.success} /> : null}
+    <View
+      style={[
+        styles.slotCard,
+        {
+          backgroundColor: colors.card,
+          borderColor: uri ? "#10B981" : colors.border,
+        },
+      ]}
+    >
+      {/* Slot Header */}
+      <View style={styles.slotTopRow}>
+        <Text style={[styles.slotTitle, { color: colors.foreground }]} numberOfLines={1}>
+          {label}
+        </Text>
+        {uri ? (
+          <View style={styles.verifiedBadge}>
+            <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+            <Text style={styles.verifiedText}>Added</Text>
+          </View>
+        ) : null}
       </View>
-      {uri ? (
-        <Image source={{ uri }} style={styles.preview} resizeMode="cover" accessibilityLabel={`${label} photo`} />
-      ) : (
-        <View style={[styles.preview, styles.placeholder, { backgroundColor: colors.secondary }]}>
-          <Ionicons name="card-outline" size={24} color={colors.mutedForeground} />
-        </View>
-      )}
-      <View style={styles.slotActions}>
+
+      {/* Card Body / Preview */}
+      <Pressable
+        onPress={handleCardPress}
+        style={styles.previewBox}
+        accessibilityRole="button"
+        accessibilityLabel={`Upload ${label}`}
+      >
+        {uri ? (
+          <Image source={{ uri }} style={styles.slotImage} resizeMode="cover" />
+        ) : (
+          <View style={[styles.emptyPreview, { backgroundColor: colors.secondary }]}>
+            <Ionicons name="camera" size={24} color={colors.mutedForeground} />
+            <Text style={[styles.tapHint, { color: colors.mutedForeground }]}>Tap to add</Text>
+          </View>
+        )}
+      </Pressable>
+
+      {/* Quick Action Buttons */}
+      <View style={styles.actionRow}>
         <Pressable
-          onPress={() => void take()}
-          style={[styles.slotButton, { backgroundColor: colors.primary }]}
-          accessibilityRole="button"
-          accessibilityLabel={`${uri ? "Retake" : "Take"} photo: ${label}`}
+          onPress={() => void takePhoto()}
+          style={({ pressed }) => [
+            styles.miniBtn,
+            { backgroundColor: "#FF2D55", opacity: pressed ? 0.85 : 1 },
+          ]}
+          hitSlop={4}
         >
-          <Ionicons name="camera-outline" size={15} color="#FFFFFF" />
-          <Text style={styles.slotButtonText}>{uri ? "Retake" : "Camera"}</Text>
+          <Ionicons name="camera-outline" size={13} color="#FFFFFF" />
+          <Text style={styles.miniBtnText}>{uri ? "Retake" : "Camera"}</Text>
         </Pressable>
+
         <Pressable
-          onPress={() => void choose()}
-          style={[styles.slotButton, { backgroundColor: colors.secondary }]}
-          accessibilityRole="button"
-          accessibilityLabel={`Choose from photos: ${label}`}
+          onPress={() => void pickGallery()}
+          style={({ pressed }) => [
+            styles.miniBtn,
+            { backgroundColor: colors.secondary, opacity: pressed ? 0.85 : 1 },
+          ]}
+          hitSlop={4}
         >
-          <Ionicons name="images-outline" size={15} color={colors.foreground} />
-          <Text style={[styles.slotButtonText, { color: colors.foreground }]}>Gallery</Text>
+          <Ionicons name="images-outline" size={13} color={colors.foreground} />
+          <Text style={[styles.miniBtnText, { color: colors.foreground }]}>Gallery</Text>
         </Pressable>
       </View>
     </View>
   );
 }
 
-function PrimaryButton({ label, onPress, busy, disabled }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean }) {
+function PrimaryButton({
+  label,
+  onPress,
+  busy,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  busy?: boolean;
+  disabled?: boolean;
+}) {
   const colors = useColors();
   const off = busy || disabled;
   return (
@@ -408,7 +566,10 @@ function PrimaryButton({ label, onPress, busy, disabled }: { label: string; onPr
       disabled={off}
       style={({ pressed }) => [
         styles.primary,
-        { backgroundColor: disabled ? colors.disabled : colors.primary, opacity: busy || pressed ? 0.85 : 1 },
+        {
+          backgroundColor: disabled ? colors.disabled : "#FF2D55",
+          opacity: busy || pressed ? 0.88 : 1,
+        },
       ]}
       accessibilityRole="button"
       accessibilityState={{ busy, disabled }}
@@ -428,36 +589,198 @@ function TextButton({ label, onPress }: { label: string; onPress: () => void }) 
 }
 
 const styles = StyleSheet.create({
-  lead: { fontSize: 24, letterSpacing: -0.6, fontFamily: "Inter_700Bold" },
-  leadText: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: -8 },
-  privacy: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, padding: 12 },
-  privacyText: { flex: 1, fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
-  documents: { gap: 10 },
-  document: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1.5, padding: 12 },
-  documentCopy: { flex: 1, gap: 2 },
-  documentLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  documentText: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
-  // Side by side, each half the width, so front and back fit on one row.
-  slots: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  slot: { flexBasis: "47%", flexGrow: 0, flexShrink: 1, maxWidth: 260, borderRadius: 14, borderWidth: 1.5, padding: 8, gap: 7 },
-  slotHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 4 },
-  slotLabel: { flexShrink: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  preview: { width: "100%", aspectRatio: 1.586, borderRadius: 9 },
-  placeholder: { alignItems: "center", justifyContent: "center" },
-  slotActions: { flexDirection: "row", gap: 6 },
-  slotButton: { flex: 1, minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: 9 },
-  slotButtonText: { color: "#FFFFFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  tips: { gap: 6, marginTop: 10 },
-  confirmRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, borderWidth: 1, padding: 14 },
-  confirmText: { flex: 1, fontSize: 14, lineHeight: 20, fontFamily: "Inter_500Medium" },
-  tip: { flexDirection: "row", alignItems: "center", gap: 8 },
-  tipText: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
-  primary: { alignSelf: "stretch", minHeight: 52, borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
-  primaryText: { color: "#FFFFFF", fontSize: 16, fontFamily: "Inter_600SemiBold" },
-  textBtn: { minHeight: 44, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
-  textBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  status: { alignItems: "center", paddingVertical: 32, gap: 14 },
-  statusIcon: { width: 72, height: 72, borderRadius: 24, alignItems: "center", justifyContent: "center" },
-  statusTitle: { fontSize: 22, fontFamily: "Inter_700Bold", textAlign: "center" },
-  statusText: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", textAlign: "center", maxWidth: 420 },
+  headerBlock: {
+    gap: 4,
+  },
+  heading: {
+    fontSize: 22,
+    letterSpacing: -0.5,
+    fontFamily: "Inter_700Bold",
+  },
+  subheading: {
+    fontSize: 13.5,
+    lineHeight: 19,
+    fontFamily: "Inter_400Regular",
+  },
+  alertBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 10,
+  },
+  alertText: {
+    flex: 1,
+    fontSize: 12.5,
+    lineHeight: 17,
+    fontFamily: "Inter_500Medium",
+  },
+  sectionCompact: {
+    gap: 6,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    letterSpacing: 0.8,
+    fontFamily: "Inter_700Bold",
+  },
+  segmentedContainer: {
+    flexDirection: "row",
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 3,
+    gap: 4,
+  },
+  segmentItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 9,
+  },
+  segmentItemActive: {
+    backgroundColor: "#FF2D55",
+  },
+  segmentText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  photoRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  slotCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 10,
+    gap: 8,
+  },
+  slotTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  slotTitle: {
+    fontSize: 12.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  verifiedText: {
+    color: "#10B981",
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  previewBox: {
+    width: "100%",
+    aspectRatio: 1.5,
+    borderRadius: 9,
+    overflow: "hidden",
+  },
+  slotImage: {
+    width: "100%",
+    height: "100%",
+  },
+  emptyPreview: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  tapHint: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  miniBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 6,
+    borderRadius: 7,
+  },
+  miniBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  confirmRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+  },
+  checkboxTouch: {
+    padding: 2,
+  },
+  confirmText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Inter_500Medium",
+  },
+  termsLink: {
+    color: "#FF2D55",
+    fontFamily: "Inter_600SemiBold",
+    textDecorationLine: "underline",
+  },
+  primary: {
+    minHeight: 50,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    marginTop: 4,
+  },
+  primaryText: {
+    color: "#FFFFFF",
+    fontSize: 15.5,
+    fontFamily: "Inter_700Bold",
+  },
+  textBtn: {
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  textBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  status: {
+    alignItems: "center",
+    paddingVertical: 32,
+    gap: 14,
+  },
+  statusIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statusTitle: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  statusText: {
+    fontSize: 13.5,
+    lineHeight: 20,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    maxWidth: 380,
+  },
 });

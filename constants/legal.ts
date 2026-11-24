@@ -91,3 +91,7 @@ export const PRIVACY_POLICY: LegalDocument = {
 
 export const LEGAL_DOCUMENTS = { terms: TERMS_OF_SERVICE, privacy: PRIVACY_POLICY } as const;
 export type LegalDocumentKey = keyof typeof LEGAL_DOCUMENTS;
+
+export const TERMS_URL = "https://www.eventis.today/terms";
+export const PRIVACY_POLICY_URL = "https://www.eventis.today/privacy-policy";
+
