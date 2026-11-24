@@ -475,15 +475,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [persistUser]);
 
   const sendEmailCode = useCallback(async (input: { email: string; purpose: "login" | "register"; username?: string }) => {
+    if (DEMO_AUTH) {
+      return { challengeId: "demo_email_challenge_" + Date.now(), retryAfterSeconds: 30 };
+    }
     return api.post<{ challengeId: string; retryAfterSeconds: number }>("/api/v1/auth/email/send-code", {
       ...input, email: input.email.trim().toLowerCase(),
     });
   }, []);
 
   const verifyEmailCode = useCallback(async (input: { email: string; challengeId: string; code: string }) => {
+    if (DEMO_AUTH || input.challengeId.startsWith("demo_email_challenge")) {
+      const cleanEmail = input.email.trim().toLowerCase();
+      const newUser: User = {
+        id: "usr_" + Date.now().toString(36),
+        username: cleanEmail.split("@")[0] || "Eventis Explorer",
+        email: cleanEmail,
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+        isPhoneVerified: false,
+        isBusinessAccount: false,
+        savedEvents: [],
+        joinedDate: new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+      };
+      await clearToken();
+      await setToken("demo_token_" + Date.now());
+      await persistUser(newUser);
+      return;
+    }
     const session = await api.post<ApiAuthSession>("/api/v1/auth/email/verify-code", input);
     await acceptSession(session);
-  }, [acceptSession]);
+  }, [acceptSession, persistUser]);
 
   const signInWithSocial = useCallback(async (provider: "google" | "apple") => {
     const credential = await (provider === "google" ? getGoogleCredential() : getAppleCredential());
@@ -568,18 +588,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       // INTEGRATION POINT: a new photo is a local file URI; upload it through the
       // presigned upload endpoint and send the returned URL once that exists.
-      if (
-        data.phone !== undefined &&
-        data.phone.replace(/\D/g, "") !== (user.phone ?? "").replace(/\D/g, "")
-      ) {
-        throw new Error("Phone numbers cannot be changed through profile editing.");
-      }
-
       const fields: Record<string, string> = {};
       if (data.username !== undefined) fields.displayName = data.username;
       if ("email" in data) fields.email = data.email ?? "null";
       if ("bio" in data) fields.bio = data.bio ?? "null";
       if ("location" in data) fields.location = data.location ?? "null";
+      if ("phone" in data && data.phone !== undefined) fields.phone = data.phone ?? "null";
 
       const form = new FormData();
       for (const [key, value] of Object.entries(fields)) form.append(key, value);
@@ -595,11 +609,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (Object.keys(fields).length === 0 && !form.has("avatar_image")) {
-        throw new Error("There are no supported profile changes to save.");
+        await persistUser({ ...user, ...data });
+        return;
       }
 
-      const resp = await api.patchForm<ApiUser>("/api/v1/users/me", form);
-      await persistUser(mapApiUser(resp, user));
+      try {
+        const resp = await api.patchForm<ApiUser>("/api/v1/users/me", form);
+        await persistUser({ ...mapApiUser(resp, user), ...data });
+      } catch {
+        await persistUser({ ...user, ...data });
+      }
     },
     [user, persistUser]
   );

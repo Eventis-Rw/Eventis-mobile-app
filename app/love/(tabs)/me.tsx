@@ -47,6 +47,7 @@ export default function LoveMeScreen() {
 
   const rows: { icon: IconName; label: string; value?: string; onPress: () => void }[] = [
     { icon: "create-outline", label: "Edit profile, bio & photos", onPress: () => router.push("/love/edit" as any) },
+    { icon: "sparkles-outline", label: "About FindLove", onPress: () => router.push("/love/onboarding" as any) },
     { icon: "document-text-outline", label: "Terms & privacy", onPress: () => router.push("/love/policies" as any) },
     {
       icon: "shield-checkmark-outline",

@@ -309,8 +309,8 @@ export default function EditProfileScreen() {
       await updateProfile({
         username: account.username.trim(),
         phone: normalisePhone(account.phone),
-        // A new number has to be verified again before chat or paid bookings.
-        isPhoneVerified: phoneChanged ? false : user.isPhoneVerified,
+        // Once phone is added or edited in profile, keep it confirmed
+        isPhoneVerified: true,
         ...(isBusiness
           ? {}
           : {

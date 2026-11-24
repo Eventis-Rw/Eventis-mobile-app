@@ -1,9 +1,20 @@
-import { AuthMethods } from "@/components/AuthMethods";
+import { GoogleIcon } from "@/components/GoogleIcon";
+import { KeyboardAwareScrollView } from "@/components/KeyboardCompat";
+import { Logo } from "@/components/Logo";
+import { PRIVACY_POLICY_URL, TERMS_URL } from "@/constants/legal";
+import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
+import { useColors } from "@/hooks/useColors";
+import { ApiError } from "@/utils/apiClient";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import React, { useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -12,199 +23,448 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { KeyboardAwareScrollView } from "@/components/KeyboardCompat";
-import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-
-import { PinInput } from "@/components/PinInput";
-import { useAuth } from "@/context/AuthContext";
-import { Logo } from "@/components/Logo";
-import { COUNTRIES, Country, PhoneInput } from "@/components/PhoneInput";
-import { useTheme } from "@/context/ThemeContext";
-import { useColors } from "@/hooks/useColors";
 
 export default function RegisterScreen() {
   const colors = useColors();
   const { scheme } = useTheme();
+  const isDark = scheme === "dark";
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
+  const { sendEmailCode, signInWithSocial } = useAuth();
 
-  const { register } = useAuth();
-  const [pin, setPin] = useState("");
-  const [submitError, setSubmitError] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // Rwanda (+250) default
-  const [errors, setErrors] = useState<{ fullName?: string; phone?: string; pin?: string }>({});
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [errors, setErrors] = useState<{ username?: string; email?: string; terms?: string; general?: string }>({});
   const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState<"username" | "email" | null>(null);
+  const [socialLoading, setSocialLoading] = useState<string | null>(null);
+  const submitting = useRef(false);
 
   const validate = () => {
-    const nextErrors: { fullName?: string; phone?: string; pin?: string } = {};
-    if (!fullName.trim() || fullName.trim().length < 2) {
-      nextErrors.fullName = "Please enter your username";
+    const nextErrors: { username?: string; email?: string; terms?: string } = {};
+    const cleanUsername = username.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanUsername || cleanUsername.length < 2) {
+      nextErrors.username = "Enter a username with at least 2 characters.";
     }
-    const cleanedPhone = phone.replace(/\D/g, "");
-    if (!cleanedPhone || cleanedPhone.length < 7) {
-      nextErrors.phone = "Please enter a valid phone number";
+    if (!cleanEmail) {
+      nextErrors.email = "Please enter your email address.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.length > 255) {
+      nextErrors.email = "Please enter a valid email address.";
     }
-    if (!/^\d{5}$/.test(pin)) nextErrors.pin = "Enter exactly 5 digits";
+    if (!agreedToTerms) {
+      nextErrors.terms = "Please accept the Terms & Conditions and Privacy Policy to continue.";
+    }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = async () => {
-    if (loading || !validate()) return;
+  const handleContinueWithEmail = async () => {
+    if (loading || submitting.current || !validate()) return;
+    const cleanUsername = username.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    submitting.current = true;
     setLoading(true);
-    setSubmitError("");
-    const input = { phone: `${selectedCountry.code}${phone.replace(/\D/g, "").replace(/^0+/, "")}`, username: fullName.trim(), pin };
+    setErrors({});
     try {
-      await register(input);
-      router.push({ pathname: "/auth/otp", params: { purpose: "register", phone: input.phone, fullName: input.username } });
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Could not create your account. Please try again.");
-    } finally { setLoading(false); }
+      const challenge = await sendEmailCode({
+        email: cleanEmail,
+        purpose: "register",
+        username: cleanUsername,
+      });
+      router.push({
+        pathname: "/auth/otp",
+        params: {
+          email: cleanEmail,
+          purpose: "register",
+          username: cleanUsername,
+          challengeId: challenge.challengeId,
+        },
+      });
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 409 || (err.status === 400 && err.message?.toLowerCase().includes("already")))) {
+        setErrors({ general: "An account with this email already exists. Please sign in instead." });
+      } else if (err instanceof ApiError && err.status === 429) {
+        setErrors({ general: "Too many attempts. Please wait a moment and try again." });
+      } else {
+        setErrors({
+          general: err instanceof Error ? err.message : "Could not start registration. Please try again.",
+        });
+      }
+    } finally {
+      submitting.current = false;
+      setLoading(false);
+    }
+  };
+
+  const handleSocialSignIn = async (provider: "google" | "apple") => {
+    if (loading || socialLoading) return;
+    if (!agreedToTerms) {
+      setErrors({ terms: "Please accept the Terms & Conditions and Privacy Policy to continue." });
+      return;
+    }
+    if (provider === "apple" && Platform.OS !== "ios") {
+      setErrors({ general: "Apple sign-in is only available on iOS devices." });
+      return;
+    }
+    setErrors({});
+    setSocialLoading(provider);
+    try {
+      await signInWithSocial(provider);
+      router.replace("/(tabs)");
+    } catch (err) {
+      setErrors({
+        general: err instanceof Error ? err.message : "Could not complete sign in. Please try again.",
+      });
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handleOpenLegalUrl = async (url: string) => {
+    try {
+      if (Platform.OS === "web") {
+        if (typeof window !== "undefined") {
+          window.open(url, "_blank");
+        }
+      } else {
+        await WebBrowser.openBrowserAsync(url);
+      }
+    } catch {
+      void Linking.openURL(url).catch(() => {});
+    }
   };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <LinearGradient
-        pointerEvents="none"
-        colors={
-          scheme === "dark"
-            ? ["#1A2458", "#070814", colors.background]
-            : ["#D9E6FF", "#E8EEF8", colors.background]
-        }
-        style={StyleSheet.absoluteFill}
-      />
       <KeyboardAwareScrollView
         style={styles.scroll}
         contentContainerStyle={[
-          styles.form,
+          styles.scrollContent,
           {
-            paddingTop: insets.top + 28,
-            paddingBottom: Math.max(insets.bottom, 16) + 12,
+            paddingTop: Math.max(insets.top, 16) + 12,
+            paddingBottom: Math.max(insets.bottom, 16) + 16,
           },
         ]}
         keyboardShouldPersistTaps="handled"
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+        overScrollMode="never"
         bottomOffset={20}
       >
-        <View style={styles.mainContent}>
-          {/* Brand Icon & Heading */}
-          <Animated.View
-            entering={Platform.OS !== "web" ? FadeInDown.delay(80).springify() : undefined}
-            style={styles.brandSection}
-          >
-            <Logo style={styles.brandLogo} />
-          <Text style={[styles.kicker, { color: colors.primary }]}>Join Eventis</Text>
-          <Text style={[styles.title, { color: colors.foreground }]}>
-            Create an account
-          </Text>
+        <View style={styles.centerContainer}>
+          {/* Brand Header: Small Logo + eventis */}
+          <View style={styles.headerSection}>
+            <Animated.View
+              entering={Platform.OS !== "web" ? FadeInDown.duration(400) : undefined}
+              style={styles.brandRow}
+            >
+              <Logo variant="auto" style={styles.brandLogo} />
+              <Text style={[styles.brandText, { color: colors.foreground }]}>eventis</Text>
+            </Animated.View>
 
-        </Animated.View>
-
-        {/* Full Name Field */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(140).springify() : undefined}
-          style={styles.fieldSection}
-        >
-          <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-            Username
-          </Text>
-          <View
-            style={[
-              styles.nameField,
-              {
-                backgroundColor: colors.input,
-                borderColor: errors.fullName ? colors.destructive : colors.border,
-              },
-            ]}
-          >
-            <Ionicons
-              name="person-outline"
-              size={18}
-              color={colors.mutedForeground}
-            />
-            <TextInput
-              style={[styles.nameInput, { color: colors.foreground }]}
-              placeholder=""
-              placeholderTextColor={colors.mutedForeground}
-              value={fullName}
-              onChangeText={(text) => {
-                setFullName(text);
-                if (errors.fullName) setErrors((e) => ({ ...e, fullName: undefined }));
-              }}
-              autoCapitalize="words"
-              autoCorrect={false}
-              accessibilityLabel="Username"
-            />
+            <Animated.View
+              entering={Platform.OS !== "web" ? FadeInDown.delay(70).duration(450) : undefined}
+              style={styles.titleSection}
+            >
+              <Text style={[styles.title, { color: colors.foreground }]}>Create an account</Text>
+              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+                Join Eventis to discover, attend and share memorable events
+              </Text>
+            </Animated.View>
           </View>
-          {errors.fullName ? (
-            <Text style={[styles.errorText, { color: colors.destructive }]}>
-              {errors.fullName}
-            </Text>
-          ) : null}
-        </Animated.View>
 
-        {/* Phone Input Field with Country Code */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(200).springify() : undefined}
-          style={styles.fieldSection}
-        >
-          <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-            Phone number
-          </Text>
-          <PhoneInput
-            value={phone}
-            onChangeText={(text) => {
-              setPhone(text);
-              if (errors.phone) setErrors((e) => ({ ...e, phone: undefined }));
-            }}
-            selectedCountry={selectedCountry}
-            onSelectCountry={setSelectedCountry}
-            error={errors.phone}
-            placeholder="7XX XXX XXX"
-          />
-        </Animated.View>
-
-        <PinInput value={pin} onChangeText={(value) => { setPin(value); setErrors((e) => ({ ...e, pin: undefined })); }} error={errors.pin} />
-        {submitError ? <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive }}>{submitError}</Text> : null}
-
-        {/* Submit Button */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(260).springify() : undefined}
-        >
-          <Pressable
-            style={[
-              styles.submitBtn,
-              { backgroundColor: colors.primary, opacity: loading ? 0.75 : 1 },
-            ]}
-            onPress={handleSubmit}
-              accessibilityRole="button"
-              accessibilityState={{ busy: loading }}
-            disabled={loading}
+          {/* Content Section */}
+        <View style={styles.formContainer}>
+          {/* Username Input Field */}
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(100).duration(450).springify() : undefined}
+            style={styles.inputSection}
           >
-            <Text style={styles.submitBtnText}>
-              {loading ? "Please wait..." : "Continue"}
+            <View
+              style={[
+                styles.pillInputContainer,
+                {
+                  backgroundColor: isDark ? "#161616" : colors.input,
+                  borderColor: errors.username
+                    ? colors.destructive
+                    : focusedField === "username"
+                    ? "#00A3FF"
+                    : isDark
+                    ? "#262626"
+                    : colors.border,
+                },
+              ]}
+            >
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color={focusedField === "username" ? "#00A3FF" : colors.mutedForeground}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={[styles.textInput, { color: colors.foreground }]}
+                placeholder="Full name or username"
+                placeholderTextColor={colors.mutedForeground}
+                value={username}
+                onChangeText={(text) => {
+                  setUsername(text);
+                  if (errors.username) setErrors((e) => ({ ...e, username: undefined }));
+                }}
+                onFocus={() => setFocusedField("username")}
+                onBlur={() => setFocusedField(null)}
+                autoCapitalize="words"
+                autoCorrect={false}
+                returnKeyType="next"
+                accessibilityLabel="Username"
+              />
+              {username.length > 0 ? (
+                <Pressable onPress={() => setUsername("")} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+                </Pressable>
+              ) : null}
+            </View>
+            {errors.username ? (
+              <Text style={[styles.errorText, { color: colors.destructive }]}>
+                {errors.username}
+              </Text>
+            ) : null}
+          </Animated.View>
+
+          {/* Email Input Field */}
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(130).duration(450).springify() : undefined}
+            style={styles.inputSection}
+          >
+            <View
+              style={[
+                styles.pillInputContainer,
+                {
+                  backgroundColor: isDark ? "#161616" : colors.input,
+                  borderColor: errors.email
+                    ? colors.destructive
+                    : focusedField === "email"
+                    ? "#00A3FF"
+                    : isDark
+                    ? "#262626"
+                    : colors.border,
+                },
+              ]}
+            >
+              <Ionicons
+                name="mail-outline"
+                size={18}
+                color={focusedField === "email" ? "#00A3FF" : colors.mutedForeground}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={[styles.textInput, { color: colors.foreground }]}
+                placeholder="Email address"
+                placeholderTextColor={colors.mutedForeground}
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (errors.email) setErrors((e) => ({ ...e, email: undefined }));
+                }}
+                onFocus={() => setFocusedField("email")}
+                onBlur={() => setFocusedField(null)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={handleContinueWithEmail}
+                accessibilityLabel="Email address"
+              />
+              {email.length > 0 ? (
+                <Pressable onPress={() => setEmail("")} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+                </Pressable>
+              ) : null}
+            </View>
+            {errors.email ? (
+              <Text style={[styles.errorText, { color: colors.destructive }]}>
+                {errors.email}
+              </Text>
+            ) : null}
+          </Animated.View>
+
+          {errors.general ? (
+            <Animated.Text
+              entering={Platform.OS !== "web" ? FadeInDown.duration(200) : undefined}
+              style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}
+              accessibilityRole="alert"
+            >
+              {errors.general}
+            </Animated.Text>
+          ) : null}
+
+          {/* Terms & Privacy Policy Agreement Row */}
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(145).duration(450).springify() : undefined}
+            style={styles.termsWrapper}
+          >
+            <View style={styles.termsRow}>
+              <Pressable
+                onPress={() => {
+                  setAgreedToTerms((v) => !v);
+                  if (errors.terms) setErrors((e) => ({ ...e, terms: undefined }));
+                }}
+                hitSlop={8}
+                style={[
+                  styles.checkbox,
+                  {
+                    backgroundColor: agreedToTerms ? "#00A3FF" : isDark ? "#161616" : colors.input,
+                    borderColor: errors.terms
+                      ? colors.destructive
+                      : agreedToTerms
+                      ? "#00A3FF"
+                      : isDark
+                      ? "#2E2E2E"
+                      : colors.border,
+                  },
+                ]}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: agreedToTerms }}
+                accessibilityLabel="I agree to the Terms of Service and Privacy Policy"
+              >
+                {agreedToTerms ? <Ionicons name="checkmark" size={13} color="#FFFFFF" /> : null}
+              </Pressable>
+
+              <Text style={[styles.termsText, { color: colors.mutedForeground }]}>
+                I agree to the{" "}
+                <Text
+                  style={[styles.termsLink, { color: "#00A3FF" }]}
+                  onPress={() => void handleOpenLegalUrl(TERMS_URL)}
+                  accessibilityRole="link"
+                >
+                  Terms & Conditions
+                </Text>
+                {" "}and{" "}
+                <Text
+                  style={[styles.termsLink, { color: "#00A3FF" }]}
+                  onPress={() => void handleOpenLegalUrl(PRIVACY_POLICY_URL)}
+                  accessibilityRole="link"
+                >
+                  Privacy Policy
+                </Text>
+              </Text>
+            </View>
+            {errors.terms ? (
+              <Text style={[styles.errorText, { color: colors.destructive, paddingHorizontal: 0, marginTop: 2 }]}>
+                {errors.terms}
+              </Text>
+            ) : null}
+          </Animated.View>
+
+          {/* Primary Action Button ("Continue") */}
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(160).duration(450).springify() : undefined}
+          >
+            <Pressable
+              onPress={handleContinueWithEmail}
+              disabled={loading || !!socialLoading}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                { opacity: pressed || loading ? 0.88 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Continue"
+            >
+              <LinearGradient
+                colors={["#00A3FF", "#0284C7"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryGradient}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Continue</Text>
+                )}
+              </LinearGradient>
+            </Pressable>
+          </Animated.View>
+
+          {/* Bold Divider: ──── or continue with ──── */}
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(190).duration(450).springify() : undefined}
+            style={styles.dividerRow}
+          >
+            <View style={[styles.dividerLine, { backgroundColor: isDark ? "#262626" : colors.border }]} />
+            <Text style={[styles.dividerText, { color: colors.mutedForeground }]}>
+              or continue with
             </Text>
+            <View style={[styles.dividerLine, { backgroundColor: isDark ? "#262626" : colors.border }]} />
+          </Animated.View>
+
+          {/* Social Sign-in Buttons (Horizontal Row with Brand Colors) */}
+          <Animated.View
+            entering={Platform.OS !== "web" ? FadeInDown.delay(220).duration(450).springify() : undefined}
+            style={styles.socialRow}
+          >
+            <Pressable
+              onPress={() => handleSocialSignIn("google")}
+              disabled={loading || !!socialLoading}
+              style={({ pressed }) => [
+                styles.googleBtn,
+                { opacity: pressed || socialLoading === "google" ? 0.8 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Google"
+            >
+              {socialLoading === "google" ? (
+                <ActivityIndicator size="small" color="#1F2937" />
+              ) : (
+                <>
+                  <GoogleIcon size={18} />
+                  <Text style={styles.googleBtnText}>Google</Text>
+                </>
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={() => handleSocialSignIn("apple")}
+              disabled={loading || !!socialLoading}
+              style={({ pressed }) => [
+                styles.appleBtn,
+                {
+                  backgroundColor: isDark ? "#161616" : "#000000",
+                  borderColor: isDark ? "#2E2E2E" : "#000000",
+                  opacity: pressed || socialLoading === "apple" ? 0.8 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Apple"
+            >
+              {socialLoading === "apple" ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="logo-apple" size={19} color="#FFFFFF" />
+                  <Text style={styles.appleBtnText}>Apple</Text>
+                </>
+              )}
+            </Pressable>
+          </Animated.View>
+        </View>
+
+        {/* Footer Link (Toggle to Sign In) */}
+        <Animated.View
+          entering={Platform.OS !== "web" ? FadeInDown.delay(260).duration(450).springify() : undefined}
+          style={styles.footerSection}
+        >
+          <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
+            Already have an account?{" "}
+          </Text>
+          <Pressable onPress={() => router.push("/auth/login" as any)} hitSlop={8}>
+            <Text style={styles.footerLink}>Sign In</Text>
           </Pressable>
         </Animated.View>
-        <AuthMethods busy={loading} onBusyChange={setLoading} onError={setSubmitError} onEmail={() => router.push({ pathname: "/auth/email", params: { mode: "register" } })} />
-      </View>
-
-        {/* Footer Link to Sign In */}
-        <Animated.View
-          entering={Platform.OS !== "web" ? FadeInDown.delay(320).springify() : undefined}
-        >
-          <View style={styles.footerRow}>
-            <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
-              Already have an account?
-            </Text>
-            <Pressable onPress={() => router.push("/auth/login" as any)}>
-              <Text style={[styles.footerLink, { color: colors.primary }]}>
-                Sign in
-              </Text>
-            </Pressable>
-          </View>
-        </Animated.View>
+        </View>
       </KeyboardAwareScrollView>
     </View>
   );
@@ -217,95 +477,152 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
-  form: {
+  scrollContent: {
     flexGrow: 1,
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
+    justifyContent: "center",
   },
-  mainContent: {
-    gap: 22,
+  centerContainer: {
+    width: "100%",
   },
-  brandSection: {
+  headerSection: {
     alignItems: "center",
-    gap: 8,
-    marginBottom: 6,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
-  kicker: {
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-    textAlign: "center",
-  },
-  brandLogo: {
-    width: 68,
-    height: 68,
-    marginBottom: 6,
-    alignSelf: "center",
-  },
-  title: {
-    fontSize: 28,
-    fontFamily: "Inter_900Black",
-    letterSpacing: -0.8,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  fieldSection: {
-    gap: 8,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  nameField: {
+  brandRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
+  brandLogo: {
+    width: 30,
+    height: 30,
+  },
+  brandText: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
+  },
+  titleSection: {
+    alignItems: "center",
+    gap: 4,
+  },
+  title: {
+    fontSize: 25,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+    letterSpacing: -0.4,
+  },
+  subtitle: {
+    fontSize: 13.5,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 19,
+    paddingHorizontal: 12,
+  },
+  formContainer: {
+    paddingHorizontal: 24,
+    gap: 13,
+  },
+  inputSection: {
+    gap: 6,
+  },
+  pillInputContainer: {
+    height: 52,
     borderRadius: 14,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    height: 56,
-    gap: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
   },
-  nameInput: {
+  inputIcon: {
+    marginRight: 10,
+  },
+  textInput: {
     flex: 1,
     fontSize: 15,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
     height: "100%",
   },
   errorText: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 4,
+    fontFamily: "Inter_500Medium",
+    paddingHorizontal: 14,
   },
-  submitBtn: {
-    width: "100%",
-    height: 54,
-    borderRadius: 27,
+  primaryBtn: {
+    height: 52,
+    borderRadius: 26,
+    overflow: "hidden",
+  },
+  primaryGradient: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
-    marginTop: 6,
   },
-  submitBtnText: {
+  primaryBtnText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
   },
-  footerRow: {
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginVertical: 4,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    textTransform: "lowercase",
+  },
+  socialRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  googleBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingTop: 10,
+    gap: 8,
+  },
+  googleBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#1F2937",
+  },
+  appleBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  appleBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#FFFFFF",
+  },
+  footerSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 20,
   },
   footerText: {
     fontSize: 14,
@@ -314,5 +631,33 @@ const styles = StyleSheet.create({
   footerLink: {
     fontSize: 14,
     fontFamily: "Inter_700Bold",
+    color: "#00A3FF",
+  },
+  termsWrapper: {
+    paddingVertical: 2,
+    gap: 4,
+  },
+  termsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontFamily: "Inter_400Regular",
+  },
+  termsLink: {
+    fontFamily: "Inter_600SemiBold",
+    textDecorationLine: "underline",
   },
 });
