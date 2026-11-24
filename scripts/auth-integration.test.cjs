@@ -143,6 +143,25 @@ test("an invalid refresh token clears both stored tokens", async () => {
   assert.equal(await client.getRefreshToken(), null);
 });
 
+test("duplicate email registration exposes the sign-in error without changing the current session", async () => {
+  const client = loadApiClient();
+  await client.setAuthTokens("old-access", "old-refresh");
+  const message = "An account with this email already exists. Please sign in instead.";
+  const requests = [];
+  global.fetch = async (url) => {
+    requests.push(url);
+    return response(409, { error: "EMAIL_ALREADY_EXISTS", code: "EMAIL_ALREADY_EXISTS", message });
+  };
+
+  await assert.rejects(
+    client.api.post("/api/v1/auth/email/send-code", { email: "aline@example.com", purpose: "register", username: "Aline" }),
+    (error) => error.status === 409 && error.message === message,
+  );
+  assert.deepEqual(requests, ["http://localhost:3000/api/v1/auth/email/send-code"]);
+  assert.equal(await client.getToken(), "old-access");
+  assert.equal(await client.getRefreshToken(), "old-refresh");
+});
+
 for (const endpoint of ["/api/v1/auth/email/send-code", "/api/v1/auth/email/verify-code", "/api/v1/auth/social"]) {
   test(`${endpoint} failures do not refresh an unrelated existing session`, async () => {
     const client = loadApiClient();

@@ -436,27 +436,13 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
     }, 5000);
     void (async () => {
       try {
-        if (!liveProject.tokenServerId)
-          throw new Error(
-            "Add your LiveKit development token server ID to connect real devices.",
-          );
         await prepareLiveMedia();
         mediaPrepared = true;
         if (disposed) {
           await disconnect();
           return;
         }
-        const source = TokenSource.developmentTokenServer(
-          liveProject.tokenServerId,
-        );
-        const credentials = await deadline(
-          source.fetch({
-            roomName: session.code,
-            participantIdentity: session.identity,
-            participantName: name.slice(0, 64),
-          }),
-          20000,
-        );
+        const credentials = await deadline(liveDirectoryApi.token(session.code), 20000);
         if (disposed) return;
         if (!credentials.serverUrl.startsWith("wss://"))
           throw new Error(
@@ -567,6 +553,9 @@ export function useLiveBroadcast(session: BroadcastSession, name: string) {
               throw new Error("Wait for the room to reconnect.");
             if (coordinates()) {
               if (!isHost && !parseGuestAction(action, session.code, !!session.sample)) throw new Error("Only the host can do that.");
+              if (session.hosting && session.listing && (action.type === "accept" || action.type === "invite" || action.type === "remove" || action.type === "block")) {
+                await liveDirectoryApi.stage(session.listing.id, action.person.id, action.type);
+              }
               const state = apply(personOf(rtc.localParticipant), action);
               await broadcast();
               if (action.type === "end") {

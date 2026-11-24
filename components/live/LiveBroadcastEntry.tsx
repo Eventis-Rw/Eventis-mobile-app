@@ -241,9 +241,7 @@ export function LiveBroadcastEntry({
   };
   const setupProblem = unavailable
     ? "Camera preview only. Open the Eventis development app to broadcast."
-    : !liveProject.tokenServerId
-      ? "Connect your LiveKit project to start broadcasting."
-      : "";
+    : "";
   const hint = !title.trim()
     ? "Add a title so viewers know what’s happening."
     : mode === "video" && !cameraReady
@@ -405,7 +403,7 @@ export function LiveBroadcastEntry({
                 ))}
                 <Text style={[s.body, { fontSize: 11 }]}>
                   Approved organisers can qualify without the view threshold.
-                  Local progress is an estimate; all routes need server-verified
+                  All routes need server-verified
                   account safety.
                 </Text>
               </View>
@@ -440,7 +438,7 @@ export function LiveBroadcastEntry({
               <LiveButton
                 tone="live"
                 label="Continue to preview"
-                disabled={!directory?.developmentAccess}
+                disabled={!directory?.broadcastingAvailable}
                 onPress={() => setPhase("preview")}
               />
               <Text style={[s.body, { textAlign: "center", fontSize: 11 }]}>

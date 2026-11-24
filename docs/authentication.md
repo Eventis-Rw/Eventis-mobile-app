@@ -60,3 +60,15 @@ Existing accounts are never silently merged based on provider email. If a provid
 Run `pnpm test:auth` in the mobile app and the identity tests in the API. With real credentials and delivery configured, verify email registration → code → home → restart → sign out → email sign-in; then test Google and Apple cancellation, first registration, returning sign-in, restart, and sign-out on supported devices. Also verify phone registration/sign-in and phone-gated features for accounts without a phone.
 
 Provider consent and actual email delivery require the external credentials above and real device testing; unit tests do not prove those integrations are configured.
+
+## LiveKit configuration
+
+The API owns LiveKit room creation and participant tokens. Configure `LIVEKIT_URL`
+(with `wss://`), `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` only on the backend.
+The mobile app can set `EXPO_PUBLIC_LIVEKIT_URL` to validate the expected project;
+it obtains participant tokens from the authenticated `/api/v1/live/token` endpoint.
+The production flow does not use `EXPO_PUBLIC_LIVEKIT_TOKEN_SERVER_ID`.
+
+Live discovery displays API rooms and actual participant counts. Hosting eligibility
+and stage permissions are checked by the backend. Coin purchases remain unavailable
+unless the payments API is explicitly enabled and implemented.

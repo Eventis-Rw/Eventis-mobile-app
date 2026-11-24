@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
-import { ApiError } from "@/utils/apiClient";
+import { getToken, ApiError } from "@/utils/apiClient";
 import type { LivePerson } from "./liveState";
 
 export type LiveEventReference = {
@@ -33,6 +33,7 @@ export type LiveDirectory = {
   capacity: number;
   queueLength: number;
   developmentAccess: boolean;
+  broadcastingAvailable: boolean;
   durationMinutes: number;
   guests: number;
 };
@@ -104,6 +105,7 @@ async function request<T>(
   body?: unknown,
   token?: string,
 ): Promise<T> {
+  const sessionToken = await getToken();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
   try {
@@ -112,7 +114,7 @@ async function request<T>(
       signal: controller.signal,
       headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
@@ -133,6 +135,15 @@ async function request<T>(
   }
 }
 export const liveDirectoryApi = {
+  token: (roomName: string) =>
+    request<{ serverUrl: string; participantToken: string }>("/token", "POST", {
+      roomName,
+    }),
+  stage: (id: string, identity: string, action: string) =>
+    request(`/rooms/${encodeURIComponent(id)}/stage`, "POST", {
+      identity,
+      action,
+    }),
   list: () => request<LiveDirectory>("/rooms"),
   start: (draft: LiveStartDraft) =>
     request<LiveStartResult>("/rooms", "POST", draft),

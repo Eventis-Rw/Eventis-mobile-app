@@ -62,8 +62,7 @@ function settle(payment: ReturnType<typeof readPayment>): LiveCoinCheckoutResult
 // The server owns prices and credits the wallet only after the provider confirms.
 export async function buyLiveCoins(input: { pack: LiveCoinPackage; paymentMethod: LivePaymentMethod; payerPhone: string }): Promise<LiveCoinCheckoutResult> {
   if (!USE_LIVE_PAYMENTS_API) {
-    await wait(2000);
-    return { status: "succeeded", paymentId: `test_${input.pack.id}_${Date.now().toString(36)}` };
+    throw new Error("Live coin purchases are not available yet.");
   }
   let payment = readPayment(
     await api.post<unknown>("/api/v1/live/coins/checkout", {

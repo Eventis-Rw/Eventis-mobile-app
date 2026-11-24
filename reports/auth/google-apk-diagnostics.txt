@@ -1,0 +1,14 @@
+Google sign-in diagnosis — 2026-11-23
+
+APK: https://expo.dev/artifacts/eas/4EkDv39m-jhbSnl85opsibbs7b0I2A37fRKXp0sp4Zw.apk
+Package verified from APK manifest: com.nzizaprince5.mobile
+APK signature verified with Android apksigner. Signing certificate:
+SHA-1: 16:BA:2A:24:DC:C8:5C:17:71:30:B2:97:D7:57:15:0E:E5:4E:98:1E
+SHA-256: 2B:7B:7F:F8:6F:A6:2B:67:2C:CC:DD:15:00:56:D7:78:9C:F0:B9:AC:D2:E2:1E:97:C8:07:44:F4:3C:57:07:15
+
+The local debug SHA-1 previously supplied was:
+5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
+
+Register an Android OAuth client in the same Google Cloud project as the app's Web OAuth client. Use the actual APK package and SHA-1 above. Keep EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID set to the Web application client ID.
+
+DEVELOPER_ERROR is raised by the native Google SDK before an Eventis API session is requested. Reference: https://react-native-google-signin.github.io/docs/troubleshooting
