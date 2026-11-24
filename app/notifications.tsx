@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
+  Image,
   Platform,
   Pressable,
   RefreshControl,
@@ -16,7 +17,7 @@ import { GlassSurface } from "@/components/GlassSurface";
 import { useNotificationsOptional } from "@/context/NotificationsContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
-import { USE_PROFILE_API } from "@/services/profileService";
+import { USE_NOTIFICATIONS_API } from "@/services/notificationService";
 
 export type NotificationCategory = "all" | "events" | "activity" | "organizers";
 
@@ -31,6 +32,7 @@ export interface AppNotification {
   iconColor: string;
   iconBg: string;
   eventId?: string;
+  actorAvatarUrl?: string;
 }
 
 const CATEGORY_TABS: { label: string; value: NotificationCategory }[] = [
@@ -62,6 +64,8 @@ function mapBackendCategory(cat: string): "events" | "activity" | "organizers" {
 
 function iconFor(cat: "events" | "activity" | "organizers", type?: string): { name: React.ComponentProps<typeof Ionicons>["name"]; color: string; bg: string } {
   const t = String(type || "").toUpperCase();
+  if (t.includes("LIKE")) return { name: "heart", color: "#E04467", bg: "rgba(224,68,103,0.16)" };
+  if (t.includes("COMMENT")) return { name: "chatbubble", color: "#8B5CF6", bg: "rgba(139,92,246,0.16)" };
   if (cat === "events" || t.includes("TICKET") || t.includes("BOOKING")) return { name: "ticket", color: "#10B981", bg: "rgba(16,185,129,0.16)" };
   if (cat === "organizers") return { name: "megaphone", color: "#F59E0B", bg: "rgba(245,158,11,0.16)" };
   if (t.includes("REMINDER")) return { name: "calendar", color: "#6E96FF", bg: "rgba(110,150,255,0.16)" };
@@ -73,14 +77,15 @@ export default function NotificationsScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const ctx = useNotificationsOptional();
+  const refreshNotifications = ctx?.refresh;
 
-  const apiMode = !!ctx && USE_PROFILE_API;
+  const apiMode = !!ctx && USE_NOTIFICATIONS_API;
   const [selectedCategory, setSelectedCategory] = useState<NotificationCategory>("all");
   const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(useCallback(() => {
-    if (apiMode) void ctx?.refresh();
-  }, [apiMode, ctx]));
+    if (apiMode) void refreshNotifications?.();
+  }, [apiMode, refreshNotifications]));
 
   const apiNotifications: AppNotification[] = useMemo(() => {
     if (!apiMode || !ctx) return [];
@@ -88,6 +93,7 @@ export default function NotificationsScreen() {
       const category = mapBackendCategory(n.category);
       const icon = iconFor(category, n.type);
       const eventId = typeof n.data?.eventId === "string" ? n.data.eventId : typeof n.data?.event_id === "string" ? n.data.event_id : undefined;
+      const actorAvatarUrl = typeof n.data?.actorAvatarUrl === "string" ? n.data.actorAvatarUrl : undefined;
       return {
         id: n.id,
         category,
@@ -99,6 +105,7 @@ export default function NotificationsScreen() {
         iconColor: icon.color,
         iconBg: icon.bg,
         eventId,
+        actorAvatarUrl,
       };
     });
   }, [apiMode, ctx]);
@@ -237,9 +244,11 @@ export default function NotificationsScreen() {
             ]}
           >
             <View style={styles.notifLeftWrap}>
-              <View style={[styles.notifIconWrap, { backgroundColor: item.iconBg }]}>
-                <Ionicons name={item.iconName} size={20} color={item.iconColor} />
-              </View>
+              {item.actorAvatarUrl ? <Image source={{ uri: item.actorAvatarUrl }} style={styles.notifActorAvatar} /> : (
+                <View style={[styles.notifIconWrap, { backgroundColor: item.iconBg }]}>
+                  <Ionicons name={item.iconName} size={20} color={item.iconColor} />
+                </View>
+              )}
             </View>
             <View style={styles.notifCenterCol}>
               <View style={styles.notifTopRow}>
@@ -307,6 +316,7 @@ const styles = StyleSheet.create({
   notifCard: { flexDirection: "row", alignItems: "flex-start", padding: 14, borderRadius: 16, borderWidth: 1, gap: 12 },
   notifLeftWrap: { paddingTop: 2 },
   notifIconWrap: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  notifActorAvatar: { width: 44, height: 44, borderRadius: 22 },
   notifCenterCol: { flex: 1, gap: 4 },
   notifTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   notifTitle: { fontSize: 14, flex: 1 },

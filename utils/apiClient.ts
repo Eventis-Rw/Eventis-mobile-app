@@ -3,6 +3,18 @@ import { Platform } from "react-native";
 
 export const TOKEN_KEY = "@eventis_jwt";
 export const REFRESH_TOKEN_KEY = "@eventis_refresh_token";
+let sessionGeneration = 0;
+let tokenWrite: Promise<void> = Promise.resolve();
+
+export function getSessionGeneration(): number {
+  return sessionGeneration;
+}
+
+function queueTokenWrite(write: () => Promise<void>): Promise<void> {
+  const pending = tokenWrite.then(write);
+  tokenWrite = pending.catch(() => {});
+  return pending;
+}
 
 function getApiBase(): string {
   if (process.env.EXPO_PUBLIC_API_URL) {
@@ -29,18 +41,21 @@ export async function getRefreshToken(): Promise<string | null> {
 }
 
 export async function setToken(token: string): Promise<void> {
-  await AsyncStorage.setItem(TOKEN_KEY, token);
+  sessionGeneration += 1;
+  await queueTokenWrite(() => AsyncStorage.setItem(TOKEN_KEY, token));
 }
 
 export async function setAuthTokens(accessToken: string, refreshToken: string): Promise<void> {
-  await AsyncStorage.multiSet([
+  sessionGeneration += 1;
+  await queueTokenWrite(() => AsyncStorage.multiSet([
     [TOKEN_KEY, accessToken],
     [REFRESH_TOKEN_KEY, refreshToken],
-  ]);
+  ]));
 }
 
 export async function clearToken(): Promise<void> {
-  await AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_TOKEN_KEY]);
+  sessionGeneration += 1;
+  await queueTokenWrite(() => AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_TOKEN_KEY]));
 }
 
 export class ApiError extends Error {
@@ -58,11 +73,13 @@ interface RefreshedTokens {
   refreshToken: string;
 }
 
-let refreshInProgress: Promise<string | null> | null = null;
+let refreshInProgress: { generation: number; promise: Promise<string | null> } | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
+async function refreshAccessToken(generation: number): Promise<string | null> {
+  await tokenWrite;
   const refreshToken = await getRefreshToken();
   if (!refreshToken) return null;
+  if (generation !== sessionGeneration) throw new Error("The account session changed.");
 
   const response = await fetchWithToken(
     "/api/v1/auth/refresh",
@@ -74,22 +91,37 @@ async function refreshAccessToken(): Promise<string | null> {
     null,
   );
   if (!response.ok) {
-    if (response.status === 401) await clearToken();
+    if (response.status === 401) {
+      await queueTokenWrite(async () => {
+        if (generation === sessionGeneration) {
+          sessionGeneration += 1;
+          await AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_TOKEN_KEY]);
+        }
+      });
+    }
     throw await toApiError(response);
   }
 
   const tokens = (await response.json()) as RefreshedTokens;
-  await setAuthTokens(tokens.accessToken, tokens.refreshToken);
+  await queueTokenWrite(async () => {
+    if (generation !== sessionGeneration) throw new Error("The account session changed.");
+    await AsyncStorage.multiSet([
+      [TOKEN_KEY, tokens.accessToken],
+      [REFRESH_TOKEN_KEY, tokens.refreshToken],
+    ]);
+  });
   return tokens.accessToken;
 }
 
 function refreshOnce(): Promise<string | null> {
-  if (!refreshInProgress) {
-    refreshInProgress = refreshAccessToken().finally(() => {
-      refreshInProgress = null;
+  const generation = sessionGeneration;
+  if (refreshInProgress?.generation !== generation) {
+    const promise = refreshAccessToken(generation).finally(() => {
+      if (refreshInProgress?.promise === promise) refreshInProgress = null;
     });
+    refreshInProgress = { generation, promise };
   }
-  return refreshInProgress;
+  return refreshInProgress.promise;
 }
 
 export async function refreshSession(): Promise<string> {
@@ -184,12 +216,25 @@ async function request<T>(
   }
 
   if (!response.ok) throw await toApiError(response);
-  if (response.status === 204) return undefined as T;
+  // Some endpoints (e.g. DELETE) answer 200 with an empty body; parsing that as JSON would throw.
+  if (response.status === 204 || response.headers?.get?.("content-length") === "0") return undefined as T;
   return response.json() as Promise<T>;
+}
+
+async function getBlob(path: string): Promise<Blob> {
+  let token = await getToken();
+  let response = await fetchWithToken(path, {}, token, UPLOAD_TIMEOUT_MS);
+  if (response.status === 401 && token) {
+    token = await refreshOnce();
+    if (token) response = await fetchWithToken(path, {}, token, UPLOAD_TIMEOUT_MS);
+  }
+  if (!response.ok) throw await toApiError(response);
+  return response.blob();
 }
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
+  getBlob,
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }),
   /** Multipart upload, e.g. photos. */

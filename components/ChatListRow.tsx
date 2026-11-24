@@ -28,7 +28,9 @@ export function ChatListRow({
 }) {
   const colors = useChatColors();
   const displayName =
-    contact.isInAddressBook === false ? contact.phone : contact.name;
+    contact.isInAddressBook === false && contact.phone
+      ? contact.phone
+      : contact.name;
   const date = time ? new Date(time) : null;
   const label =
     date?.toDateString() === new Date().toDateString()

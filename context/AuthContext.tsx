@@ -4,11 +4,15 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
+import { AppState } from "react-native";
 
 import { DEMO_AUTH, type LoginInput, type SignupInput } from "@/constants/auth";
 import { getAppleCredential, getGoogleCredential } from "@/services/socialAuth";
+import { fetchAccountWithCurrentRoles } from "@/services/accountRoleSync";
+import { getMyOrganiserApplication, type OrganiserApplication } from "@/services/organiserApplicationService";
 import { ONBOARDING_COMPLETE_KEY } from "@/constants/onboarding";
 import {
   activeOrganiserSubscription,
@@ -35,6 +39,7 @@ import {
   ApiError,
   clearToken,
   getRefreshToken,
+  getSessionGeneration,
   getToken,
   refreshSession,
   setAuthTokens,
@@ -67,6 +72,9 @@ export interface User {
   savedEvents: string[];
   joinedDate: string;
   isDemo?: boolean;
+  /** Roles last received from the API, used to detect out-of-band changes. */
+  serverRoles?: string[];
+  organiserApplication?: OrganiserApplication | null;
   /** Paid organiser plan. Active but without an organisation means setup is still pending. */
   organiserSubscription?: OrganiserSubscription;
   /** Organisations owned by this account. */
@@ -125,6 +133,7 @@ function mapApiUser(remote: ApiUser, cached?: User): User {
     avatarUrl: remote.avatarUrl ?? previous?.avatarUrl,
     isPhoneVerified: remote.isPhoneVerified ?? Boolean(remote.phone),
     isBusinessAccount: hasPublisherRole || previous?.isBusinessAccount === true,
+    serverRoles: remote.roles ?? previous?.serverRoles,
     accountType,
     bio: remote.bio !== undefined ? remote.bio ?? undefined : previous?.bio,
     location: remote.location !== undefined ? remote.location ?? undefined : previous?.location,
@@ -243,7 +252,7 @@ function normaliseOrganisationState(user: User): User {
 
 async function hydrateOrganiserState(user: User): Promise<User> {
   if (!USE_ORGANISER_API || user.isDemo) return user;
-  const [remote, subscriptions] = await Promise.all([fetchMyOrganisations(), fetchMyOrganiserSubscriptions()]);
+  const [remote, subscriptions, organiserApplication] = await Promise.all([fetchMyOrganisations(), fetchMyOrganiserSubscriptions(), getMyOrganiserApplication()]);
   const organiserSubscription = activeOrganiserSubscription(subscriptions);
   return normaliseOrganisationState({
     ...user,
@@ -251,6 +260,7 @@ async function hydrateOrganiserState(user: User): Promise<User> {
     organisation: undefined,
     activeOrganisationId: remote.activeOrganisationId ?? user.activeOrganisationId,
     organiserSubscription,
+    organiserApplication,
     isBusinessAccount: remote.organisations.length > 0,
     accountType: remote.organisations.length > 0 ? "business" : organiserSubscription ? "individual" : user.accountType,
     businessName: undefined,
@@ -272,6 +282,9 @@ const DEFAULT_USER: User = {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const userRef = useRef<User | null>(null);
+  const userRevision = useRef(0);
+  const organiserSync = useRef<Promise<void> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [pendingOTPContext, setPendingOTPContext] = useState<{
@@ -305,9 +318,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           cachedUser = null;
         }
         if (token && !token.startsWith("demo_token_")) {
-          const remote = await api.get<ApiUser>("/api/v1/auth/me");
+          const remote = await fetchAccountWithCurrentRoles<ApiUser>(cachedUser?.serverRoles);
           const mappedUser = mapApiUser(remote, cachedUser ?? undefined);
-          const mapped = await hydrateOrganiserState(mappedUser).catch(() => mappedUser);
+          const mapped = await hydrateOrganiserState(mappedUser).catch((error) => {
+            console.warn("Could not refresh organiser access:", error);
+            return mappedUser;
+          });
           cachedUser = {
             ...mapped,
             savedEvents: await fetchSavedEventIds().catch(() => mapped.savedEvents),
@@ -321,7 +337,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           cachedUser = null;
         }
       } finally {
-        setUser(cachedUser ? normaliseOrganisationState(cachedUser) : null);
+        userRef.current = cachedUser ? normaliseOrganisationState(cachedUser) : null;
+        setUser(userRef.current);
         setIsLoading(false);
       }
     })();
@@ -329,6 +346,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const persistUser = useCallback(async (u: User) => {
     const normalisedUser = normaliseOrganisationState(u);
+    userRevision.current += 1;
+    userRef.current = normalisedUser;
     await AsyncStorage.removeItem("@eventis_logged_out");
     await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(normalisedUser));
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
@@ -380,10 +399,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setHasCompletedOnboarding(true);
   }, []);
   const logout = useCallback(async () => {
-    const token = await getToken();
-    const refreshToken = await getRefreshToken();
-    if (user && !user.isDemo && token && !token.startsWith("demo_token_") && refreshToken) {
-      await api.post<void>("/api/v1/auth/logout", { refreshToken });
+    userRevision.current += 1;
+    userRef.current = null;
+    try {
+      if (organiserSync.current) {
+        await organiserSync.current.catch((error) => console.warn("Could not finish organiser refresh:", error));
+      }
+      const token = await getToken();
+      const refreshToken = await getRefreshToken();
+      if (user && !user.isDemo && token && !token.startsWith("demo_token_") && refreshToken) {
+        await api.post<void>("/api/v1/auth/logout", { refreshToken });
+      }
+    } catch (error) {
+      userRef.current = user;
+      throw error;
     }
     await clearToken();
     await AsyncStorage.multiRemove([USER_CACHE_KEY, BOOKINGS_CACHE_KEY]);
@@ -391,6 +420,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setHasCompletedOnboarding(true);
     setPendingSignup(null);
     setUser(null);
+    userRef.current = null;
   }, [user]);
 
   const deleteAccount = useCallback(
@@ -402,6 +432,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!localOnly) await requestAccountDeletion(deletionToken, confirmation);
 
       const userId = user?.id;
+      userRevision.current += 1;
+      userRef.current = null;
       setUser(null);
       setHasCompletedOnboarding(false);
       await clearToken();
@@ -675,15 +707,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, persistUser]);
 
   const refreshOrganiserSubscription = useCallback(async () => {
-    if (!user) return;
-    const token = await getToken();
-    if (user.isDemo || !token || token.startsWith("demo_token_")) return;
-    try {
-      await persistUser(await hydrateOrganiserState(user));
-    } catch {
-      // Keep whatever the app already had; the tracking screen lets the member retry.
-    }
-  }, [user, persistUser]);
+    if (organiserSync.current) return organiserSync.current;
+    const sync = async () => {
+      const current = userRef.current;
+      if (!current || current.isDemo || !USE_ORGANISER_API) return;
+      const revision = userRevision.current;
+      const generation = getSessionGeneration();
+      const token = await getToken();
+      if (!token || token.startsWith("demo_token_")) return;
+      const remote = await fetchAccountWithCurrentRoles<ApiUser>(current.serverRoles, current.id);
+      const next = await hydrateOrganiserState(mapApiUser(remote, current));
+      if (revision !== userRevision.current || generation !== getSessionGeneration() || userRef.current?.id !== current.id) return;
+      if (JSON.stringify(next) === JSON.stringify(current)) return;
+      await persistUser(next);
+    };
+    const pending = sync().finally(() => { organiserSync.current = null; });
+    organiserSync.current = pending;
+    return pending;
+  }, [persistUser]);
+
+  useEffect(() => {
+    if (!user || user.isDemo || !USE_ORGANISER_API) return;
+    const check = () => {
+      void refreshOrganiserSubscription().catch((error) => {
+        console.warn("Could not refresh organiser access:", error);
+      });
+    };
+    check();
+    const timer = setInterval(() => {
+      if (AppState.currentState === "active") check();
+    }, 30_000);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") check();
+    });
+    return () => { clearInterval(timer); subscription.remove(); };
+  }, [user?.id, user?.isDemo, refreshOrganiserSubscription]);
 
   // The active organisation alias keeps existing organiser screens compatible
   // while the collection supports owning and switching between organisations.

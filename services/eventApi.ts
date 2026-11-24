@@ -242,9 +242,11 @@ function toApiPayload(
     ...(status ? { status } : {}),
     capacity: input.capacity > 0 ? input.capacity : null,
     is_paid: input.isPaid,
-    ...(input.isPaid ? { price_minor: String(Math.round(input.price)) } : {}),
+    // Paid entry: optional price (null clears it), required external ticket link.
+    // Free entry: the API clears both.
+    ...(input.isPaid ? { price_minor: input.price > 0 ? String(Math.round(input.price)) : null } : {}),
     currency: "RWF",
-    ...(input.isPaid && input.websiteUrl ? { booking_url: input.websiteUrl.trim() } : {}),
+    ...(input.isPaid && input.websiteUrl?.trim() ? { booking_url: input.websiteUrl.trim() } : {}),
     tags: [input.category.toLowerCase()],
   };
 }

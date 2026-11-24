@@ -123,6 +123,34 @@ test("uses the caption as a text layer when another client sends no overlays", (
   assert.equal(story.overlays[0].text, "Backstage in five minutes");
 });
 
+test("a caption written separately from the text layers is shown under the story", () => {
+  const { mapApiStatus } = loadStatusService();
+  const story = mapApiStatus(record({ caption: "Doors open at 8pm, bring a friend" }));
+
+  assert.equal(story.overlays[0].text, "Tonight");
+  assert.equal(story.caption, "Doors open at 8pm, bring a friend");
+});
+
+test("older stories whose caption repeats the text layers don't show it twice", () => {
+  const { mapApiStatus } = loadStatusService();
+  assert.equal(mapApiStatus(record()).caption, undefined);
+  const twoLayers = mapApiStatus(record({
+    caption: "Tonight\nSee you there",
+    overlays: [
+      { id: "a", text: "Tonight", kind: "text", x: 0.5, y: 0.4, color: "#FFFFFF", style: "bold", size: 28 },
+      { id: "b", text: " See you there ", kind: "sticker", x: 0.5, y: 0.7, color: "#FFFFFF", style: "label", size: 24 },
+    ],
+  }));
+  assert.equal(twoLayers.caption, undefined);
+});
+
+test("a caption-only story keeps showing its caption as the text layer, not twice", () => {
+  const { mapApiStatus } = loadStatusService();
+  const story = mapApiStatus(record({ media_type: "text", media_url: null, caption: "Backstage", overlays: [] }));
+  assert.equal(story.overlays[0].text, "Backstage");
+  assert.equal(story.caption, undefined);
+});
+
 test("uploads media first and submits the returned URL with the status", async () => {
   const { publishStatus } = loadStatusService();
   await publishStatus({

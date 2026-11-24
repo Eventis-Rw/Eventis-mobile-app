@@ -35,6 +35,7 @@ import { organiserIdFromName } from "@/services/profileService";
 import { shareEvent } from "@/utils/shareEvent";
 import { useAnalytics } from "@/context/AnalyticsContext";
 import type { AnalyticsSource } from "@/services/analyticsService";
+import { admissionLabel, hasTicketPrice, ticketLink } from "@/utils/admission";
 
 export default function EventDetailScreen() {
   const { id, source: routeSource } = useLocalSearchParams<{ id: string; source?: string }>();
@@ -188,6 +189,16 @@ export default function EventDetailScreen() {
     } catch { /* An unavailable maps app isn't a completed action. */ }
   }, [event, trackEvent]);
 
+  // Paid entry: tickets are bought on the organiser's external ticket link.
+  const ticketUrl = event ? ticketLink(event) : undefined;
+  const openTickets = useCallback(async () => {
+    if (!event || !ticketUrl) return;
+    try {
+      await Linking.openURL(ticketUrl);
+      trackEvent(event, "website_click", "details");
+    } catch { /* Only record successful hand-offs. */ }
+  }, [event, ticketUrl, trackEvent]);
+
   const openWebsite = useCallback(async () => {
     if (!event?.organizerWebsite) return;
     try {
@@ -237,10 +248,10 @@ export default function EventDetailScreen() {
   }
 
   const instructions = (event.instructions ?? []).map((item) => item.trim()).filter(Boolean);
-  const price =
-    !event.isPaid || event.price <= 0
-      ? "Free entry"
-      : `${event.currency} ${event.price.toLocaleString()}`;
+  // Free entry, a paid event with its ticket price, or paid entry whose price is set on the ticket page.
+  const ticketPriced = hasTicketPrice(event);
+  const price = admissionLabel(event);
+  const admissionText = event.isPaid ? price : "FREE ENTRY";
 
   const isLongDescription = event.description.length > 220;
   const webBlurStyle =
@@ -421,12 +432,28 @@ export default function EventDetailScreen() {
             </View>
             <View style={styles.cardInfoCol}>
               <Text style={styles.cardInfoEyebrow}>ADMISSION & TICKETS</Text>
-              <Text style={styles.cardInfoMainText}>{price}</Text>
+              <Text style={styles.cardInfoMainText} testID="admission-label">{admissionText}</Text>
               <Text style={styles.cardInfoSubText}>
                 {event.isPaid
-                  ? "Instant ticket confirmation · Mobile check-in"
+                  ? ticketPriced
+                    ? "Ticket price · Buy on the organiser's ticket page"
+                    : "Price shown on the organiser's ticket page"
                   : "No reservation needed · Free community access"}
               </Text>
+              {ticketUrl ? (
+                <Pressable
+                  onPress={openTickets}
+                  accessibilityRole="link"
+                  accessibilityLabel="Get tickets"
+                  accessibilityHint="Opens the organiser's ticket page"
+                  testID="get-tickets"
+                  style={({ pressed }) => [styles.getTicketsBtn, { opacity: pressed ? 0.85 : 1 }]}
+                >
+                  <Ionicons name="ticket" size={16} color={colors.primaryForeground} />
+                  <Text style={styles.getTicketsText}>Get Tickets</Text>
+                  <Ionicons name="open-outline" size={14} color={colors.primaryForeground} />
+                </Pressable>
+              ) : null}
             </View>
           </DetailSurface>
 
@@ -1237,6 +1264,22 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
   organizerBtnOutline: {
     backgroundColor: `${colors.primary}14`,
     borderColor: `${colors.primary}14`,
+  },
+  getTicketsBtn: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+  },
+  getTicketsText: {
+    color: colors.primaryForeground,
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
   },
   organizerBtnText: {
     color: colors.primary,

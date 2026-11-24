@@ -55,6 +55,14 @@ Rebuild the app after installing native modules and configuring OAuth clients. G
 
 Existing accounts are never silently merged based on provider email. If a provider's email is already used by another account, sign in using that account's existing method. Linking additional providers to an existing account needs a separate authenticated linking flow and is not included here.
 
+## Organiser approval
+
+Preview and production EAS builds enable the live organiser API. Customers submit organisation details before paying. An administrator verifies the receipt and records its provider transaction ID; this moves the application to `IN_REVIEW` but does not grant organiser permissions. A separate application approval creates the organiser profile and activates the purchased plan. Rejected applicants see the reason and may submit a new application with a new verified payment. Existing organisers retain access and can renew their plans.
+
+The app checks account, application and subscription state when it opens, returns to the foreground, and every 30 seconds while active. When server roles change it rotates the session tokens. Payment history also supports refresh and retry.
+
+Deploy the API and database migration together with the updated admin dashboard, then distribute a new APK; an installed older APK cannot display the new application form or status. Existing pending receipts require the applicant to complete the new form before verification. In a staging environment, verify an unconfirmed receipt, successful verification, rejection and reapplication, and approval; confirm event creation is denied before approval and allowed afterwards. Repeat after backgrounding, restarting and signing in again.
+
 ## Verification
 
 Run `pnpm test:auth` in the mobile app and the identity tests in the API. With real credentials and delivery configured, verify email registration → code → home → restart → sign out → email sign-in; then test Google and Apple cancellation, first registration, returning sign-in, restart, and sign-out on supported devices. Also verify phone registration/sign-in and phone-gated features for accounts without a phone.

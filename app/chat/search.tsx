@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -44,6 +44,13 @@ export default function ChatSearchScreen() {
     query: string;
     result: PhoneLookupResult;
   } | null>(null);
+  const [directoryUsers, setDirectoryUsers] = useState<ChatContact[]>([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [directoryError, setDirectoryError] = useState<string | null>(null);
+  const [directoryHasMore, setDirectoryHasMore] = useState(false);
+  const [directoryRetry, setDirectoryRetry] = useState(0);
+  const directoryPage = useRef(1);
+  const directoryRequest = useRef(0);
   const run = async (action: () => Promise<unknown>) => {
     if (working.current) return;
     working.current = true;
@@ -58,14 +65,75 @@ export default function ChatSearchScreen() {
       setBusy(false);
     }
   };
+  useEffect(() => {
+    if (callMode || chat.isDemoMode || (normalized.replace(/^@+/, "").length === 1)) {
+      directoryRequest.current += 1;
+      setDirectoryUsers([]);
+      setDirectoryError(null);
+      setDirectoryHasMore(false);
+      setDirectoryLoading(false);
+      directoryPage.current = 1;
+      return;
+    }
+    const requestId = ++directoryRequest.current;
+    const timer = setTimeout(() => {
+      setDirectoryLoading(true);
+      setDirectoryError(null);
+      directoryPage.current = 1;
+      void chat.searchUsers(normalized, 1).then((result) => {
+        if (requestId !== directoryRequest.current) return;
+        setDirectoryUsers(result.items);
+        setDirectoryHasMore(result.hasMore);
+        directoryPage.current = 1;
+      }).catch((cause: unknown) => {
+        if (requestId !== directoryRequest.current) return;
+        setDirectoryUsers([]);
+        setDirectoryHasMore(false);
+        setDirectoryError(cause instanceof Error ? cause.message : "Eventis users could not be loaded.");
+      }).finally(() => {
+        if (requestId === directoryRequest.current) setDirectoryLoading(false);
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [normalized, callMode, chat.isDemoMode, chat.searchUsers, directoryRetry]);
+
+  const loadMoreUsers = async () => {
+    if (directoryLoading || !directoryHasMore) return;
+    setDirectoryLoading(true);
+    setDirectoryError(null);
+    const nextPage = directoryPage.current + 1;
+    const requestId = directoryRequest.current;
+    try {
+      const result = await chat.searchUsers(normalized, nextPage);
+      if (requestId !== directoryRequest.current) return;
+      setDirectoryUsers((current) => {
+        const known = new Set(current.map((contact) => contact.id));
+        return [...current, ...result.items.filter((contact) => !known.has(contact.id))];
+      });
+      directoryPage.current = nextPage;
+      setDirectoryHasMore(result.hasMore);
+    } catch (cause) {
+      if (requestId !== directoryRequest.current) return;
+      setDirectoryError(cause instanceof Error ? cause.message : "More Eventis users could not be loaded.");
+    } finally {
+      if (requestId === directoryRequest.current) setDirectoryLoading(false);
+    }
+  };
   const rows = useMemo(() => {
     const result: SearchRow[] = [];
     const digits = normalized.replace(/\D/g, "");
-    const contacts = chat.contacts
+    const directoryById = new Map(directoryUsers.map((contact) => [contact.id, contact]));
+    const addressBook = chat.contacts.map((contact) => {
+      const serverProfile = directoryById.get(contact.id);
+      return serverProfile ? { ...contact, username: serverProfile.username, headline: serverProfile.headline } : contact;
+    });
+    const addressBookIds = new Set(addressBook.filter((contact) => contact.isEventisUser).map((contact) => contact.id));
+    const serverOnly = directoryUsers.filter((contact) => !addressBookIds.has(contact.id));
+    const contacts = addressBook
       .filter(
         (contact) =>
           !normalized ||
-          `${contact.name} ${contact.headline} ${contact.phone}`
+          `${contact.name} ${contact.username ?? ""} ${contact.headline} ${contact.phone}`
             .toLowerCase()
             .includes(normalized) ||
           (digits.length >= 3 &&
@@ -73,15 +141,17 @@ export default function ChatSearchScreen() {
             contact.phone.replace(/\D/g, "").includes(digits)),
       )
       .sort((a, b) => a.name.localeCompare(b.name));
-    for (const isMember of [true, false]) {
-      const group = contacts.filter(
-        (contact) => contact.isEventisUser === isMember,
-      );
+    for (const groupInfo of [
+      { id: "phone-members", title: "Phone contacts on Eventis", contacts: contacts.filter((contact) => contact.isEventisUser) },
+      { id: "directory", title: "Eventis users", contacts: serverOnly },
+      { id: "invites", title: "Invite to Eventis", contacts: contacts.filter((contact) => !contact.isEventisUser) },
+    ]) {
+      const group = groupInfo.contacts;
       if (!group.length) continue;
       result.push({
         kind: "heading",
-        id: isMember ? "contacts" : "invites",
-        title: isMember ? "Contacts" : "Invite to Eventis",
+        id: groupInfo.id,
+        title: groupInfo.title,
       });
       result.push(
         ...group.map((contact) => ({
@@ -116,7 +186,7 @@ export default function ChatSearchScreen() {
         );
     }
     return result;
-  }, [chat.contacts, chat.conversations, chat.allMessages, normalized, callMode]);
+  }, [chat.contacts, chat.conversations, chat.allMessages, normalized, callMode, directoryUsers]);
 
   function openContact(contact: ChatContact) {
     if (callMode) {
@@ -195,12 +265,12 @@ export default function ChatSearchScreen() {
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               placeholder={
-                callMode ? "Search a contact to call" : "Search chats"
+                callMode ? "Search a contact to call" : "Search chats or username"
               }
               accessibilityLabel={
                 callMode
                   ? "Search a contact to call"
-                  : "Search contacts and messages"
+                  : "Search contacts, messages, or Eventis username"
               }
               returnKeyType="search"
               autoCorrect={false}
@@ -228,6 +298,17 @@ export default function ChatSearchScreen() {
         </View>
         {busy || chat.isLoading ? (
           <ActivityIndicator color={colors.primary} style={styles.notice} />
+        ) : null}
+        {directoryLoading ? (
+          <View style={styles.directoryNotice}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={{ color: colors.mutedForeground }}>Searching Eventis users…</Text>
+          </View>
+        ) : null}
+        {directoryError ? (
+          <Pressable onPress={() => setDirectoryRetry((count) => count + 1)} style={styles.notice}>
+            <Text style={{ color: colors.destructive }}>{directoryError} Tap to retry.</Text>
+          </Pressable>
         ) : null}
         {error || chat.error ? (
           <Pressable
@@ -266,26 +347,19 @@ export default function ChatSearchScreen() {
                   contact={item.contact}
                   subtitle={
                     item.contact.isEventisUser
-                      ? item.contact.headline
+                      ? item.contact.isInAddressBook === false
+                        ? "Registered Eventis user · Tap to message"
+                        : item.contact.headline
                       : item.contact.invited
                         ? "Invitation ready to share"
                         : "Invite to Eventis"
                   }
                   onPress={() => openContact(item.contact)}
-                  actionLabel={
-                    !item.contact.isEventisUser
-                      ? item.contact.invited
-                        ? "Invited"
-                        : "Invite"
-                      : undefined
-                  }
+                  actionLabel={item.contact.isEventisUser ? "Message" : item.contact.invited ? "Invited" : "Invite"}
                   actionDisabled={item.contact.invited}
-                  onAction={
-                    !item.contact.isEventisUser
-                      ? () =>
-                          void run(() => chat.inviteContact(item.contact.id))
-                      : undefined
-                  }
+                  onAction={item.contact.isEventisUser
+                    ? () => openContact(item.contact)
+                    : () => void run(() => chat.inviteContact(item.contact.id))}
                 />
               );
             return (
@@ -307,7 +381,7 @@ export default function ChatSearchScreen() {
             );
           }}
           ListEmptyComponent={
-            !chat.isLoading ? (
+            !chat.isLoading && !directoryLoading ? (
               <View style={styles.empty}>
                 <Ionicons
                   name="search-outline"
@@ -320,7 +394,7 @@ export default function ChatSearchScreen() {
                 <Text style={[styles.hint, { color: colors.mutedForeground }]}>
                   {callMode
                     ? "Search for a saved contact, then tap their name to call."
-                    : "Search by a saved name, phone number or words in a message."}
+                    : "Search saved contacts and messages, or enter an Eventis username to find registered users."}
                 </Text>
                 {!chat.isDemoMode && !callMode ? (
                   <Pressable
@@ -340,7 +414,14 @@ export default function ChatSearchScreen() {
             ) : undefined
           }
           ListFooterComponent={
-            phoneQuery ? (
+            <View>
+            {directoryHasMore && normalized.length >= 2 && !callMode ? (
+              <Pressable disabled={directoryLoading} onPress={() => void loadMoreUsers()} style={[styles.lookup, { backgroundColor: colors.secondary, marginHorizontal: 18, marginTop: 12 }]}>
+                {directoryLoading ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="people-outline" size={18} color={colors.primary} />}
+                <Text style={{ color: colors.primary }}>Load more Eventis users</Text>
+              </Pressable>
+            ) : null}
+            {phoneQuery ? (
               <View style={styles.notice}>
                 <Pressable
                   disabled={busy}
@@ -417,7 +498,8 @@ export default function ChatSearchScreen() {
                   />
                 ) : null}
               </View>
-            ) : undefined
+            ) : null}
+            </View>
           }
         />
       </View>
@@ -468,6 +550,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   notice: { padding: 16 },
+  directoryNotice: { paddingHorizontal: 18, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 9 },
   empty: {
     flex: 1,
     alignItems: "center",

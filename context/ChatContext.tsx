@@ -24,6 +24,7 @@ import {
   type ChatContactUpdate,
   type ChatMessage,
   type ChatService,
+  type ChatUserSearchPage,
   type PhoneLookupResult,
   type SendMessageOptions,
 } from "@/services/chatService";
@@ -101,6 +102,7 @@ interface ChatContextValue {
     update: ChatContactUpdate,
   ) => Promise<ChatContact>;
   lookupPhone: (phone: string) => Promise<PhoneLookupResult>;
+  searchUsers: (query: string, page?: number) => Promise<ChatUserSearchPage>;
   markConversationRead: (conversationId: string) => Promise<void>;
   syncDeviceContacts: () => Promise<number>;
   acceptInvitation: (token: string) => Promise<ChatConversation>;
@@ -392,6 +394,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return result;
   }, []);
 
+  const searchUsers = useCallback(
+    (query: string, page = 1) => serviceRef.current.searchUsers(query, page),
+    [],
+  );
+
   const markConversationRead = useCallback(async (conversationId: string) => {
     await serviceRef.current.markConversationRead(conversationId);
     setConversations((current) =>
@@ -597,6 +604,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       updateContactName,
       updateContact,
       lookupPhone,
+      searchUsers,
       markConversationRead,
       syncDeviceContacts,
       acceptInvitation,
@@ -630,6 +638,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       updateContactName,
       updateContact,
       lookupPhone,
+      searchUsers,
       markConversationRead,
       syncDeviceContacts,
       acceptInvitation,

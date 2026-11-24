@@ -18,6 +18,7 @@ import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { describeProfileError } from "@/services/profileService";
 import { localToday } from "@/utils/dates";
+import { admissionLabel } from "@/utils/admission";
 import {
   deletePublisherEvent,
   fetchPublisherEvent,
@@ -158,7 +159,7 @@ export default function ManageEventScreen() {
             </Text>
             <Text style={[styles.meta, { color: colors.mutedForeground }]}>{event.location}</Text>
             <Text style={[styles.meta, { color: colors.foreground }]}>
-              {event.isPaid ? `${event.currency} ${event.price.toLocaleString()} · paid on your website` : "Free entry"}
+              {event.isPaid ? `${admissionLabel(event)} · tickets on your ticket link` : "Free entry"}
             </Text>
           </View>
         </OrganiserSurface>

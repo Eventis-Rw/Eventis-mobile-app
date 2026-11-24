@@ -24,6 +24,7 @@ import {
 import {
   fetchManualPaymentMethods,
   formatMinorAmount,
+  isDuplicateManualPaymentError,
   submitManualPayment,
   uploadPaymentReceipt,
   type ManualPaymentMethod,
@@ -144,6 +145,7 @@ function ManualMembershipCheckout() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [duplicatePayment, setDuplicatePayment] = useState(false);
   const [submission, setSubmission] = useState<ManualPaymentSubmission | null>(null);
 
   useEffect(() => {
@@ -243,6 +245,7 @@ function ManualMembershipCheckout() {
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       setSubmitError(describeError(err, "We couldn't submit your payment. Please try again."));
+      setDuplicatePayment(isDuplicateManualPaymentError(err));
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSubmitting(false);
@@ -270,6 +273,22 @@ function ManualMembershipCheckout() {
     );
   }
 
+  if (submitError && duplicatePayment) {
+    return (
+      <LoveScreenShell title="Membership" onBack={() => router.replace("/(tabs)" as any)}>
+        <View style={styles.status}>
+          <View style={[styles.statusIcon, { backgroundColor: colors.secondary }]}>
+            <Ionicons name="time-outline" size={30} color={colors.warning} />
+          </View>
+          <Text style={[styles.statusTitle, { color: colors.foreground }]}>Payment already submitted</Text>
+          <Text style={[styles.statusText, { color: colors.mutedForeground }]}>{submitError}</Text>
+          <PrimaryButton label="View my payments" onPress={() => router.push("/love/payments" as any)} />
+          <TextButton label="Back to home" onPress={() => router.replace("/(tabs)" as any)} />
+        </View>
+      </LoveScreenShell>
+    );
+  }
+
   if (step === "upload") {
     return (
       <LoveScreenShell title="Membership" onBack={() => setStep("method")} stepLabel="Upload receipt">
@@ -291,6 +310,7 @@ function ManualMembershipCheckout() {
         />
         {photoError ? <InlineError message={photoError} /> : null}
         {submitError ? <InlineError message={submitError} /> : null}
+        {submitError ? <TextButton label="Back to home" onPress={() => router.replace("/(tabs)" as any)} /> : null}
         <PrimaryButton
           label={submitting ? "Submitting…" : "Submit for review"}
           onPress={() => void submit()}

@@ -53,8 +53,8 @@ const PUBLISHER_FAQS: Faq[] = [
     a: "Open your profile, choose Event Management, then Create event. Published events appear in discovery straight away.",
   },
   {
-    q: "Why can't I sell paid tickets?",
-    a: "Only verified businesses can publish paid events. Businesses can apply in Settings → Verification with their registration details, TIN and payment website.",
+    q: "Can I sell tickets for my event?",
+    a: "Yes. In Tickets & entry choose Paid entry and add the link where people buy tickets, such as your website or a ticket platform. The price is optional. Eventis doesn't process payments.",
   },
   {
     q: "How long does business verification take?",

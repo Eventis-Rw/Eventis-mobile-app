@@ -189,11 +189,11 @@ test("phone codes require six digits and the demo accepts any six digits", async
   assert.equal(ok.isPhoneVerified, true);
 });
 
-test("paid publishing stays locked until a business is verified", () => {
+test("paid entry with an external ticket link doesn't wait for business verification", () => {
   for (const businessVerification of ["unverified", "pending", "rejected"]) {
     const caps = getAccountCapabilities({ accountType: "business", hasOrganiserAccess: true, isPhoneVerified: true, businessVerification });
-    assert.equal(caps.canPublishPaidEvents, false, businessVerification);
-    assert.match(caps.paidEventsBlockedReason, /verification/);
+    assert.equal(caps.canPublishPaidEvents, true, businessVerification);
+    assert.equal(caps.paidEventsBlockedReason, undefined, businessVerification);
   }
 });
 
@@ -242,11 +242,11 @@ test("unsupported features are hidden rather than shown", () => {
   assert.equal(caps.settings.languagePreference, false);
 });
 
-test("individual posters manage events but cannot publish paid events or see analytics", () => {
+test("individual posters manage free and paid events but don't see analytics", () => {
   const caps = getAccountCapabilities({ accountType: "individual", hasOrganiserAccess: true, isPhoneVerified: true });
   assert.deepEqual(tabKeys(caps), ["overview", "published", "manage"]);
-  assert.equal(caps.canPublishPaidEvents, false);
-  assert.match(caps.paidEventsBlockedReason, /business/);
+  assert.equal(caps.canPublishPaidEvents, true);
+  assert.equal(caps.paidEventsBlockedReason, undefined);
   assert.equal(caps.settings.businessVerification, false);
 });
 
@@ -257,13 +257,16 @@ test("publishers without organiser access only see their published events", () =
   assert.equal(caps.canPromote, false);
 });
 
-test("paid publishing is unlocked only for verified businesses", () => {
+test("paid publishing needs organiser access, not business verification", () => {
   const base = { accountType: "business", hasOrganiserAccess: true, isPhoneVerified: true };
   for (const status of [undefined, "unverified", "pending", "rejected"]) {
     const caps = getAccountCapabilities({ ...base, businessVerification: status });
-    assert.equal(caps.canPublishPaidEvents, false, `status ${status}`);
-    assert.match(caps.paidEventsBlockedReason, /verification/);
+    assert.equal(caps.canPublishPaidEvents, true, `status ${status}`);
+    assert.equal(caps.paidEventsBlockedReason, undefined);
   }
+  const noAccess = getAccountCapabilities({ ...base, hasOrganiserAccess: false, businessVerification: "verified" });
+  assert.equal(noAccess.canPublishPaidEvents, false);
+  assert.match(noAccess.paidEventsBlockedReason, /Organiser access/);
   const verified = getAccountCapabilities({ ...base, businessVerification: "verified" });
   assert.deepEqual(tabKeys(verified), ["overview", "published", "manage", "analytics"]);
   assert.equal(verified.canPublishPaidEvents, true);
@@ -368,10 +371,14 @@ test("event input validation covers dates, times, capacity and paid rules", () =
   assert.match(publisher.validateEventInput(eventInput({ time: "24:00" }), today), /HH:MM/);
   assert.equal(publisher.validateEventInput(eventInput({ capacity: 0 }), today), null);
   assert.match(publisher.validateEventInput(eventInput({ capacity: -1 }), today), /capacity/i);
-  assert.match(publisher.validateEventInput(eventInput({ isPaid: true, price: 0 }), today), /price/);
+  // Paid entry: the ticket price is optional, the external ticket link is required.
+  assert.equal(publisher.validateEventInput(eventInput({ isPaid: true, price: 0, websiteUrl: "https://tix.rw/jazz" }), today), null);
+  assert.match(publisher.validateEventInput(eventInput({ isPaid: true, price: 0 }), today), /link/);
+  assert.match(publisher.validateEventInput(eventInput({ isPaid: true, price: -5, websiteUrl: "https://tix.rw/jazz" }), today), /price/);
+  assert.match(publisher.validateEventInput(eventInput({ isPaid: true, price: Number.NaN, websiteUrl: "https://tix.rw/jazz" }), today), /price/);
   assert.match(
     publisher.validateEventInput(eventInput({ isPaid: true, price: 5000, websiteUrl: "tickets" }), today),
-    /website/,
+    /link/,
   );
   assert.equal(
     publisher.validateEventInput(eventInput({ isPaid: true, price: 5000, websiteUrl: "https://tix.rw/jazz" }), today),
@@ -399,6 +406,17 @@ test("publishers create, edit, pause and delete only their own events", async ()
   await assert.rejects(publisher.deletePublisherEvent("u2", created.id), /no longer exists/);
   await publisher.deletePublisherEvent("u1", created.id);
   assert.equal((await publisher.fetchPublisherEvents("u1")).length, 0);
+});
+
+test("paid entry without a price stays paid and keeps its ticket link", async () => {
+  const created = await publisher.createPublisherEvent(
+    "u1",
+    "Jazz Co",
+    eventInput({ isPaid: true, price: 0, websiteUrl: "https://tix.rw/jazz" }),
+  );
+  assert.equal(created.isPaid, true);
+  assert.equal(created.price, 0);
+  assert.equal(created.organizerWebsite, "https://tix.rw/jazz");
 });
 
 test("free events drop any price or payment site", async () => {

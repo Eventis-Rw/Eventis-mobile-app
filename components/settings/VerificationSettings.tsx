@@ -7,10 +7,10 @@ import type { BusinessVerificationStatus } from "@/services/profileService";
 import type { AccountCapabilities } from "@/utils/accountCapabilities";
 
 const BUSINESS_STATUS: Record<BusinessVerificationStatus, { text: string; tone: "success" | "warning" | "destructive" | "mutedForeground"; sublabel: string }> = {
-  verified: { text: "Verified", tone: "success", sublabel: "You can publish paid events." },
+  verified: { text: "Verified", tone: "success", sublabel: "Your business details are confirmed." },
   pending: { text: "In review", tone: "warning", sublabel: "We're checking your documents." },
   rejected: { text: "Declined", tone: "destructive", sublabel: "See what to fix and submit again." },
-  unverified: { text: "Not verified", tone: "mutedForeground", sublabel: "Needed before you sell paid tickets." },
+  unverified: { text: "Not verified", tone: "mutedForeground", sublabel: "Optional: confirm your business details." },
 };
 
 /** Group 5: phone verification for everyone, business verification for businesses. */

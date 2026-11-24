@@ -29,6 +29,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
+import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { DEMO_POST_ORDER } from "@/constants/featuredDemoPosts";
 import { useFeedAnalytics } from "@/hooks/useFeedAnalytics";
 import { useStories } from "@/context/StoriesContext";
@@ -43,6 +44,12 @@ export default function HomeScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { step: organiserStep, openOrganiserFlow } = useOrganiserAccess();
+  const application = user?.organiserApplication;
+  const organiserLabel = application?.status === "IN_REVIEW" ? "Application in review"
+    : application?.status === "REJECTED" ? "Application rejected"
+    : application?.status === "PENDING_PAYMENT" ? "Application pending payment"
+    : organiserStep === "ready" ? "Dashboard" : organiserStep === "setup" ? "Set up organizer" : "Become an organizer";
   const notifications = useNotificationsOptional();
   const unreadNotifications = notifications?.unreadCount ?? 0;
   const { events, categories, isLoading, error, refreshEvents } = useEvents();
@@ -262,20 +269,18 @@ export default function HomeScreen() {
             </Pressable>
             <Pressable
               onPress={() =>
-                user?.isBusinessAccount
-                  ? router.push("/business/register" as any)
-                  : setShowOrganizerModal(true)
+                organiserStep === "intro" && !application ? setShowOrganizerModal(true) : openOrganiserFlow()
               }
               style={[
                 styles.becomeOrganizerHeaderBtn,
                 { backgroundColor: colors.primary, borderRadius: 999 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Become an organizer"
+              accessibilityLabel={organiserLabel}
             >
               <Ionicons name="briefcase-outline" size={13} color="#FFFFFF" />
               <Text style={styles.becomeOrganizerHeaderBtnText}>
-                {user?.isBusinessAccount ? "Dashboard" : "Become an organizer"}
+                {organiserLabel}
               </Text>
             </Pressable>
           </View>
@@ -312,7 +317,27 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <EventCard event={item} variant="feed" inset={0} source={selectedCategory === "All" ? "home" : "category"} onMediaReady={feedAnalytics.onMediaReady} onTrackingBlocked={setCardCovered} />
         )}
-        ListHeaderComponent={renderBody() ?? undefined}
+        ListHeaderComponent={
+          <>
+            {application && application.status !== "PENDING_PAYMENT" && application.status !== "APPROVED" ? (
+              <View style={{ margin: 20, padding: 16, borderRadius: 12, backgroundColor: colors.card, gap: 8 }}>
+                <Text style={{ color: colors.foreground, fontWeight: "700" }}>
+                  {`Organizer Application Status: ${application.status.replace("_", " ")}`}
+                </Text>
+                <Text style={{ color: colors.foreground }}>
+                  {application.status === "IN_REVIEW" ? "Your payment was successful, and your organizer application has been submitted successfully. Our administration team is currently reviewing your application. You will receive a notification once a decision has been made."
+                    : `Reason: ${application.rejectionReason}. You can reapply with a new verified payment.`}
+                </Text>
+                {application.status !== "IN_REVIEW" ? (
+                  <Pressable onPress={() => openOrganiserFlow()} accessibilityRole="button">
+                    <Text style={{ color: colors.primary, fontWeight: "700" }}>Apply again</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+            {renderBody()}
+          </>
+        }
         ListFooterComponent={visibleEvents.length ? (
           <Text style={{ color: colors.mutedForeground, textAlign: "center", paddingVertical: 20 }}>
             {visibleCount < filtered.length ? "Scroll for more events" : "You're all caught up"}
@@ -404,7 +429,7 @@ export default function HomeScreen() {
               style={[styles.modalCta, { backgroundColor: colors.primary }]}
               onPress={() => {
                 setShowOrganizerModal(false);
-                router.push("/business/register" as any);
+                router.push("/organiser" as any);
               }}
               accessibilityRole="button"
             >
@@ -414,7 +439,7 @@ export default function HomeScreen() {
             <Pressable
               onPress={() => {
                 setShowOrganizerModal(false);
-                router.push("/organiser/subscribe" as any);
+                router.push("/organiser" as any);
               }}
               accessibilityRole="button"
               style={styles.modalDismissButton}

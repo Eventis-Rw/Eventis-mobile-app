@@ -2,11 +2,11 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AppState } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
-import { USE_PROFILE_API } from "@/services/profileService";
 import {
   fetchNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  USE_NOTIFICATIONS_API,
   type ApiNotification,
 } from "@/services/notificationService";
 
@@ -36,7 +36,7 @@ const POLL_INTERVAL_MS = 20000;
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated } = useAuth();
-  const enabled = isAuthenticated && !!user && !user.isDemo && USE_PROFILE_API;
+  const enabled = isAuthenticated && !!user && !user.isDemo && USE_NOTIFICATIONS_API;
 
   const [notifications, setNotifications] = useState<ApiNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);

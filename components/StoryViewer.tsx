@@ -229,6 +229,7 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
         {!ready && !failed ? <View pointerEvents="none" style={styles.loading}><ActivityIndicator color="white" accessibilityLabel="Loading story" /></View> : null}
         {failed ? <View style={styles.failure}><Ionicons name="image-outline" color="white" size={32} /><Text style={styles.name}>This story couldn't load</Text><Text style={styles.time}>Retry or continue to the next story.</Text><View style={styles.actions}><Pressable style={styles.button} onPress={retry} accessibilityRole="button"><Text style={styles.name}>Retry</Text></Pressable><Pressable style={styles.button} onPress={onNext} accessibilityRole="button"><Text style={styles.name}>Skip story</Text></Pressable></View></View> : null}
         <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
+          {story.caption ? <Text style={styles.caption} numberOfLines={4} testID="story-caption">{story.caption}</Text> : null}
           {own ? <View style={styles.actions}>
             <Pressable style={styles.button} onPress={() => { onClose(); router.push("/business/create-story"); }} accessibilityRole="button"><Ionicons name="add" color="white" size={20} /><Text style={styles.name}>Add to story</Text></Pressable>
             <Pressable style={styles.button} onPress={() => void openViewers()} accessibilityRole="button" accessibilityLabel={`${viewsCount} story views`}><Ionicons name="eye-outline" color="white" size={20} /><Text style={styles.name}>{viewsCount}</Text></Pressable>
@@ -255,7 +256,7 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
           <View style={styles.actions}><Pressable disabled={deleting} style={styles.button} onPress={() => setConfirmDelete(false)} accessibilityRole="button"><Text style={styles.name}>Cancel</Text></Pressable>
             <Pressable disabled={deleting} style={styles.button} onPress={async () => {
               setDeleting(true);
-              try { await onDelete(story); } catch { setDeleteError("Couldn't delete. Try again."); setDeleting(false); }
+              try { await onDelete(story); } catch (error) { setDeleteError(describeStatusError(error, "Couldn't delete. Try again.")); setDeleting(false); }
             }} accessibilityRole="button"><Text style={styles.name}>{deleting ? "Deleting…" : "Delete"}</Text></Pressable></View>
         </View></View> : null}
       </Animated.View>
@@ -282,7 +283,8 @@ const styles = StyleSheet.create({
   identity: { flex: 1, minWidth: 0 }, name: { color: "white", fontSize: 14, fontFamily: "Inter_600SemiBold" },
   time: { color: "#C7CED9", fontSize: 12, marginTop: 4, lineHeight: 18 },
   control: { width: 42, height: 44, alignItems: "center", justifyContent: "center" },
-  bottom: { position: "absolute", bottom: 0, left: 0, right: 0, alignItems: "center", paddingHorizontal: 18 },
+  bottom: { position: "absolute", bottom: 0, left: 0, right: 0, alignItems: "center", paddingHorizontal: 18, gap: 12 },
+  caption: { color: "white", fontSize: 15, lineHeight: 21, textAlign: "center", fontFamily: "Inter_500Medium", backgroundColor: "rgba(0,0,0,0.45)", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, overflow: "hidden" },
   actions: { flexDirection: "row", alignItems: "center", gap: 12 }, button: { minHeight: 44, borderRadius: 24, backgroundColor: "#FFFFFF22", paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   loading: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
   failure: { position: "absolute", top: "35%", left: 20, right: 20, backgroundColor: "#111827", borderRadius: 20, padding: 22, alignItems: "center", gap: 14 },

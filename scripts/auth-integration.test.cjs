@@ -69,6 +69,17 @@ test("authenticated requests attach the access token", async () => {
   assert.equal(request.options.headers.Authorization, "Bearer access-token");
 });
 
+test("a DELETE answered with 200 and an empty body resolves instead of failing", async () => {
+  const client = loadApiClient();
+  await client.setToken("access-token");
+  global.fetch = async () => ({
+    ...response(200, undefined),
+    headers: { get: (name) => (name.toLowerCase() === "content-length" ? "0" : null) },
+  });
+
+  assert.equal(await client.api.delete("/api/v1/statuses/4d6a1c44-8f45-4eb8-9b69-52ec76cf9f0f"), undefined);
+});
+
 test("expired access tokens refresh once and retry with rotated tokens", async () => {
   const client = loadApiClient();
   await client.setAuthTokens("expired-access", "refresh-token");
@@ -160,6 +171,59 @@ test("duplicate email registration exposes the sign-in error without changing th
   assert.deepEqual(requests, ["http://localhost:3000/api/v1/auth/email/send-code"]);
   assert.equal(await client.getToken(), "old-access");
   assert.equal(await client.getRefreshToken(), "old-refresh");
+});
+
+for (const outcome of ["logout", "account switch"]) {
+  test(`in-flight refresh cannot overwrite tokens after ${outcome}`, async () => {
+    const client = loadApiClient();
+    await client.setAuthTokens("old-access", "old-refresh");
+    let respond;
+    let started;
+    const requestStarted = new Promise((resolve) => { started = resolve; });
+    global.fetch = async () => {
+      started();
+      return new Promise((resolve) => { respond = resolve; });
+    };
+    const refresh = client.refreshSession();
+    await requestStarted;
+    if (outcome === "logout") await client.clearToken();
+    else await client.setAuthTokens("new-access", "new-refresh");
+    respond(response(200, { accessToken: "stale-access", refreshToken: "stale-refresh" }));
+    await assert.rejects(refresh, /session changed/);
+    assert.equal(await client.getToken(), outcome === "logout" ? null : "new-access");
+    assert.equal(await client.getRefreshToken(), outcome === "logout" ? null : "new-refresh");
+  });
+}
+
+test("concurrent session refreshes share one token rotation", async () => {
+  const client = loadApiClient();
+  await client.setAuthTokens("old-access", "old-refresh");
+  let calls = 0;
+  global.fetch = async () => {
+    calls++;
+    return response(200, { accessToken: "new-access", refreshToken: "new-refresh" });
+  };
+  assert.deepEqual(await Promise.all([client.refreshSession(), client.refreshSession()]), ["new-access", "new-access"]);
+  assert.equal(calls, 1);
+});
+
+test("an old rejected refresh cannot clear a new account's tokens", async () => {
+  const client = loadApiClient();
+  await client.setAuthTokens("old-access", "old-refresh");
+  let respond;
+  let started;
+  const requestStarted = new Promise((resolve) => { started = resolve; });
+  global.fetch = async () => {
+    started();
+    return new Promise((resolve) => { respond = resolve; });
+  };
+  const refresh = client.refreshSession();
+  await requestStarted;
+  await client.setAuthTokens("new-access", "new-refresh");
+  respond(response(401, { message: "Invalid refresh token" }));
+  await assert.rejects(refresh);
+  assert.equal(await client.getToken(), "new-access");
+  assert.equal(await client.getRefreshToken(), "new-refresh");
 });
 
 for (const endpoint of ["/api/v1/auth/email/send-code", "/api/v1/auth/email/verify-code", "/api/v1/auth/social"]) {

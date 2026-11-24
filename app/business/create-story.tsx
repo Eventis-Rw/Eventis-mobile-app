@@ -3,472 +3,627 @@ import { Asset } from "expo-asset";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { describeStatusError, publishStatus, type StatusCreateInput, type StatusMediaAsset, type StatusMediaType } from "@/services/statusService";
-import { StoryVideo } from "@/components/StoryVideo";
-import { useStories } from "@/context/StoriesContext";
-import React, { type ComponentRef, useEffect, useRef, useState } from "react";
+import React, { type ComponentRef, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator, Image, Keyboard, Modal, Platform, Pressable,
+  ActivityIndicator, BackHandler, Image, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions,
   type ImageSourcePropType,
 } from "react-native";
-import { KeyboardAwareScrollView, KeyboardStickyView, useKeyboardState } from "@/components/KeyboardCompat";
 
+import { KeyboardStickyView } from "@/components/KeyboardCompat";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { STORY_BACKGROUNDS, StoryCanvas, type StoryOverlay } from "@/components/StoryCanvas";
+import { StoryVideo } from "@/components/StoryVideo";
 import { useAuth } from "@/context/AuthContext";
+import { useStories } from "@/context/StoriesContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
+import { describeStatusError, publishStatus, type StatusCreateInput, type StatusMediaAsset, type StatusMediaType } from "@/services/statusService";
 
-const StoryScrollView = Platform.OS === "web" ? ScrollView : KeyboardAwareScrollView;
 const StoryFooter = Platform.OS === "web" ? View : KeyboardStickyView;
-const TEXT_COLORS = ["#FFFFFF", "#70BDF5", "#08111F"];
-const STICKERS = ["🔥", "✨", "🎶", "🎉", "💙", "📍", "Tonight", "New drop", "See you there", "Tickets out"];
+const MAX_LAYERS = 8;
+const MAX_ITEMS = 10;
+const TEXT_COLORS = ["#FFFFFF", "#08111F", "#70BDF5", "#FACC15", "#EF4444", "#22C55E", "#EC4899", "#A855F7"];
+const STICKERS = ["🔥", "✨", "🎶", "🎉", "💙", "📍", "😍", "🙌", "🥳", "🎤", "🍹", "🎟️", "Tonight", "New drop", "See you there", "Tickets out", "Sold out", "Last chance"];
 const TEXT_STYLES = ["bold", "classic", "label"] as const;
+const STYLE_LABEL: Record<StoryOverlay["style"], string> = { bold: "Bold", classic: "Classic", label: "Label" };
 const TEMPLATES = [
-  { id: "fiesta", title: "Friday energy", subtitle: "Make an announcement", image: require("../../assets/images/friday-fiesta.jpeg"), message: "Your Friday plans, sorted. 🔥" },
-  { id: "grill", title: "Live moments", subtitle: "Set the mood", image: require("../../assets/images/grill-and-chill.jpeg"), message: "Good music. Great company. ✨" },
-  { id: "rewind", title: "What's happening", subtitle: "Keep people in the loop", image: require("../../assets/images/thursday-rewind.jpeg"), message: "Something good is on the way. 🎶" },
+  { id: "fiesta", title: "Friday energy", image: require("../../assets/images/friday-fiesta.jpeg"), message: "Your Friday plans, sorted. 🔥" },
+  { id: "grill", title: "Live moments", image: require("../../assets/images/grill-and-chill.jpeg"), message: "Good music. Great company. ✨" },
+  { id: "rewind", title: "What's happening", image: require("../../assets/images/thursday-rewind.jpeg"), message: "Something good is on the way. 🎶" },
 ] as const;
-const TOOLS = [
-  { id: "text", label: "Text", icon: "text-outline" },
-  { id: "stickers", label: "Stickers", icon: "happy-outline" },
-  { id: "background", label: "Colour", icon: "color-palette-outline" },
-  { id: "layout", label: "Layout", icon: "crop-outline" },
-] as const;
-type Tool = (typeof TOOLS)[number]["id"];
-type DraftCanvas = { image?: ImageSourcePropType; videoUri?: string; mediaFileName?: string; mediaMimeType?: string; backgroundIndex: number; fit: "cover" | "contain"; overlays: StoryOverlay[] };
-
-function Choice({ label, selected, onPress, disabled = false }: { label: string; selected?: boolean; onPress: () => void; disabled?: boolean }) {
+/** Controls drawn on top of the photo stay white-on-dark in both themes so they read on any picture. */
+const OVER = { text: "#FFFFFF", accent: "#70BDF5", danger: "#FF6B6B" };
+type Palette = ReturnType<typeof useOrganiserPalette>;
+type Ink = { bg: string; surface: string; raised: string; line: string; text: string; muted: string; accent: string; send: string; onSend: string; danger: string };
+const inkFrom = (palette: Palette): Ink => ({
+  bg: palette.canvas, surface: palette.surface, raised: palette.surfaceRaised, line: palette.line, text: palette.text,
+  muted: palette.muted, accent: palette.accent, send: palette.blue, onSend: palette.onBlue, danger: palette.danger,
+});
+/** Follows the app's light/dark theme (and the system setting when the app does). */
+function useComposerTheme() {
   const palette = useOrganiserPalette();
-  return (
-    <Pressable
-      onPress={onPress} disabled={disabled}
-      accessibilityRole={selected === undefined ? "button" : "radio"}
-      accessibilityState={{ checked: selected, disabled }}
-      style={({ pressed }) => [styles.choice, { backgroundColor: selected ? palette.blueSoft : palette.surfaceRaised, borderColor: selected ? palette.accent : palette.line, opacity: pressed || disabled ? 0.6 : 1 }]}
-    >
-      <Text style={[styles.choiceText, { color: selected ? palette.accent : palette.text }]}>{label}</Text>
-    </Pressable>
-  );
+  const ink = inkFrom(palette);
+  const key = Object.values(ink).join("|");
+  // `key` changes whenever any theme colour does, so styles rebuild on a theme switch.
+  const styles = useMemo(() => createStyles(ink), [key]);
+  return { ink, styles };
 }
 
+type Draft = {
+  key: string;
+  image?: ImageSourcePropType;
+  videoUri?: string;
+  mediaFileName?: string;
+  mediaMimeType?: string;
+  backgroundIndex: number;
+  fit: "cover" | "contain";
+  overlays: StoryOverlay[];
+  caption: string;
+};
 
-async function resolveCanvasMedia(canvas: DraftCanvas, mediaType: StatusMediaType, index: number): Promise<StatusMediaAsset | undefined> {
+const hasMedia = (draft: Draft) => Boolean(draft.image || draft.videoUri);
+const hasText = (draft: Draft) => draft.overlays.some((layer) => layer.text.trim());
+const isEmpty = (draft: Draft) => !hasMedia(draft) && !hasText(draft);
+
+async function resolveDraftMedia(draft: Draft, mediaType: StatusMediaType): Promise<StatusMediaAsset | undefined> {
   if (mediaType === "text") return undefined;
-  const imageUri = canvas.image && typeof canvas.image === "object" && !Array.isArray(canvas.image)
-    ? (canvas.image as { uri?: string }).uri
+  const imageUri = draft.image && typeof draft.image === "object" && !Array.isArray(draft.image)
+    ? (draft.image as { uri?: string }).uri
     : undefined;
-  const uri = canvas.videoUri || imageUri;
-  if (uri) return { uri, fileName: canvas.mediaFileName, mimeType: canvas.mediaMimeType };
-  if (mediaType === "image" && typeof canvas.image === "number") {
-    const asset = Asset.fromModule(canvas.image);
+  const uri = draft.videoUri || imageUri;
+  if (uri) return { uri, fileName: draft.mediaFileName, mimeType: draft.mediaMimeType };
+  if (mediaType === "image" && typeof draft.image === "number") {
+    const asset = Asset.fromModule(draft.image);
     if (!asset.localUri) await asset.downloadAsync();
     return { uri: asset.localUri ?? asset.uri, fileName: `${asset.name}.${asset.type}` };
   }
   return undefined;
 }
 
+function RoundIcon({ icon, label, onPress, active = false, disabled = false, color = OVER.text }: {
+  icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; onPress: () => void; active?: boolean; disabled?: boolean; color?: string;
+}) {
+  const { styles } = useComposerTheme();
+  return (
+    <Pressable onPress={onPress} disabled={disabled} hitSlop={4} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled, selected: active }}
+      style={({ pressed }) => [styles.roundIcon, { backgroundColor: active ? OVER.accent : "rgba(0,0,0,0.55)", opacity: disabled ? 0.4 : pressed ? 0.7 : 1 }]}>
+      <Ionicons name={icon} size={21} color={active ? "#08111F" : color} />
+    </Pressable>
+  );
+}
+
+function EntryAction({ icon, label, onPress, disabled }: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; onPress: () => void; disabled?: boolean }) {
+  const { ink, styles } = useComposerTheme();
+  return (
+    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => [styles.entryAction, { opacity: pressed || disabled ? 0.65 : 1 }]}>
+      <View style={styles.entryCircle}><Ionicons name={icon} size={26} color={ink.text} /></View>
+      <Text style={styles.entryLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function CreateStoryScreen() {
   const palette = useOrganiserPalette();
+  const { ink, styles } = useComposerTheme();
   const router = useRouter();
-  const [publishing, setPublishing] = useState(false);
-  const [published, setPublished] = useState(false);
-  const publishLock = useRef(false);
   const insets = useAppSafeAreaInsets();
   const { user } = useAuth();
   const { refresh, openStories } = useStories();
   const { width, height } = useWindowDimensions();
-  const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const textInputRef = useRef<ComponentRef<typeof TextInput>>(null);
-  const nextLayerId = useRef(0);
-  const [editing, setEditing] = useState(false);
-  const [image, setImage] = useState<ImageSourcePropType | undefined>();
-  const [videoUri, setVideoUri] = useState<string>();
-  const [mediaFileName, setMediaFileName] = useState<string>();
-  const [mediaMimeType, setMediaMimeType] = useState<string>();
-  const [batch, setBatch] = useState<DraftCanvas[]>([]);
-  const [draftIndex, setDraftIndex] = useState(0);
-  const [backgroundIndex, setBackgroundIndex] = useState(0);
-  const [fit, setFit] = useState<"cover" | "contain">("contain");
-  const [overlays, setOverlays] = useState<StoryOverlay[]>([]);
-  const [selectedId, setSelectedId] = useState<string | undefined>();
-  const [activeTool, setActiveTool] = useState<Tool | undefined>();
-  const [pickError, setPickError] = useState<string | undefined>();
+  const nextId = useRef(0);
+  const publishLock = useRef(false);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [index, setIndex] = useState(0);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [editingTextId, setEditingTextId] = useState<string>();
+  const [stickersOpen, setStickersOpen] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [previewing, setPreviewing] = useState(false);
-  const [footerHeight, setFooterHeight] = useState(82);
-  const selected = overlays.find((layer) => layer.id === selectedId);
-  const background = STORY_BACKGROUNDS[backgroundIndex];
-  const hasContent = Boolean(image || videoUri) || overlays.some((layer) => layer.text.trim());
-  const snapshot = (): DraftCanvas => ({ image, videoUri, mediaFileName, mediaMimeType, backgroundIndex, fit, overlays });
-  const loadDraft = (draft: DraftCanvas) => {
-    setImage(draft.image); setVideoUri(draft.videoUri);
-    setMediaFileName(draft.mediaFileName); setMediaMimeType(draft.mediaMimeType);
-    setBackgroundIndex(draft.backgroundIndex);
-    setFit(draft.fit); setOverlays(draft.overlays); setSelectedId(undefined); setActiveTool(undefined);
-  };
-  const selectDraft = (index: number) => {
-    if (index === draftIndex) return;
-    setBatch((current) => current.map((draft, i) => i === draftIndex ? snapshot() : draft));
-    loadDraft(batch[index]); setDraftIndex(index);
-  };
-  const removeDraft = () => {
-    const remaining = batch.filter((_, index) => index !== draftIndex);
-    setBatch(remaining);
-    const nextIndex = Math.max(0, Math.min(draftIndex, remaining.length - 1));
-    setDraftIndex(nextIndex);
-    loadDraft(remaining[nextIndex] ?? { backgroundIndex: 0, fit: "contain", overlays: [] });
-    if (!remaining.length) setEditing(false);
-  };
-  const canvasWidth = Math.min(width - 36, Math.max(165, (height - insets.top - insets.bottom - 300) * 9 / 16));
-  const organisationName = user?.organisation?.name ?? user?.businessName ?? "Your organisation";
-  const selectedTextId = selected?.kind === "text" ? selected.id : undefined;
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState(false);
+  const [error, setError] = useState<string>();
+  const [footerHeight, setFooterHeight] = useState(120);
 
-  useEffect(() => {
-    if (activeTool !== "text" || !selectedTextId) return;
-    const frame = requestAnimationFrame(() => textInputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, [activeTool, selectedTextId]);
+  const editing = drafts.length > 0;
+  const current = drafts[Math.min(index, drafts.length - 1)];
+  const background = STORY_BACKGROUNDS[current?.backgroundIndex ?? 0] ?? STORY_BACKGROUNDS[0];
+  const selected = current?.overlays.find((layer) => layer.id === selectedId);
+  const editingLayer = current?.overlays.find((layer) => layer.id === editingTextId);
+  const canPublish = editing && drafts.some((draft) => !isEmpty(draft)) && !publishing && !picking;
+  const topBar = insets.top + 62;
+  const canvasWidth = Math.max(160, Math.min(width, (height - topBar - footerHeight - 8) * 9 / 16));
 
-  const haptic = () => {
-    if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => {});
+  const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${++nextId.current}`;
+  const haptic = () => { if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => {}); };
+  const updateCurrent = (patch: Partial<Draft> | ((draft: Draft) => Partial<Draft>)) => {
+    setDrafts((list) => list.map((draft, i) => i === index ? { ...draft, ...(typeof patch === "function" ? patch(draft) : patch) } : draft));
   };
   const updateLayer = (id: string, patch: Partial<StoryOverlay>) => {
-    setOverlays((current) => current.map((layer) => layer.id === id ? { ...layer, ...patch } : layer));
+    updateCurrent((draft) => ({ overlays: draft.overlays.map((layer) => layer.id === id ? { ...layer, ...patch } : layer) }));
   };
-  const addLayer = (text: string, kind: StoryOverlay["kind"]) => {
-    if (overlays.length >= 8) {
-      setPickError("You can add up to 8 layers. Remove one to add another.");
-      return;
-    }
-    const id = `layer-${++nextLayerId.current}`;
-    setOverlays((current) => [...current, {
-      id, text, kind, x: 0.5, y: kind === "text" ? 0.46 : 0.7 - (current.length % 3) * 0.12,
-      color: background.foreground, style: kind === "text" ? "bold" : "label", size: kind === "text" ? 28 : 23,
-    }]);
-    setSelectedId(id);
-    setPickError(undefined);
+  const removeLayer = (id: string) => {
+    updateCurrent((draft) => ({ overlays: draft.overlays.filter((layer) => layer.id !== id) }));
+    setSelectedId(undefined);
     haptic();
   };
-  const chooseTool = (tool: Tool) => {
-    if (tool !== "text") Keyboard.dismiss();
-    setActiveTool((current) => current === tool && tool !== "text" ? undefined : tool);
-    if (tool === "text" && selected?.kind !== "text") {
-      const existing = overlays.find((layer) => layer.kind === "text");
-      if (existing) setSelectedId(existing.id);
-      else addLayer("Your message", "text");
+  const addLayer = (text: string, kind: StoryOverlay["kind"]): string | undefined => {
+    if (!current) return undefined;
+    if (current.overlays.length >= MAX_LAYERS) {
+      setError(`You can add up to ${MAX_LAYERS} texts and stickers. Remove one to add another.`);
+      return undefined;
     }
+    const id = newId("layer");
+    const textOnly = !hasMedia(current);
+    updateCurrent((draft) => ({ overlays: [...draft.overlays, {
+      id, text, kind, x: 0.5,
+      y: kind === "text" ? (textOnly && !draft.overlays.length ? 0.5 : 0.4) : 0.68 - (draft.overlays.length % 3) * 0.12,
+      color: kind === "text" ? STORY_BACKGROUNDS[draft.backgroundIndex].foreground : "#FFFFFF",
+      style: kind === "text" ? "bold" : "label",
+      size: kind === "text" ? (textOnly ? 34 : 28) : 24,
+    }] }));
+    setSelectedId(id);
+    setError(undefined);
+    haptic();
+    return id;
+  };
+  const openTextEditor = (id?: string) => {
+    const targetId = id ?? addLayer("", "text");
+    if (!targetId) return;
+    setSelectedId(targetId);
+    setEditingTextId(targetId);
+  };
+  const closeTextEditor = () => {
+    Keyboard.dismiss();
+    const id = editingTextId;
+    setEditingTextId(undefined);
+    if (!id) return;
+    // Like WhatsApp: closing the editor on empty text removes that text.
+    const layer = current?.overlays.find((item) => item.id === id);
+    if (layer && !layer.text.trim()) {
+      const remaining = current.overlays.filter((item) => item.id !== id);
+      if (!hasMedia(current) && !remaining.length) { removeItem(index); return; }
+      removeLayer(id);
+    }
+  };
+  const removeItem = (at: number) => {
+    const remaining = drafts.filter((_, i) => i !== at);
+    setDrafts(remaining);
+    setIndex(Math.max(0, Math.min(at, remaining.length - 1)));
+    setSelectedId(undefined);
+    setEditingTextId(undefined);
+    setError(undefined);
+  };
+  const selectItem = (at: number) => {
+    if (at === index) return;
+    Keyboard.dismiss();
+    setIndex(at); setSelectedId(undefined); setEditingTextId(undefined); setError(undefined);
+    haptic();
+  };
+  const startTextStory = () => {
+    const id = newId("layer");
+    setDrafts([{ key: newId("item"), backgroundIndex: 1, fit: "contain", caption: "",
+      overlays: [{ id, text: "", kind: "text", x: 0.5, y: 0.5, color: STORY_BACKGROUNDS[1].foreground, style: "bold", size: 34 }] }]);
+    setIndex(0);
+    setSelectedId(id);
+    setEditingTextId(id);
+    setError(undefined);
+    haptic();
+  };
+  const useTemplate = (template: (typeof TEMPLATES)[number]) => {
+    setDrafts([{ key: newId("item"), image: template.image, backgroundIndex: 0, fit: "cover", caption: "",
+      overlays: [{ id: newId("layer"), kind: "text", text: template.message, x: 0.5, y: 0.83, color: "#FFFFFF", style: "label", size: 21 }] }]);
+    setIndex(0);
+    setSelectedId(undefined);
+    setError(undefined);
     haptic();
   };
   const chooseMedia = async (camera = false) => {
-    if (picking) return;
+    if (picking || publishing) return;
+    const room = MAX_ITEMS - drafts.length;
+    if (room <= 0) { setError(`You can share up to ${MAX_ITEMS} stories at once.`); return; }
     setPicking(true);
-    setPickError(undefined);
+    setError(undefined);
     Keyboard.dismiss();
     try {
       if (camera) {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          setPickError("Allow camera access in your phone settings, or choose a photo from your gallery.");
+          setError("Allow camera access in your phone settings, or choose from your gallery.");
           return;
         }
       }
       const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images", "videos"], quality: 0.85, allowsEditing: false,
-        allowsMultipleSelection: !camera, selectionLimit: 10, orderedSelection: true, videoMaxDuration: 60,
+        allowsMultipleSelection: !camera && room > 1, selectionLimit: room, orderedSelection: true, videoMaxDuration: 60,
         preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible };
       const result = camera ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
-      if (!result.canceled && result.assets[0]) {
-        const additions: DraftCanvas[] = result.assets.map((asset) => ({
-          image: asset.type === "video" ? undefined : { uri: asset.uri },
-          videoUri: asset.type === "video" ? asset.uri : undefined,
-          mediaFileName: asset.fileName ?? undefined,
-          mediaMimeType: asset.mimeType ?? undefined,
-          backgroundIndex: 0, fit: "contain", overlays: [],
-        }));
-        const current = batch.length ? batch.map((draft, index) => index === draftIndex ? snapshot() : draft) : hasContent ? [snapshot()] : [];
-        setBatch([...current, ...additions]);
-        setDraftIndex(current.length);
-        loadDraft(additions[0]);
-        setEditing(true);
-        setActiveTool(undefined);
-        setFit("contain");
-        haptic();
-      }
+      if (result.canceled || !result.assets.length) return;
+      const additions: Draft[] = result.assets.slice(0, room).map((asset) => ({
+        key: newId("item"),
+        image: asset.type === "video" ? undefined : { uri: asset.uri },
+        videoUri: asset.type === "video" ? asset.uri : undefined,
+        mediaFileName: asset.fileName ?? undefined,
+        mediaMimeType: asset.mimeType ?? undefined,
+        backgroundIndex: 0,
+        fit: asset.width && asset.height && asset.height >= asset.width ? "cover" : "contain",
+        overlays: [],
+        caption: "",
+      }));
+      // An untouched text story is replaced instead of being left behind empty.
+      const kept = drafts.filter((draft) => !isEmpty(draft));
+      setDrafts([...kept, ...additions]);
+      setIndex(kept.length);
+      setSelectedId(undefined);
+      setEditingTextId(undefined);
+      haptic();
     } catch {
-      setPickError(camera ? "We couldn't open the camera. Try your gallery instead." : "We couldn't open your photos. Check photo permissions and try again.");
+      setError(camera ? "We couldn't open the camera. Try your gallery instead." : "We couldn't open your photos. Check photo permissions and try again.");
     } finally {
       setPicking(false);
     }
   };
-  const useTemplate = (template: (typeof TEMPLATES)[number]) => {
-    setBatch([]);
-    setDraftIndex(0);
-    setVideoUri(undefined);
-    setMediaFileName(undefined);
-    setMediaMimeType(undefined);
-    setImage(template.image);
-    setOverlays([{ id: `layer-${++nextLayerId.current}`, kind: "text", text: template.message, x: 0.5, y: 0.83, color: "#FFFFFF", style: "label", size: 21 }]);
-    setSelectedId(undefined);
-    setEditing(true);
-    setActiveTool(undefined);
-    setFit("contain");
-    haptic();
-  };
   const share = async () => {
-    if (!hasContent || publishLock.current) return;
-    if (!user) { setPickError("Sign in to publish your story."); return; }
+    if (!canPublish || publishLock.current) return;
+    if (!user) { setError("Sign in to publish your story."); return; }
+    const ready = drafts.filter((draft) => !isEmpty(draft));
     publishLock.current = true;
     setPublishing(true);
-    let publishedCount = 0;
-    let total = 0;
-    setPickError(undefined);
+    setError(undefined);
+    setSelectedId(undefined);
     Keyboard.dismiss();
+    let publishedCount = 0;
     try {
-      const canvases = batch.length ? batch.map((draft, index) => index === draftIndex ? snapshot() : draft) : [snapshot()];
-      total = canvases.length;
-      const emptyIndex = canvases.findIndex((canvas) => !canvas.image && !canvas.videoUri && !canvas.overlays.some((layer) => layer.text.trim()));
-      if (emptyIndex >= 0) {
-        setPickError(`Story ${emptyIndex + 1} is empty. Add media or text, or remove it.`);
-        return;
-      }
-      const drafts: StatusCreateInput[] = [];
-      for (const [index, canvas] of canvases.entries()) {
-        const overlays = canvas.overlays.filter((layer) => layer.text.trim());
-        const mediaType: StatusMediaType = canvas.videoUri ? "video" : canvas.image ? "image" : "text";
-        drafts.push({
+      const inputs: StatusCreateInput[] = [];
+      for (const draft of ready) {
+        const overlays = draft.overlays.filter((layer) => layer.text.trim());
+        const mediaType: StatusMediaType = draft.videoUri ? "video" : draft.image ? "image" : "text";
+        const layeredText = overlays.map((layer) => layer.text.trim()).join("\n");
+        inputs.push({
           mediaType,
-          media: await resolveCanvasMedia(canvas, mediaType, index),
-          caption: overlays.map((layer) => layer.text.trim()).join("\n").slice(0, 1000) || undefined,
-          background: STORY_BACKGROUNDS[canvas.backgroundIndex].color,
-          fit: canvas.fit,
+          media: await resolveDraftMedia(draft, mediaType),
+          caption: (draft.caption.trim() || layeredText).slice(0, 1000) || undefined,
+          background: STORY_BACKGROUNDS[draft.backgroundIndex].color,
+          fit: draft.fit,
           overlays,
         });
       }
-      for (const draft of drafts) {
-        await publishStatus(draft);
+      for (const input of inputs) {
+        await publishStatus(input);
         publishedCount += 1;
       }
       await refresh();
-      setPreviewing(false);
       setPublished(true);
-    } catch (error) {
-      setPreviewing(false);
-      const message = describeStatusError(error, "Your status could not be published. Your design is still here — please try again.");
-      setPickError(publishedCount > 0 && publishedCount < total
-        ? `${publishedCount} of ${total} statuses published. ${message}`
-        : message);
+    } catch (problem) {
+      const message = describeStatusError(problem, "Your story could not be published. Your design is still here — please try again.");
+      if (publishedCount > 0) {
+        // Keep only what didn't go out, so retrying doesn't post duplicates.
+        const sent = new Set(ready.slice(0, publishedCount).map((draft) => draft.key));
+        setDrafts((list) => list.filter((draft) => !sent.has(draft.key)));
+        setIndex(0);
+        setError(`${publishedCount} of ${ready.length} stories published. ${message}`);
+      } else {
+        setError(message);
+      }
     } finally {
       publishLock.current = false;
       setPublishing(false);
     }
   };
+  const requestClose = () => {
+    if (publishing) return;
+    Keyboard.dismiss();
+    if (drafts.some((draft) => !isEmpty(draft) || draft.caption.trim())) { setConfirmDiscard(true); return; }
+    if (editing) { setDrafts([]); setIndex(0); setError(undefined); return; }
+    if (router.canGoBack()) router.back(); else router.replace("/business/dashboard" as never);
+  };
+
+  useEffect(() => {
+    if (!editingTextId) return;
+    const frame = requestAnimationFrame(() => textInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [editingTextId]);
+
+  // Android back closes the innermost layer first, then asks before discarding work.
+  const backRef = useRef<() => boolean>(() => false);
+  backRef.current = () => {
+    if (publishing) return true;
+    if (confirmDiscard) { setConfirmDiscard(false); return true; }
+    if (editingTextId) { closeTextEditor(); return true; }
+    if (stickersOpen) { setStickersOpen(false); return true; }
+    if (selectedId) { setSelectedId(undefined); return true; }
+    if (editing) { requestClose(); return true; }
+    return false;
+  };
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => backRef.current());
+    return () => subscription.remove();
+  }, []);
 
   if (published) return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>
       <PortalScreenHeader title="Story published" />
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 28, gap: 18 }}>
+      <View style={styles.doneWrap}>
         <Ionicons name="checkmark-circle-outline" size={56} color={palette.accent} />
-        <Text style={[styles.heading, { color: palette.text }]}>Your story is ready to view</Text>
-        <Text style={[styles.description, { color: palette.muted, textAlign: "center" }]}>Published to your status feed for 24 hours. Your audience can see it at the top of their feed.</Text>
-        <Pressable onPress={() => { if (user) openStories(user.id, true); }} accessibilityRole="button" style={[styles.shareButton, { flex: 0, paddingHorizontal: 24, backgroundColor: palette.blue }]}><Text style={styles.shareText}>View your stories</Text><Ionicons name="arrow-forward" size={20} color="#FFFFFF" /></Pressable>
-        <Pressable onPress={() => router.replace("/business/dashboard")} accessibilityRole="button"><Text style={[styles.choiceText, { color: palette.accent }]}>Back to dashboard</Text></Pressable>
+        <Text style={[styles.doneHeading, { color: palette.text }]}>Your story is ready to view</Text>
+        <Text style={[styles.doneText, { color: palette.muted }]}>Published to your status feed for 24 hours. Your audience can see it at the top of their feed.</Text>
+        <Pressable onPress={() => { if (user) openStories(user.id, true); }} accessibilityRole="button" style={[styles.primaryButton, { backgroundColor: palette.blue }]}><Text style={styles.primaryText}>View your stories</Text><Ionicons name="arrow-forward" size={20} color="#FFFFFF" /></Pressable>
+        <Pressable onPress={() => router.replace("/business/dashboard")} accessibilityRole="button"><Text style={[styles.linkText, { color: palette.accent }]}>Back to dashboard</Text></Pressable>
       </View>
     </View>
   );
 
-  return (
-    <View style={[styles.root, { backgroundColor: palette.canvas }]}>
-      <PortalScreenHeader title="Create Story" icon="close" compact={keyboardVisible} disabled={publishing} />
-      <StoryScrollView
-        style={styles.flex} contentContainerStyle={styles.content}
-        bottomOffset={editing ? footerHeight + 24 : 24} extraKeyboardSpace={editing ? footerHeight : 0}
-        keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
-        disableScrollOnKeyboardHide showsVerticalScrollIndicator={false}
-      >
-        {!editing ? (
-          <>
-            <View style={styles.intro}>
-              <Text style={[styles.eyebrow, { color: palette.accent }]}>YOUR NEXT MOMENT</Text>
-              <Text style={[styles.heading, { color: palette.text }]}>Make it a story.</Text>
-              <Text style={[styles.description, { color: palette.muted }]}>A poster, a backstage moment, a quick announcement. Make it yours with text and stickers.</Text>
-            </View>
-            <View style={styles.entryRow}>
-              <Pressable onPress={() => void chooseMedia(true)} disabled={picking} accessibilityRole="button" accessibilityState={{ disabled: picking }} style={({ pressed }) => [styles.entryCard, { backgroundColor: palette.blue, opacity: pressed || picking ? 0.75 : 1 }]}>
-                <Ionicons name="camera-outline" size={29} color="#FFFFFF" /><Text style={styles.entryTitle}>Camera</Text><Text style={styles.entrySubtitle}>Capture now</Text>
-              </Pressable>
-              <Pressable onPress={() => void chooseMedia()} disabled={picking} accessibilityRole="button" accessibilityState={{ disabled: picking }} style={({ pressed }) => [styles.entryCard, { backgroundColor: palette.surface, borderColor: palette.line, opacity: pressed || picking ? 0.75 : 1 }]}>
-                <Ionicons name="images-outline" size={29} color={palette.accent} /><Text style={[styles.entryTitle, { color: palette.text }]}>Gallery</Text><Text style={[styles.entrySubtitle, { color: palette.muted }]}>Photos and videos</Text>
-              </Pressable>
-            </View>
-            <Pressable onPress={() => { setEditing(true); setActiveTool("text"); addLayer("Your message", "text"); }} accessibilityRole="button" style={[styles.textEntry, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-              <View style={[styles.textEntryIcon, { backgroundColor: palette.blueSoft }]}><Text style={[styles.aa, { color: palette.accent }]}>Aa</Text></View>
-              <View style={styles.flex}><Text style={[styles.optionTitle, { color: palette.text }]}>Say it with text</Text><Text style={[styles.smallText, { color: palette.muted }]}>Start with a colour and a message</Text></View><Ionicons name="arrow-forward" size={20} color={palette.accent} />
+  const discardDialog = confirmDiscard ? (
+    <View style={styles.dialogBackdrop}>
+      <View style={styles.dialog}>
+        <Text style={styles.dialogTitle}>Discard this story?</Text>
+        <Text style={styles.dialogText}>Your photos, text and stickers will be lost.</Text>
+        <View style={styles.dialogActions}>
+          <Pressable onPress={() => setConfirmDiscard(false)} accessibilityRole="button" style={styles.dialogButton}><Text style={styles.dialogButtonText}>Keep editing</Text></Pressable>
+          <Pressable onPress={() => { setConfirmDiscard(false); setDrafts([]); setIndex(0); setSelectedId(undefined); setError(undefined); }} accessibilityRole="button" style={styles.dialogButton}><Text style={[styles.dialogButtonText, { color: ink.danger }]}>Discard</Text></Pressable>
+        </View>
+      </View>
+    </View>
+  ) : null;
+
+  if (!editing || !current) return (
+    <View style={[styles.root, { backgroundColor: ink.bg, paddingTop: insets.top }]}>
+      <View style={styles.entryHeader}>
+        <Pressable onPress={requestClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} style={styles.headerIcon}><Ionicons name="close" size={28} color={ink.text} /></Pressable>
+        <Text style={styles.entryTitle}>Add status</Text>
+      </View>
+      <ScrollView contentContainerStyle={[styles.entryContent, { paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
+        <View style={styles.entryActions}>
+          <EntryAction icon="pencil" label="Text" onPress={startTextStory} />
+          <EntryAction icon="camera-outline" label="Camera" onPress={() => void chooseMedia(true)} disabled={picking} />
+          <EntryAction icon="images-outline" label="Gallery" onPress={() => void chooseMedia()} disabled={picking} />
+        </View>
+        {picking ? <ActivityIndicator color={ink.accent} accessibilityLabel="Opening media picker" /> : null}
+        {error ? <Text accessibilityLiveRegion="polite" style={styles.entryError}>{error}</Text> : null}
+        <Text style={styles.sectionTitle}>Templates</Text>
+        <View style={styles.templateGrid}>
+          {TEMPLATES.map((template) => (
+            <Pressable key={template.id} onPress={() => useTemplate(template)} accessibilityRole="button" accessibilityLabel={`Use ${template.title} template`} style={({ pressed }) => [styles.templateTile, { opacity: pressed ? 0.8 : 1 }]}>
+              <Image source={template.image} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <View style={styles.templateShade}><Text style={styles.templateTitle} numberOfLines={2}>{template.title}</Text></View>
             </Pressable>
-            <View style={styles.sectionHeading}><Text style={[styles.sectionTitle, { color: palette.text }]}>Start with a little inspiration</Text><Text style={[styles.smallText, { color: palette.muted }]}>Editable templates</Text></View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.templateRow}>
-              {TEMPLATES.map((template) => (
-                <Pressable key={template.id} onPress={() => useTemplate(template)} accessibilityRole="button" accessibilityLabel={`Use ${template.title} story template`} style={[styles.templateCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                  <Image source={template.image} style={styles.templateImage} resizeMode="cover" />
-                  <View style={styles.templateCopy}><Text style={[styles.templateTitle, { color: palette.text }]}>{template.title}</Text><Text style={[styles.templateSubtitle, { color: palette.muted }]}>{template.subtitle}</Text></View>
-                  <View style={styles.templateBadge}><Ionicons name="image-outline" size={12} color="#FFFFFF" /><Text style={styles.templateBadgeText}>Try it</Text></View>
+          ))}
+        </View>
+        <Text style={styles.entryHint}>Stories disappear after 24 hours. Pick several photos or videos to share them together.</Text>
+      </ScrollView>
+      {discardDialog}
+    </View>
+  );
+
+  const mediaItem = hasMedia(current);
+  const backgroundVisible = !mediaItem || current.fit === "contain";
+  return (
+    <View style={[styles.root, { backgroundColor: ink.bg }]}>
+      <View style={[styles.stage, { top: topBar, bottom: footerHeight }]}>
+        <Pressable style={{ width: canvasWidth }} onPress={() => { setSelectedId(undefined); Keyboard.dismiss(); }} accessible={false}>
+          <StoryCanvas
+            image={current.image} background={background.color} fit={current.fit} overlays={current.overlays}
+            editable={!editingTextId && !publishing} selectedId={selectedId}
+            media={current.videoUri ? <StoryVideo key={current.videoUri} uri={current.videoUri} paused={publishing || Boolean(editingTextId)} fit={current.fit} /> : undefined}
+            onSelect={(id) => { Keyboard.dismiss(); setSelectedId(id); }}
+            onTapLayer={(id) => {
+              const layer = current.overlays.find((item) => item.id === id);
+              if (layer?.kind === "text") openTextEditor(id);
+            }}
+            onMove={(id, x, y) => updateLayer(id, { x, y })}
+          />
+        </Pressable>
+      </View>
+
+      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
+        <RoundIcon icon="close" label={drafts.length > 1 ? "Discard stories" : "Discard story"} onPress={requestClose} disabled={publishing} />
+        <View style={styles.topTools}>
+          {selected ? <RoundIcon icon="trash-outline" label="Remove selected text or sticker" color={OVER.danger} onPress={() => removeLayer(selected.id)} disabled={publishing} /> : null}
+          {mediaItem ? <RoundIcon icon={current.fit === "cover" ? "contract-outline" : "expand-outline"} label={current.fit === "cover" ? "Fit whole photo" : "Fill the screen"}
+            onPress={() => { updateCurrent({ fit: current.fit === "cover" ? "contain" : "cover" }); haptic(); }} disabled={publishing} /> : null}
+          <RoundIcon icon="happy-outline" label="Add sticker" onPress={() => { Keyboard.dismiss(); setStickersOpen(true); }} disabled={publishing} />
+          <RoundIcon icon="text" label="Add text" onPress={() => openTextEditor()} disabled={publishing} />
+          {backgroundVisible ? <RoundIcon icon="color-palette-outline" label={`Background colour: ${background.name}. Tap to change`}
+            onPress={() => {
+              const next = (current.backgroundIndex + 1) % STORY_BACKGROUNDS.length;
+              const previousForeground = STORY_BACKGROUNDS[current.backgroundIndex].foreground;
+              // Keep text readable when switching between light and dark backgrounds.
+              updateCurrent((draft) => ({ backgroundIndex: next, overlays: draft.overlays.map((layer) => layer.kind === "text" && layer.color === previousForeground ? { ...layer, color: STORY_BACKGROUNDS[next].foreground } : layer) }));
+              haptic();
+            }} disabled={publishing} /> : null}
+        </View>
+      </View>
+
+      <StoryFooter offset={{ closed: 0, opened: insets.bottom }} style={styles.footerWrap}>
+        <View onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)} style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom + 6) }]}>
+          {error ? <Text accessibilityLiveRegion="polite" style={styles.editorError}>{error}</Text> : null}
+          {drafts.length > 1 || mediaItem ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbRow} keyboardShouldPersistTaps="handled">
+              {drafts.map((draft, i) => {
+                const active = i === index;
+                return (
+                  <Pressable key={draft.key} onPress={() => selectItem(i)} disabled={publishing} accessibilityRole="button" accessibilityLabel={`Story ${i + 1} of ${drafts.length}`} accessibilityState={{ selected: active }}
+                    style={[styles.thumb, { borderColor: active ? ink.text : "transparent", backgroundColor: STORY_BACKGROUNDS[draft.backgroundIndex].color }]}>
+                    {draft.image ? <Image source={draft.image} style={styles.thumbImage} resizeMode="cover" /> : null}
+                    {draft.videoUri ? <Ionicons name="videocam" size={18} color="#FFFFFF" /> : null}
+                    {!hasMedia(draft) ? <Text style={styles.thumbText} numberOfLines={2}>{draft.overlays.find((layer) => layer.text.trim())?.text || "Aa"}</Text> : null}
+                    {active && drafts.length > 1 ? (
+                      <Pressable onPress={() => removeItem(i)} disabled={publishing} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove story ${i + 1}`} style={styles.thumbRemove}>
+                        <Ionicons name="close" size={13} color="#FFFFFF" />
+                      </Pressable>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+              {drafts.length < MAX_ITEMS ? (
+                <Pressable onPress={() => void chooseMedia()} disabled={picking || publishing} accessibilityRole="button" accessibilityLabel="Add more photos or videos" style={[styles.thumb, styles.thumbAdd]}>
+                  {picking ? <ActivityIndicator color={ink.text} size="small" /> : <Ionicons name="add" size={24} color={ink.text} />}
                 </Pressable>
-              ))}
+              ) : null}
             </ScrollView>
-            <View style={[styles.tip, { backgroundColor: palette.blueSoft }]}><Ionicons name="bulb-outline" size={20} color={palette.accent} /><Text style={[styles.tipText, { color: palette.text }]}>Keep the moment simple. Add a short message, a sticker, and you're ready to go.</Text></View>
-          </>
-        ) : (
-          <>
-            <View style={styles.editorMeta}>
-              <View style={styles.flex}><Text style={[styles.editorTitle, { color: palette.text }]} numberOfLines={1}>{organisationName}</Text><Text style={[styles.smallText, { color: palette.muted }]}>Drag text and stickers to place them</Text></View>
-              <Pressable onPress={() => { Keyboard.dismiss(); setPreviewing(true); }} style={[styles.previewBtn, { backgroundColor: palette.surface, borderColor: palette.line }]} accessibilityRole="button"><Ionicons name="expand-outline" size={18} color={palette.text} /><Text style={[styles.choiceText, { color: palette.text }]}>Preview</Text></Pressable>
-            </View>
-            <View style={[styles.canvasFrame, { width: canvasWidth, borderColor: palette.line }]}>
-              <StoryCanvas image={image} background={background.color} fit={fit} overlays={overlays} editable selectedId={selectedId}
-                media={videoUri ? <StoryVideo key={videoUri} uri={videoUri} paused={previewing || publishing} fit={fit} /> : undefined}
-                onSelect={(id) => { Keyboard.dismiss(); setSelectedId(id); setActiveTool(undefined); }}
-                onMove={(id, x, y) => updateLayer(id, { x, y })}
-              />
-            </View>
-            {batch.length > 1 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.styleRow}>
-              {batch.map((draft, index) => <Choice key={index} label={`${index + 1} · ${draft.videoUri ? "Video" : "Story"}`} selected={draftIndex === index} disabled={publishing} onPress={() => selectDraft(index)} />)}
-            </ScrollView> : null}
-            {batch.length ? <Pressable onPress={removeDraft} disabled={publishing} accessibilityRole="button" style={styles.previewBtn}>
-              <Ionicons name="trash-outline" size={17} color={palette.danger} /><Text style={[styles.choiceText, { color: palette.danger }]}>Remove this item</Text>
-            </Pressable> : null}
-            <View style={styles.toolRow}>{TOOLS.map((tool) => (
-              <Pressable key={tool.id} onPress={() => chooseTool(tool.id)} accessibilityRole="button" accessibilityState={{ selected: activeTool === tool.id }} style={[styles.tool, { backgroundColor: activeTool === tool.id ? palette.blueSoft : palette.surface, borderColor: activeTool === tool.id ? palette.accent : palette.line }]}>
-                <Ionicons name={tool.icon} size={21} color={activeTool === tool.id ? palette.accent : palette.text} /><Text style={[styles.toolLabel, { color: activeTool === tool.id ? palette.accent : palette.text }]}>{tool.label}</Text>
+          ) : null}
+          <View style={styles.captionRow}>
+            {mediaItem ? (
+              <View style={styles.captionBox}>
+                <Ionicons name="chatbox-ellipses-outline" size={20} color={ink.muted} />
+                <TextInput value={current.caption} onChangeText={(caption) => updateCurrent({ caption })} placeholder="Add a caption…" placeholderTextColor={ink.muted}
+                  maxLength={1000} multiline editable={!publishing} accessibilityLabel="Story caption" style={styles.captionInput} />
+              </View>
+            ) : (
+              <Pressable onPress={() => void chooseMedia()} disabled={picking || publishing} accessibilityRole="button" accessibilityLabel="Add a photo or video" style={[styles.captionBox, styles.textModeHint]}>
+                <Ionicons name="images-outline" size={20} color={ink.muted} />
+                <Text style={styles.textModeLabel} numberOfLines={1}>Tap the text to edit · add a photo</Text>
               </Pressable>
-            ))}</View>
-            {activeTool === "text" && selected?.kind === "text" ? (
-              <View style={[styles.panel, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                <View style={styles.panelHeading}><Text style={[styles.optionTitle, { color: palette.text }]}>Your message</Text><Pressable onPress={() => { Keyboard.dismiss(); setActiveTool(undefined); }} accessibilityRole="button" hitSlop={8}><Text style={[styles.doneText, { color: palette.accent }]}>Done</Text></Pressable></View>
-                <TextInput ref={textInputRef} value={selected.text} onChangeText={(value) => updateLayer(selected.id, { text: value })}
-                  placeholder="Write something worth sharing…" placeholderTextColor={palette.muted}
-                  multiline maxLength={200} selectTextOnFocus textAlignVertical="top" accessibilityLabel="Story text"
-                  style={[styles.textInput, { color: palette.text, backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}
-                />
-                <View style={styles.styleRow}>{TEXT_STYLES.map((style) => <Choice key={style} label={style.charAt(0).toUpperCase() + style.slice(1)} selected={selected.style === style} onPress={() => updateLayer(selected.id, { style })} />)}</View>
-                <View style={styles.textOptions}>
-                  <View style={styles.swatchRow}>{TEXT_COLORS.map((color) => <Pressable key={color} onPress={() => updateLayer(selected.id, { color })} accessibilityRole="button" accessibilityLabel={`Use ${color === "#FFFFFF" ? "white" : color === "#70BDF5" ? "blue" : "black"} text`} style={[styles.swatch, { backgroundColor: color, borderColor: selected.color === color ? palette.accent : palette.line, borderWidth: selected.color === color ? 3 : 1 }]} />)}</View>
-                  <View style={styles.sizeButtons}><Pressable onPress={() => updateLayer(selected.id, { size: Math.max(16, selected.size - 3) })} accessibilityRole="button" accessibilityLabel="Smaller text" style={styles.smallButton}><Ionicons name="remove" size={20} color={palette.text} /></Pressable><Text style={[styles.smallText, { color: palette.muted }]}>Size</Text><Pressable onPress={() => updateLayer(selected.id, { size: Math.min(46, selected.size + 3) })} accessibilityRole="button" accessibilityLabel="Larger text" style={styles.smallButton}><Ionicons name="add" size={20} color={palette.text} /></Pressable></View>
-                </View>
-                <Choice label="Add another text layer" onPress={() => addLayer("Your message", "text")} disabled={overlays.length >= 8} />
-              </View>
-            ) : null}
-            {activeTool === "stickers" ? (
-              <View style={[styles.panel, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                <View style={styles.panelHeading}><Text style={[styles.optionTitle, { color: palette.text }]}>Add a little personality</Text><Text style={[styles.smallText, { color: palette.muted }]}>{overlays.length}/8 layers</Text></View>
-                <View style={styles.stickerGrid}>{STICKERS.map((sticker) => <Choice key={sticker} label={sticker} onPress={() => addLayer(sticker, "sticker")} disabled={overlays.length >= 8} />)}</View>
-              </View>
-            ) : null}
-            {activeTool === "background" ? (
-              <View style={[styles.panel, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                <Text style={[styles.optionTitle, { color: palette.text }]}>Set the mood</Text>
-                <View style={styles.backgroundRow}>{STORY_BACKGROUNDS.map((item, index) => <Pressable key={item.name} onPress={() => { setBackgroundIndex(index); haptic(); }} accessibilityRole="radio" accessibilityState={{ checked: backgroundIndex === index }} accessibilityLabel={`${item.name} background`} style={styles.backgroundOption}><View style={[styles.backgroundSwatch, { backgroundColor: item.color, borderColor: index === backgroundIndex ? palette.accent : palette.line }]}>{index === backgroundIndex ? <Ionicons name="checkmark" size={21} color={item.foreground} /> : null}</View><Text style={[styles.smallText, { color: palette.muted }]}>{item.name}</Text></Pressable>)}</View>
-                {image ? <Text style={[styles.smallText, { color: palette.muted }]}>Background colours appear around a fitted photo.</Text> : null}
-              </View>
-            ) : null}
-            {activeTool === "layout" ? (
-              <View style={[styles.panel, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                <Text style={[styles.optionTitle, { color: palette.text }]}>Frame your story</Text>
-                <View style={styles.styleRow}><Choice label="Fit media" selected={fit === "contain"} onPress={() => setFit("contain")} disabled={!image && !videoUri} /><Choice label="Fill screen" selected={fit === "cover"} onPress={() => setFit("cover")} disabled={!image && !videoUri} /></View>
-                <Text style={[styles.smallText, { color: palette.muted }]}>Fit media keeps your whole photo or video visible.</Text>
-                {image || videoUri ? <Choice label="Remove media" onPress={() => { setImage(undefined); setVideoUri(undefined); setMediaFileName(undefined); setMediaMimeType(undefined); }} /> : null}
-              </View>
-            ) : null}
-            {selected ? (
-              <View style={styles.selectedRow}><Text style={[styles.smallText, styles.flex, { color: palette.muted }]} numberOfLines={1}>Selected: {selected.text || "Text"}</Text><Pressable onPress={() => { setOverlays((current) => current.filter((layer) => layer.id !== selected.id)); setSelectedId(undefined); Keyboard.dismiss(); }} accessibilityRole="button" accessibilityLabel="Remove selected layer" style={styles.smallButton}><Ionicons name="trash-outline" size={19} color={palette.danger} /></Pressable><Pressable onPress={() => { setSelectedId(undefined); setActiveTool(undefined); Keyboard.dismiss(); }} accessibilityRole="button" accessibilityLabel="Deselect layer" style={styles.smallButton}><Ionicons name="checkmark" size={22} color={palette.accent} /></Pressable></View>
-            ) : null}
-          </>
-        )}
-        {picking ? <ActivityIndicator color={palette.accent} accessibilityLabel="Opening media picker" /> : null}
-        {pickError ? <Text accessibilityLiveRegion="polite" style={[styles.error, { color: palette.danger }]}>{pickError}</Text> : null}
-      </StoryScrollView>
-      {editing ? (
-        <StoryFooter offset={{ closed: 0, opened: insets.bottom }}>
-          <View onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)} style={[styles.footer, { backgroundColor: palette.canvas, borderColor: palette.line, paddingBottom: Math.max(12, insets.bottom) }]}>
-            <Pressable onPress={() => void chooseMedia()} disabled={picking || publishing} accessibilityRole="button" accessibilityLabel="Add photos or videos to stories" style={[styles.footerGallery, { backgroundColor: palette.surface, borderColor: palette.line }]}><Ionicons name="images-outline" size={22} color={palette.text} /></Pressable>
-            <Pressable onPress={() => void share()} disabled={!hasContent || publishing || picking} accessibilityRole="button" accessibilityState={{ disabled: !hasContent || publishing || picking, busy: publishing }} style={[styles.shareButton, { backgroundColor: hasContent ? palette.blue : palette.surfaceRaised }]}><Text style={[styles.shareText, { color: hasContent ? "#FFFFFF" : palette.muted }]}>{publishing ? "Publishing…" : batch.length > 1 ? `Publish ${batch.length} stories` : "Publish story"}</Text><Ionicons name="arrow-forward" size={20} color={hasContent ? "#FFFFFF" : palette.muted} /></Pressable>
+            )}
+            <Pressable onPress={() => void share()} disabled={!canPublish} accessibilityRole="button" accessibilityLabel={drafts.length > 1 ? `Publish ${drafts.length} stories` : "Publish story"} accessibilityState={{ disabled: !canPublish, busy: publishing }}
+              style={({ pressed }) => [styles.sendButton, { opacity: !canPublish && !publishing ? 0.45 : pressed ? 0.8 : 1 }]}>
+              {publishing ? <ActivityIndicator color={ink.onSend} /> : <Ionicons name="send" size={22} color={ink.onSend} />}
+              {drafts.length > 1 && !publishing ? <View style={styles.sendBadge}><Text style={styles.sendBadgeText}>{drafts.length}</Text></View> : null}
+            </Pressable>
           </View>
-        </StoryFooter>
-      ) : <View style={{ height: insets.bottom }} />}
-      <Modal visible={previewing} animationType="fade" onRequestClose={() => setPreviewing(false)}>
-        <View style={[styles.fullPreview, { paddingTop: insets.top + 10, paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <View style={styles.fullPreviewHeader}><View style={styles.flex}><Text style={styles.fullPreviewTitle}>{organisationName}</Text><Text style={styles.fullPreviewSubtitle}>Story preview</Text></View><Pressable onPress={() => setPreviewing(false)} accessibilityRole="button" accessibilityLabel="Close preview" style={styles.smallButton}><Ionicons name="close" size={26} color="#FFFFFF" /></Pressable></View>
-          <View style={[styles.fullCanvas, { width: Math.max(120, Math.min(width - 32, (height - insets.top - insets.bottom - 160) * 9 / 16)) }]}><StoryCanvas image={image} background={background.color} fit={fit} overlays={overlays}
-            media={videoUri && previewing ? <StoryVideo key={videoUri} uri={videoUri} paused={publishing} fit={fit} /> : undefined} /></View>
-          <Pressable onPress={() => void share()} disabled={!hasContent || publishing} accessibilityRole="button" style={[styles.keepEditing, { backgroundColor: palette.blue }]}><Text style={styles.shareText}>{publishing ? "Publishing…" : "Publish story"}</Text></Pressable>
-          <Pressable onPress={() => setPreviewing(false)} accessibilityRole="button" style={styles.keepEditing}><Ionicons name="create-outline" size={19} color="#FFFFFF" /><Text style={styles.shareText}>Keep editing</Text></Pressable>
+        </View>
+      </StoryFooter>
+
+      {editingLayer ? (
+        <View style={[styles.textEditor, { paddingTop: insets.top + 10 }]}>
+          <View style={styles.textEditorBar}>
+            <Pressable onPress={() => {
+              const next = TEXT_STYLES[(TEXT_STYLES.indexOf(editingLayer.style) + 1) % TEXT_STYLES.length];
+              updateLayer(editingLayer.id, { style: next }); haptic();
+            }} accessibilityRole="button" accessibilityLabel={`Text style: ${STYLE_LABEL[editingLayer.style]}. Tap to change`} style={styles.pill}>
+              <Text style={styles.pillText}>Aa · {STYLE_LABEL[editingLayer.style]}</Text>
+            </Pressable>
+            <View style={styles.sizeControls}>
+              <Pressable onPress={() => updateLayer(editingLayer.id, { size: Math.max(16, editingLayer.size - 3) })} accessibilityRole="button" accessibilityLabel="Smaller text" style={styles.sizeButton}><Ionicons name="remove" size={20} color="#FFFFFF" /></Pressable>
+              <Pressable onPress={() => updateLayer(editingLayer.id, { size: Math.min(46, editingLayer.size + 3) })} accessibilityRole="button" accessibilityLabel="Larger text" style={styles.sizeButton}><Ionicons name="add" size={20} color="#FFFFFF" /></Pressable>
+            </View>
+            <Pressable onPress={closeTextEditor} accessibilityRole="button" style={styles.donePill}><Text style={styles.donePillText}>Done</Text></Pressable>
+          </View>
+          <View style={styles.colorRow}>
+            {TEXT_COLORS.map((color) => (
+              <Pressable key={color} onPress={() => { updateLayer(editingLayer.id, { color }); haptic(); }} accessibilityRole="button" accessibilityLabel={`Text colour ${color}`} accessibilityState={{ selected: editingLayer.color === color }}
+                style={[styles.colorDot, { backgroundColor: color, borderWidth: editingLayer.color === color ? 3 : 1.5, transform: [{ scale: editingLayer.color === color ? 1.15 : 1 }] }]} />
+            ))}
+          </View>
+          <TextInput
+            ref={textInputRef} value={editingLayer.text} onChangeText={(text) => updateLayer(editingLayer.id, { text })}
+            placeholder="Type something…" placeholderTextColor="rgba(255,255,255,0.55)" multiline maxLength={200} textAlign="center"
+            accessibilityLabel="Story text"
+            style={[styles.textEditorInput, {
+              color: editingLayer.color, fontSize: Math.min(40, editingLayer.size + 4), lineHeight: Math.min(40, editingLayer.size + 4) * 1.25,
+              fontFamily: editingLayer.style === "classic" ? "Inter_500Medium" : "Inter_700Bold",
+              backgroundColor: editingLayer.style === "label" ? (editingLayer.color === "#08111F" ? "#FFFFFF" : "#08111F") : "transparent",
+            }]}
+          />
+        </View>
+      ) : null}
+
+      <Modal visible={stickersOpen} transparent animationType="slide" onRequestClose={() => setStickersOpen(false)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setStickersOpen(false)} accessibilityLabel="Close stickers" />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>Stickers</Text>
+            <Text style={styles.sheetCount}>{current.overlays.length}/{MAX_LAYERS}</Text>
+          </View>
+          <View style={styles.stickerGrid}>
+            {STICKERS.map((sticker) => (
+              <Pressable key={sticker} disabled={current.overlays.length >= MAX_LAYERS}
+                onPress={() => { if (addLayer(sticker, "sticker")) setStickersOpen(false); }}
+                accessibilityRole="button" accessibilityLabel={`Add ${sticker} sticker`}
+                style={({ pressed }) => [styles.sticker, { opacity: current.overlays.length >= MAX_LAYERS ? 0.4 : pressed ? 0.7 : 1 }]}>
+                <Text style={[styles.stickerText, sticker.length <= 2 && styles.stickerEmoji]}>{sticker}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {current.overlays.length >= MAX_LAYERS ? <Text style={styles.sheetNote}>Remove a text or sticker to add another.</Text> : null}
         </View>
       </Modal>
+      {discardDialog}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(INK: Ink) {
+  return StyleSheet.create({
   root: { flex: 1 },
-  flex: { flex: 1, minWidth: 0 },
-  content: { padding: 18, paddingBottom: 28, gap: 18 },
-  intro: { gap: 9, paddingTop: 6 },
-  eyebrow: { fontSize: 10, letterSpacing: 1.5, fontFamily: "Inter_700Bold" },
-  heading: { fontSize: 31, lineHeight: 38, letterSpacing: -1, fontFamily: "Inter_700Bold" },
-  description: { fontSize: 14, lineHeight: 22, fontFamily: "Inter_400Regular" },
-  entryRow: { flexDirection: "row", gap: 12 },
-  entryCard: { flex: 1, minHeight: 130, borderRadius: 21, borderWidth: 1, borderColor: "transparent", padding: 18, gap: 8, justifyContent: "center" },
-  entryTitle: { color: "#FFFFFF", fontSize: 17, fontFamily: "Inter_700Bold" },
-  entrySubtitle: { color: "#E0F0FC", fontSize: 12, fontFamily: "Inter_400Regular" },
-  textEntry: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 19, padding: 14, borderWidth: 1 },
-  textEntryIcon: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  aa: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  optionTitle: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_600SemiBold" },
-  smallText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
-  sectionHeading: { gap: 4, paddingTop: 4 },
-  sectionTitle: { fontSize: 17, lineHeight: 23, fontFamily: "Inter_700Bold", letterSpacing: -0.3 },
-  templateRow: { gap: 12, paddingBottom: 2 },
-  templateCard: { width: 172, borderWidth: 1, borderRadius: 19, overflow: "hidden" },
-  templateImage: { width: "100%", height: 228 },
-  templateCopy: { padding: 12, gap: 4 },
-  templateTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  templateSubtitle: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular" },
-  templateBadge: { position: "absolute", top: 10, right: 10, backgroundColor: "rgba(8,11,16,0.85)", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 15, flexDirection: "row", alignItems: "center", gap: 5 },
-  templateBadgeText: { color: "#FFFFFF", fontSize: 10, fontFamily: "Inter_600SemiBold" },
-  tip: { flexDirection: "row", alignItems: "center", gap: 11, padding: 15, borderRadius: 17 },
-  tipText: { flex: 1, fontSize: 12, lineHeight: 19, fontFamily: "Inter_400Regular" },
-  editorMeta: { flexDirection: "row", alignItems: "center", gap: 10 },
-  editorTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
-  previewBtn: { minHeight: 40, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 6 },
-  canvasFrame: { alignSelf: "center", borderRadius: 23, overflow: "hidden", borderWidth: 1 },
-  toolRow: { flexDirection: "row", gap: 8 },
-  tool: { flex: 1, minHeight: 65, paddingVertical: 10, borderRadius: 17, borderWidth: 1, alignItems: "center", justifyContent: "center", gap: 5 },
-  toolLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  panel: { borderWidth: 1, borderRadius: 20, padding: 15, gap: 13 },
-  panelHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  doneText: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  textInput: { minHeight: 95, maxHeight: 150, borderRadius: 14, borderWidth: 1, padding: 12, fontSize: 16, lineHeight: 23, fontFamily: "Inter_500Medium" },
-  styleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  choice: { borderWidth: 1, borderRadius: 12, minHeight: 42, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" },
-  choiceText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  textOptions: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  swatchRow: { flexDirection: "row", gap: 9 },
-  swatch: { width: 32, height: 32, borderRadius: 16 },
-  sizeButtons: { flexDirection: "row", alignItems: "center", gap: 4 },
-  smallButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  stickerGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
-  backgroundRow: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
-  backgroundOption: { alignItems: "center", gap: 6, flex: 1 },
-  backgroundSwatch: { width: 47, height: 47, borderRadius: 16, borderWidth: 2, alignItems: "center", justifyContent: "center" },
-  selectedRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  error: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_500Medium" },
-  footer: { flexDirection: "row", paddingHorizontal: 18, paddingTop: 12, gap: 10, borderTopWidth: StyleSheet.hairlineWidth },
-  footerGallery: { width: 54, minHeight: 52, borderWidth: 1, borderRadius: 16, justifyContent: "center", alignItems: "center" },
-  shareButton: { flex: 1, minHeight: 52, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  shareText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
-  fullPreview: { flex: 1, backgroundColor: "#080B10", paddingHorizontal: 16, justifyContent: "space-between", gap: 12 },
-  fullPreviewHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  fullPreviewTitle: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
-  fullPreviewSubtitle: { color: "#9EABC0", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
-  fullCanvas: { alignSelf: "center" },
-  keepEditing: { backgroundColor: "#181F2A", minHeight: 50, borderRadius: 16, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
+  // Entry ("Add status")
+  entryHeader: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 12, paddingVertical: 10 },
+  headerIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  entryTitle: { color: INK.text, fontSize: 22, fontFamily: "Inter_600SemiBold" },
+  entryContent: { paddingHorizontal: 18, gap: 18 },
+  entryActions: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 12 },
+  entryAction: { alignItems: "center", gap: 9, minWidth: 80 },
+  entryCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: INK.raised, alignItems: "center", justifyContent: "center" },
+  entryLabel: { color: INK.text, fontSize: 14, fontFamily: "Inter_500Medium" },
+  entryError: { color: INK.danger, fontSize: 13, lineHeight: 19, textAlign: "center", fontFamily: "Inter_500Medium" },
+  sectionTitle: { color: INK.muted, fontSize: 14, fontFamily: "Inter_600SemiBold", marginTop: 4 },
+  templateGrid: { flexDirection: "row", gap: 8 },
+  templateTile: { flex: 1, aspectRatio: 9 / 16, borderRadius: 12, overflow: "hidden", backgroundColor: INK.surface },
+  templateShade: { position: "absolute", left: 0, right: 0, bottom: 0, padding: 8, backgroundColor: "rgba(0,0,0,0.45)" },
+  templateTitle: { color: "#FFFFFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  entryHint: { color: INK.muted, fontSize: 12, lineHeight: 18, textAlign: "center", fontFamily: "Inter_400Regular" },
+  // Editor
+  stage: { position: "absolute", left: 0, right: 0, alignItems: "center", justifyContent: "center" },
+  topBar: { position: "absolute", top: 0, left: 0, right: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12 },
+  topTools: { flexDirection: "row", gap: 8 },
+  roundIcon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  footerWrap: { position: "absolute", left: 0, right: 0, bottom: 0 },
+  footer: { backgroundColor: INK.bg, paddingTop: 8, paddingHorizontal: 12, gap: 10 },
+  editorError: { color: INK.danger, fontSize: 13, lineHeight: 18, textAlign: "center", fontFamily: "Inter_500Medium" },
+  thumbRow: { gap: 8, paddingVertical: 2 },
+  thumb: { width: 48, height: 64, borderRadius: 8, borderWidth: 2, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  thumbImage: { ...StyleSheet.absoluteFill },
+  thumbText: { color: "#FFFFFF", fontSize: 9, textAlign: "center", paddingHorizontal: 3, fontFamily: "Inter_600SemiBold" },
+  thumbRemove: { position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: 9, backgroundColor: "rgba(0,0,0,0.75)", alignItems: "center", justifyContent: "center" },
+  thumbAdd: { backgroundColor: INK.surface, borderColor: INK.line, borderStyle: "dashed" },
+  captionRow: { flexDirection: "row", alignItems: "flex-end", gap: 10 },
+  captionBox: { flex: 1, minHeight: 50, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: INK.surface, borderRadius: 25, paddingHorizontal: 16 },
+  captionInput: { flex: 1, color: INK.text, fontSize: 16, maxHeight: 110, paddingVertical: Platform.OS === "ios" ? 14 : 10, fontFamily: "Inter_400Regular" },
+  textModeHint: { justifyContent: "flex-start" },
+  textModeLabel: { flex: 1, color: INK.muted, fontSize: 14, fontFamily: "Inter_400Regular" },
+  sendButton: { width: 52, height: 52, borderRadius: 26, backgroundColor: INK.send, alignItems: "center", justifyContent: "center" },
+  sendBadge: { position: "absolute", top: -4, right: -4, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: INK.text, alignItems: "center", justifyContent: "center" },
+  sendBadgeText: { color: INK.bg, fontSize: 11, fontFamily: "Inter_700Bold" },
+  // Text editor
+  textEditor: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.72)", paddingHorizontal: 16, gap: 16 },
+  textEditorBar: { flexDirection: "row", alignItems: "center", gap: 10 },
+  pill: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.16)", justifyContent: "center" },
+  pillText: { color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  sizeControls: { flexDirection: "row", gap: 6, flex: 1 },
+  sizeButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center" },
+  donePill: { minHeight: 40, paddingHorizontal: 18, borderRadius: 20, backgroundColor: "#FFFFFF", justifyContent: "center" },
+  donePillText: { color: "#08111F", fontSize: 14, fontFamily: "Inter_700Bold" },
+  colorRow: { flexDirection: "row", justifyContent: "center", gap: 12, flexWrap: "wrap" },
+  colorDot: { width: 28, height: 28, borderRadius: 14, borderColor: "#FFFFFF" },
+  textEditorInput: { alignSelf: "center", maxWidth: "100%", minWidth: 160, marginTop: 24, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, textAlignVertical: "center" },
+  // Stickers
+  sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
+  sheet: { backgroundColor: INK.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 18, paddingTop: 10, gap: 14 },
+  sheetHandle: { alignSelf: "center", width: 42, height: 5, borderRadius: 3, backgroundColor: INK.line },
+  sheetHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  sheetTitle: { color: INK.text, fontSize: 17, fontFamily: "Inter_700Bold" },
+  sheetCount: { color: INK.muted, fontSize: 13, fontFamily: "Inter_500Medium" },
+  stickerGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  sticker: { minWidth: 56, minHeight: 52, paddingHorizontal: 12, borderRadius: 14, backgroundColor: INK.raised, alignItems: "center", justifyContent: "center" },
+  stickerText: { color: INK.text, fontSize: 14, fontFamily: "Inter_700Bold" },
+  stickerEmoji: { fontSize: 28 },
+  sheetNote: { color: INK.muted, fontSize: 12, textAlign: "center", fontFamily: "Inter_400Regular" },
+  // Discard dialog
+  dialogBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center", padding: 28 },
+  dialog: { width: "100%", maxWidth: 360, backgroundColor: INK.surface, borderRadius: 20, padding: 22, gap: 10 },
+  dialogTitle: { color: INK.text, fontSize: 17, fontFamily: "Inter_700Bold" },
+  dialogText: { color: INK.muted, fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular" },
+  dialogActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 8 },
+  dialogButton: { minHeight: 44, paddingHorizontal: 14, justifyContent: "center" },
+  dialogButtonText: { color: INK.accent, fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  // Published
+  doneWrap: { flex: 1, justifyContent: "center", alignItems: "center", padding: 28, gap: 18 },
+  doneHeading: { fontSize: 24, lineHeight: 30, textAlign: "center", fontFamily: "Inter_700Bold" },
+  doneText: { fontSize: 14, lineHeight: 22, textAlign: "center", fontFamily: "Inter_400Regular" },
+  primaryButton: { minHeight: 52, paddingHorizontal: 24, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  primaryText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  linkText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });
+}

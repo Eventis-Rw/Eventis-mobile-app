@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -42,6 +42,7 @@ import {
 import {
   fetchManualPaymentMethods,
   formatMinorAmount,
+  isDuplicateManualPaymentError,
   submitManualPayment,
   uploadPaymentReceipt,
   type ManualPaymentMethod,
@@ -110,7 +111,7 @@ function ManualSubscribeCheckout() {
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
-  const { refreshOrganiserSubscription } = useAuth();
+  const { user, isLoading, refreshOrganiserSubscription } = useAuth();
 
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -128,6 +129,7 @@ function ManualSubscribeCheckout() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [duplicatePayment, setDuplicatePayment] = useState(false);
   const [submission, setSubmission] = useState<ManualPaymentSubmission | null>(null);
 
   const loadPlans = useCallback(async () => {
@@ -155,6 +157,10 @@ function ManualSubscribeCheckout() {
   }, [submitting]);
 
   const activePlan = plans.find((p) => p.id === selectedPlanId) ?? null;
+
+  if (!isLoading && !user?.isDemo && !user?.serverRoles?.includes("organizer_owner") && user?.organiserApplication?.status !== "PENDING_PAYMENT") {
+    return <Redirect href={"/organiser" as any} />;
+  }
 
   const goToMethods = async () => {
     if (!activePlan) return;
@@ -209,10 +215,13 @@ function ManualSubscribeCheckout() {
       });
       setSubmission(created);
       setStep("result");
-      void refreshOrganiserSubscription();
+      void refreshOrganiserSubscription().catch((error) => {
+        console.warn("Could not refresh organiser access:", error);
+      });
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       setSubmitError(describeError(error, "We couldn't submit your payment. Please try again."));
+      setDuplicatePayment(isDuplicateManualPaymentError(error));
       if (Platform.OS !== "web") void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSubmitting(false);
@@ -258,6 +267,40 @@ function ManualSubscribeCheckout() {
     );
   }
 
+  if (submitError && duplicatePayment) {
+    return (
+      <View style={[styles.root, { backgroundColor: palette.canvas }]}>
+        <OrganiserAtmosphere />
+        <OrganiserFlowHeader title="Upload receipt" step={2} canGoBack={false} />
+        <ScrollView contentContainerStyle={[styles.statusWrap, { paddingBottom: insets.bottom + 24 }]}>
+          <Animated.View entering={FadeIn} style={styles.status}>
+            <View style={[styles.statusIconWrap, { backgroundColor: `${colors.warning}20`, borderColor: `${colors.primary}40` }]}>
+              <Ionicons name="time-outline" size={48} color={colors.warning} />
+            </View>
+            <Text style={[styles.statusTitle, { color: colors.foreground }]}>Payment already submitted</Text>
+            <Text style={[styles.statusText, { color: colors.mutedForeground }]}>{submitError}</Text>
+            <View style={styles.statusActions}>
+              <Pressable
+                style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]}
+                onPress={() => router.push("/organiser/payments" as any)}
+              >
+                <Text style={styles.primaryPayBtnText}>View my payments</Text>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+              </Pressable>
+              <Pressable
+                onPress={() => router.replace("/(tabs)" as any)}
+                style={styles.cancelSheetBtn}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.cancelSheetText, { color: colors.mutedForeground }]}>Back to home</Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </View>
+    );
+  }
+
   if (step === "upload") {
     return (
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
@@ -287,6 +330,15 @@ function ManualSubscribeCheckout() {
           />
           {photoError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{photoError}</Text> : null}
           {submitError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{submitError}</Text> : null}
+          {submitError ? (
+            <Pressable
+              onPress={() => router.replace("/(tabs)" as any)}
+              style={styles.cancelSheetBtn}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.cancelSheetText, { color: palette.accent }]}>Back to home</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             disabled={!receiptUri || submitting}
             style={[styles.primaryPayBtn, { backgroundColor: colors.primary, opacity: !receiptUri || submitting ? 0.6 : 1 }]}

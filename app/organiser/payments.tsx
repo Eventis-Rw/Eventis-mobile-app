@@ -59,9 +59,9 @@ export default function OrganiserPaymentsScreen() {
       try {
         const page = await fetchMyManualPayments({ platform: "organiser", limit: 50 });
         setItems(page.items);
-        if (page.items.some((item) => item.status === "approved")) void refreshOrganiserSubscription();
+        await refreshOrganiserSubscription();
       } catch (err) {
-        setError(describeError(err, "We couldn't load your payment history."));
+        setError(describeError(err, "We couldn't refresh your payment history or organiser access."));
       } finally {
         setLoading(false);
         setRefreshing(false);

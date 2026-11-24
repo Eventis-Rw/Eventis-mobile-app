@@ -44,6 +44,7 @@ import type { LiveVoice } from "@/hooks/useLiveBroadcast";
 import type { LiveEventReference } from "@/services/liveDirectoryService";
 import { useEvents } from "@/context/EventsContext";
 import { getEventImage } from "@/constants/eventImages";
+import { admissionLabel } from "@/utils/admission";
 
 type Props = {
   room: LiveRoom;
@@ -643,9 +644,7 @@ export function LiveRoomView({
                 <Text style={s.label}>{featuredEvent.location}</Text>
                 <Text style={s.body}>{featuredEvent.description}</Text>
                 <Text style={s.body}>
-                  {featuredEvent.isPaid
-                    ? `${featuredEvent.currency} ${featuredEvent.price.toLocaleString()}`
-                    : "Free entry"}
+                  {admissionLabel(featuredEvent)}
                 </Text>
               </>
             ) : (

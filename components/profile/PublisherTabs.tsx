@@ -143,7 +143,7 @@ const VERIFICATION_COPY: Record<BusinessVerificationStatus, { title: string; mes
   },
   unverified: {
     title: "Not verified yet",
-    message: "Submit your business documents to sell paid tickets.",
+    message: "Submit your business documents to get verified.",
     icon: "shield-outline",
     colorKey: "mutedForeground",
   },
@@ -266,7 +266,7 @@ export function PublisherOverviewTab(props: PublisherOverviewTabProps) {
           {website ? (
             <DetailRow icon="globe-outline" label="Website" value={website.replace(/^https?:\/\//, "")} onPress={() => openUrl(website)} />
           ) : (
-            <MissingDetail label={isBusiness ? "Add your website (needed for paid events)" : "Add your website"} onPress={onEditProfile} />
+            <MissingDetail label="Add your website" onPress={onEditProfile} />
           )}
           {socials.length ? (
             <View style={styles.socialRow}>
