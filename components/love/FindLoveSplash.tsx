@@ -1,165 +1,156 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
   FadeOut,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withRepeat,
   withSequence,
   withTiming,
 } from "react-native-reanimated";
 
-import { useColors } from "@/hooks/useColors";
-
-/** How long the fallback animation plays before FindLove opens on its own. */
-export const FINDLOVE_SPLASH_MS = 2600;
-/** Longest the intro video may hold the screen (it is ~15 s), in case it stalls. */
-const VIDEO_MAX_MS = 16000;
-
-const INTRO_VIDEO = require("@/assets/videos/findlove-intro.mp4");
-
-// Small hearts that float up behind the logo: x offset (px), delay (ms), size.
-const FLOATING_HEARTS = [
-  { x: -120, delay: 150, size: 18 },
-  { x: -60, delay: 600, size: 14 },
-  { x: 10, delay: 300, size: 22 },
-  { x: 75, delay: 800, size: 16 },
-  { x: 130, delay: 450, size: 20 },
-];
+/** Duration of the FindLove splash animation (2 seconds). */
+export const FINDLOVE_SPLASH_MS = 2000;
 
 /**
- * Intro played each time FindLove is opened from Eventis: the FindLove video,
- * or the animated logo if the video cannot play. Tapping anywhere skips it.
+ * Twitter/X-style Squeeze & Punch-Through Heart Animation for FindLove:
+ * 1. Single heart appears in vibrant Eventis Blue (#00A3FF) with subtle resting pulse.
+ * 2. Does the iconic Twitter/X anticipation squeeze (shrink) while morphing from Blue to Pink (#FF2D55).
+ * 3. Punch-through explosive zoom (36x) reveals the FindLove interface.
+ * 4. Completes in exactly 2.0 seconds. Tapping anywhere immediately skips.
  */
 export function FindLoveSplash({ onDone }: { onDone: () => void }) {
-  const [videoFailed, setVideoFailed] = useState(false);
-  return videoFailed ? <AnimatedSplash onDone={onDone} /> : <VideoSplash onDone={onDone} onError={() => setVideoFailed(true)} />;
-}
+  const heartScale = useSharedValue(1);
+  const heartOpacity = useSharedValue(1);
+  const colorMorph = useSharedValue(0); // 0 = Blue, 1 = Pink
+  const containerOpacity = useSharedValue(1);
+  const doneCalled = useRef(false);
 
-function VideoSplash({ onDone, onError }: { onDone: () => void; onError: () => void }) {
-  const player = useVideoPlayer(INTRO_VIDEO, (video) => {
-    video.loop = false;
-    // Muted so opening FindLove never plays sound out loud unexpectedly.
-    video.muted = true;
-    video.play();
-  });
+  const finish = () => {
+    if (doneCalled.current) return;
+    doneCalled.current = true;
+    onDone();
+  };
 
   useEffect(() => {
-    const end = player.addListener("playToEnd", onDone);
-    const status = player.addListener("statusChange", ({ status }) => {
-      if (status === "error") onError();
-    });
-    const timer = setTimeout(onDone, VIDEO_MAX_MS);
-    return () => {
-      end.remove();
-      status.remove();
-      clearTimeout(timer);
-    };
-  }, [player]);
+    // 1. Scale animation (Twitter/X squeeze & punch-through over 2 seconds)
+    heartScale.value = withSequence(
+      // Gentle living breath in Blue (0 -> 750ms)
+      withTiming(1.08, { duration: 380, easing: Easing.inOut(Easing.quad) }),
+      withTiming(1.0, { duration: 370, easing: Easing.inOut(Easing.quad) }),
+      // Iconic Twitter squeeze / shrink ("inhale") (750ms -> 1250ms)
+      withTiming(0.82, { duration: 500, easing: Easing.bezier(0.25, 0.1, 0.25, 1) }),
+      // Explosive punch-through zoom (1250ms -> 1800ms)
+      withTiming(36, { duration: 550, easing: Easing.bezier(0.65, 0, 0.35, 1) })
+    );
+
+    // 2. Color morph from Blue to Pink during the anticipation squeeze (600ms -> 1250ms)
+    colorMorph.value = withDelay(
+      600,
+      withTiming(1, { duration: 650, easing: Easing.inOut(Easing.cubic) })
+    );
+
+    // 3. Heart opacity fade-out as it punches through (1400ms -> 1750ms)
+    heartOpacity.value = withDelay(
+      1400,
+      withTiming(0, { duration: 350, easing: Easing.out(Easing.ease) })
+    );
+
+    // 4. Background container dissolve to seamlessly reveal FindLove (1650ms -> 2000ms)
+    containerOpacity.value = withSequence(
+      withDelay(
+        1650,
+        withTiming(0, { duration: 350, easing: Easing.linear }, (finished) => {
+          if (finished) {
+            runOnJS(finish)();
+          }
+        })
+      )
+    );
+
+    // 5. Fallback timer at exactly 2000ms
+    const timer = setTimeout(() => {
+      finish();
+    }, FINDLOVE_SPLASH_MS);
+
+    return () => clearTimeout(timer);
+  }, [onDone]);
+
+  // Scaled heart container style
+  const heartContainerStyle = useAnimatedStyle(() => ({
+    opacity: heartOpacity.value,
+    transform: [{ scale: heartScale.value }],
+  }));
+
+  // Blue heart layer style (fades out as colorMorph -> 1)
+  const blueLayerStyle = useAnimatedStyle(() => ({
+    opacity: 1 - colorMorph.value,
+  }));
+
+  // Pink heart layer style (fades in as colorMorph -> 1)
+  const pinkLayerStyle = useAnimatedStyle(() => ({
+    opacity: colorMorph.value,
+  }));
+
+  // Screen container fade
+  const containerStyle = useAnimatedStyle(() => ({
+    opacity: containerOpacity.value,
+  }));
 
   return (
-    <Animated.View exiting={FadeOut.duration(300)} style={[StyleSheet.absoluteFill, styles.videoRoot]}>
-      <VideoView
-        player={player}
-        style={[StyleSheet.absoluteFill, { width: "100%", height: "100%" }]}
-        contentFit="cover"
-        nativeControls={false}
-        allowsPictureInPicture={false}
-      />
+    <Animated.View exiting={FadeOut.duration(200)} style={[styles.root, containerStyle]}>
       <Pressable
-        onPress={onDone}
+        onPress={finish}
         style={StyleSheet.absoluteFill}
         accessibilityRole="button"
         accessibilityLabel="Skip intro and open FindLove"
       >
-        <View style={styles.skipPill}>
-          <Text style={styles.skipPillText}>Skip</Text>
-          <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
+        <View style={styles.center}>
+          <Animated.View style={[styles.heartBox, heartContainerStyle]}>
+            {/* Blue Heart Layer (#00A3FF) */}
+            <Animated.View style={[StyleSheet.absoluteFill, styles.iconCenter, blueLayerStyle]}>
+              <Ionicons name="heart" size={92} color="#00A3FF" />
+            </Animated.View>
+
+            {/* Pink Heart Layer (#FF2D55) */}
+            <Animated.View style={[StyleSheet.absoluteFill, styles.iconCenter, pinkLayerStyle]}>
+              <Ionicons name="heart" size={92} color="#FF2D55" />
+            </Animated.View>
+          </Animated.View>
         </View>
       </Pressable>
     </Animated.View>
   );
 }
 
-function AnimatedSplash({ onDone }: { onDone: () => void }) {
-  const colors = useColors();
-  const logo = useSharedValue(0);
-  const beat = useSharedValue(1);
-  const text = useSharedValue(0);
-
-  useEffect(() => {
-    logo.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.back(1.6)) });
-    beat.value = withDelay(700, withRepeat(withSequence(withTiming(1.12, { duration: 240 }), withTiming(1, { duration: 240 })), 3));
-    text.value = withDelay(500, withTiming(1, { duration: 600 }));
-    const timer = setTimeout(onDone, FINDLOVE_SPLASH_MS);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const logoStyle = useAnimatedStyle(() => ({
-    opacity: logo.value,
-    transform: [{ scale: (0.4 + logo.value * 0.6) * beat.value }],
-  }));
-  const textStyle = useAnimatedStyle(() => ({
-    opacity: text.value,
-    transform: [{ translateY: (1 - text.value) * 16 }],
-  }));
-
-  return (
-    <Animated.View exiting={FadeOut.duration(300)} style={StyleSheet.absoluteFill}>
-      <Pressable
-        onPress={onDone}
-        style={StyleSheet.absoluteFill}
-        accessibilityRole="button"
-        accessibilityLabel="Skip intro and open FindLove"
-      >
-        <LinearGradient colors={[colors.primary, "#7A1F4F"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.root}>
-          {FLOATING_HEARTS.map((heart) => (
-            <FloatingHeart key={heart.x} {...heart} />
-          ))}
-          <Animated.View style={[styles.logo, logoStyle]}>
-            <Ionicons name="heart" size={64} color={colors.primary} />
-          </Animated.View>
-          <Animated.View style={[styles.copy, textStyle]}>
-            <Text style={styles.title}>FindLove</Text>
-            <Text style={styles.subtitle}>Connect. Discover. Meet.</Text>
-          </Animated.View>
-          <Text style={styles.skip}>Tap to skip</Text>
-        </LinearGradient>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
-function FloatingHeart({ x, delay, size }: { x: number; delay: number; size: number }) {
-  const rise = useSharedValue(0);
-  useEffect(() => {
-    rise.value = withDelay(delay, withTiming(1, { duration: 2000, easing: Easing.out(Easing.quad) }));
-  }, []);
-  const style = useAnimatedStyle(() => ({
-    opacity: rise.value < 0.7 ? rise.value * 1.2 : (1 - rise.value) * 2.8,
-    transform: [{ translateX: x }, { translateY: 120 - rise.value * 300 }],
-  }));
-  return (
-    <Animated.View style={[styles.floating, style]}>
-      <Ionicons name="heart" size={size} color="rgba(255,255,255,0.75)" />
-    </Animated.View>
-  );
-}
-
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: "center", justifyContent: "center" },
-  logo: { width: 124, height: 124, borderRadius: 62, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
-  copy: { alignItems: "center", marginTop: 26 },
-  title: { color: "#FFFFFF", fontSize: 38, letterSpacing: -1.2, fontFamily: "Inter_700Bold" },
-  subtitle: { color: "rgba(255,255,255,0.85)", fontSize: 15, fontFamily: "Inter_500Medium", marginTop: 6 },
-  skip: { position: "absolute", bottom: 48, color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Inter_500Medium" },
-  floating: { position: "absolute" },
-  videoRoot: { backgroundColor: "#000000" },
-  skipPill: { position: "absolute", right: 18, bottom: 48, flexDirection: "row", alignItems: "center", gap: 2, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: "rgba(0,0,0,0.45)" },
-  skipPillText: { color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  root: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#070814",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 999,
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heartBox: {
+    width: 96,
+    height: 96,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

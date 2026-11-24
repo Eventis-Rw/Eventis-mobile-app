@@ -90,21 +90,6 @@ export default function CreateLoveProfileScreen() {
     );
   }
 
-  if (!user.phone) {
-    return (
-      <LoveScreenShell title="Create profile" onBack={back}>
-        <SectionState
-          kind="empty"
-          icon="call-outline"
-          title="Add a phone number first"
-          message="FindLove uses the phone number on your Eventis account. Add one in Edit Profile, then come back."
-          actionLabel="Edit Profile"
-          onAction={() => router.push("/profile/edit" as any)}
-        />
-      </LoveScreenShell>
-    );
-  }
-
   // Step 1 is the ID check; this screen opens again once it's verified.
   if (!isAgeVerified(verification)) {
     return <Redirect href={{ pathname: "/love/verify", params: { from: "create" } } as any} />;

@@ -126,6 +126,31 @@ export function ProfileHeader({
         </View>
       ) : null}
 
+      {user.phone ? (
+        <View style={styles.metaRow}>
+          <Ionicons name="call-outline" size={14} color={colors.mutedForeground} />
+          <Text style={[styles.metaText, { color: colors.mutedForeground }]} numberOfLines={1}>
+            {user.phone}
+          </Text>
+          {user.isPhoneVerified ? (
+            <Ionicons name="checkmark-circle" size={13} color={colors.primary} />
+          ) : null}
+        </View>
+      ) : (
+        <Pressable
+          onPress={onEditProfile}
+          hitSlop={6}
+          style={styles.metaRow}
+          accessibilityRole="button"
+          accessibilityLabel="Add phone number"
+        >
+          <Ionicons name="call-outline" size={14} color={colors.primary} />
+          <Text style={[styles.metaText, { color: colors.primary, fontFamily: "Inter_600SemiBold" }]} numberOfLines={1}>
+            Add phone number
+          </Text>
+        </Pressable>
+      )}
+
       <Pressable
         onPress={onEditProfile}
         style={({ pressed }) => [

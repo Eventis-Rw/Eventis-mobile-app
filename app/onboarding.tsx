@@ -220,18 +220,6 @@ export default function OnboardingScreen() {
                       {item.primaryActionLabel}
                     </Text>
                   </Pressable>
-
-                  {/* Secondary Sign In link */}
-                  <Pressable
-                    style={styles.signInLink}
-                    onPress={() => void finish()}
-                    accessibilityRole="button"
-                    accessibilityLabel="Sign in to existing account"
-                  >
-                    <Text style={styles.signInLinkText}>
-                      Already have an account? <Text style={[styles.signInHighlight, { color: colors.primary }]}>Sign In</Text>
-                    </Text>
-                  </Pressable>
                 </View>
               </View>
             </ScrollView>

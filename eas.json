@@ -15,6 +15,18 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://eventis-api.brother-1.hubfly.app",
+        "EXPO_PUBLIC_DEMO_AUTH": "false",
+        "EXPO_PUBLIC_USE_EVENTS_API": "true",
+        "EXPO_PUBLIC_USE_ORGANISER_API": "true",
+        "EXPO_PUBLIC_USE_PROFILE_API": "true",
+        "EXPO_PUBLIC_FINDLOVE_ENABLED": "true",
+        "EXPO_PUBLIC_USE_FINDLOVE_API": "true",
+        "EXPO_PUBLIC_USE_LIVE_PAYMENTS_API": "false",
+        "EXPO_PUBLIC_USE_LIVE_REPORTS_API": "false",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "935024827942-es3a0g21v9jh1fh3i98qupbn73696cqa.apps.googleusercontent.com"
       }
     },
     "production": {
