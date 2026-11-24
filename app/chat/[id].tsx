@@ -88,6 +88,7 @@ function MessageBubble({
   previous,
   onActions,
   onImage,
+  onRetryAttachment,
   highlighted,
   onReply,
   replyEnabled,
@@ -97,6 +98,7 @@ function MessageBubble({
   previous?: ChatMessage;
   onActions: () => void;
   onImage: (uri: string) => void;
+  onRetryAttachment: () => void;
   highlighted: boolean;
   onReply: () => void;
   replyEnabled: boolean;
@@ -224,6 +226,13 @@ function MessageBubble({
                 durationMs={message.audioDurationMs}
               />
             ) : null}
+            {message.attachmentError ? (
+              <Pressable onPress={onRetryAttachment} accessibilityRole="button" accessibilityLabel="Retry downloading attachment">
+                <Text accessibilityLiveRegion="polite" style={[styles.smallText, { color: colors.destructive }]}>
+                  {message.attachmentError}
+                </Text>
+              </Pressable>
+            ) : null}
             {message.videoUri ? (
               <ChatVideoBubble uri={message.videoUri} />
             ) : null}
@@ -303,7 +312,7 @@ export default function ConversationScreen() {
     ? chat.getContact(conversation.contactId)
     : undefined;
   const contactDisplayName =
-    contact?.isInAddressBook === false ? contact.phone : contact?.name;
+    contact?.isInAddressBook === false ? contact.phone || contact.name : contact?.name;
   const allMessages = chat.messagesByConversation[id] ?? [];
   const list = useRef<FlatList<ChatMessage>>(null);
   const menuButton = useRef<ComponentRef<typeof View>>(null);
@@ -1115,6 +1124,7 @@ export default function ConversationScreen() {
                     if (item.status !== "pending") setSelected(item);
                   }}
                   onImage={setImagePreview}
+                  onRetryAttachment={() => void run(() => loadMessages(id))}
                 />
               )}
               contentContainerStyle={[

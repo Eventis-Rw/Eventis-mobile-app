@@ -1,7 +1,7 @@
 import { File, Paths } from "expo-file-system";
 import { Platform } from "react-native";
 
-import { API_BASE, api, getToken } from "@/utils/apiClient";
+import { API_BASE, api, getToken, refreshSession } from "@/utils/apiClient";
 
 import type {
   ChatContact,
@@ -9,6 +9,7 @@ import type {
   ChatConversation,
   ChatMessage,
   ChatReport,
+  ChatUserSearchPage,
   ChatService,
   ChatSnapshot,
   PhoneLookupResult,
@@ -107,6 +108,15 @@ interface ConversationPage {
   total: number;
 }
 
+interface ApiDiscoverableUser {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  avatarUrl: string | null;
+}
+
 const FALLBACK_AVATAR = "";
 
 function normalizePhone(phone: string) {
@@ -199,6 +209,8 @@ export class ApiChatService implements ChatService {
   private readonly messageCache = new Map<string, ApiMessage>();
   private readonly invitedPhones = new Set<string>();
   private readonly blockedIds = new Set<string>();
+  private readonly attachmentDownloads = new Map<string, Promise<string>>();
+  private readonly webAttachmentUrls = new Map<string, string>();
   private selfId = "";
 
   constructor(private readonly getSelfId: () => string) {}
@@ -531,6 +543,32 @@ export class ApiChatService implements ChatService {
     });
   }
 
+  async searchUsers(query: string, page = 1): Promise<ChatUserSearchPage> {
+    const result = await api.get<{
+      items: ApiDiscoverableUser[];
+      page: number;
+      limit: number;
+      hasMore: boolean;
+    }>(`/api/v1/chat/users/search?query=${encodeURIComponent(query)}&page=${page}&limit=20`);
+    const items = result.items.map((profile): ChatContact => {
+      const username = profile.username?.trim() || undefined;
+      return {
+        id: profile.id,
+        username,
+        name: displayName(profile, username ? `@${username}` : "Eventis user"),
+        phone: "",
+        avatarUrl: profile.avatarUrl ?? FALLBACK_AVATAR,
+        headline: username ? `@${username} · On Eventis` : "On Eventis",
+        isEventisUser: true,
+        firstName: profile.firstName ?? undefined,
+        lastName: profile.lastName ?? undefined,
+        isInAddressBook: false,
+      };
+    });
+    for (const contact of items) this.contacts.set(contact.id, contact);
+    return { items, page: result.page, hasMore: result.hasMore };
+  }
+
   async acceptInvitation(token: string): Promise<ChatConversation> {
     const result = await api.post<{ conversation: ApiConversation }>(
       "/api/v1/chat/invitations/accept",
@@ -619,29 +657,59 @@ export class ApiChatService implements ChatService {
 
   private async resolveAttachment(
     attachment: ApiAttachment,
-  ): Promise<string | undefined> {
-    if (Platform.OS === "web") {
-      return `${API_BASE}${attachment.downloadPath}`;
-    }
+  ): Promise<string> {
+    const pending = this.attachmentDownloads.get(attachment.id);
+    if (pending) return pending;
+    const download = this.downloadAttachment(attachment);
+    this.attachmentDownloads.set(attachment.id, download);
     try {
-      const token = await getToken();
-      const extension = extensionOf(attachment.fileName);
-      const file = new File(
-        Paths.cache,
-        `chat-${attachment.id}${extension ? `.${extension}` : ""}`,
+      return await download;
+    } finally {
+      this.attachmentDownloads.delete(attachment.id);
+    }
+  }
+
+  private async downloadAttachment(attachment: ApiAttachment): Promise<string> {
+    if (Platform.OS === "web") {
+      const cached = this.webAttachmentUrls.get(attachment.id);
+      if (cached) return cached;
+      const blob = await api.getBlob(attachment.downloadPath);
+      if (blob.size !== attachment.sizeBytes || !blob.size) {
+        throw new Error("The attachment download was incomplete.");
+      }
+      const uri = URL.createObjectURL(blob);
+      this.webAttachmentUrls.set(attachment.id, uri);
+      return uri;
+    }
+    const extension = extensionOf(attachment.fileName);
+    const file = new File(
+      Paths.cache,
+      `chat-v2-${this.currentUserId()}-${attachment.id}${extension ? `.${extension}` : ""}`,
+    );
+    if (file.exists && file.size === attachment.sizeBytes && file.size > 0) return file.uri;
+    if (file.exists) file.delete();
+    try {
+      let token = await getToken();
+      if (!token) throw new Error("Please sign in again to download this attachment.");
+      const download = (accessToken: string) => File.downloadFileAsync(
+        `${API_BASE}${attachment.downloadPath}`, file,
+        { headers: { Authorization: `Bearer ${accessToken}` }, idempotent: true },
       );
-      if (file.exists) return file.uri;
-      const downloaded = await File.downloadFileAsync(
-        `${API_BASE}${attachment.downloadPath}`,
-        file,
-        {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          idempotent: true,
-        },
-      );
+      let downloaded: File;
+      try {
+        downloaded = await download(token);
+      } catch (error) {
+        if (!(error instanceof Error) || !/\b401\b/.test(error.message)) throw error;
+        token = await refreshSession();
+        downloaded = await download(token);
+      }
+      if (downloaded.size !== attachment.sizeBytes || downloaded.size === 0) {
+        throw new Error("The attachment download was incomplete.");
+      }
       return downloaded.uri;
-    } catch {
-      return undefined;
+    } catch (error) {
+      if (file.exists) file.delete();
+      throw error;
     }
   }
 
@@ -653,9 +721,16 @@ export class ApiChatService implements ChatService {
       ? this.messageCache.get(message.replyToId)
       : undefined;
     const attachment = message.attachments[0];
-    const uri =
-      localMediaUri ??
-      (attachment ? await this.resolveAttachment(attachment) : undefined);
+    let uri = localMediaUri;
+    let attachmentError: string | undefined;
+    if (!uri && attachment) {
+      try {
+        uri = await this.resolveAttachment(attachment);
+      } catch (error) {
+        console.warn("Chat attachment download failed:", error);
+        attachmentError = "Attachment could not be downloaded. Tap to retry.";
+      }
+    }
     const mimeType = attachment?.mimeType ?? "";
     const result: ChatMessage = {
       id: message.id,
@@ -683,6 +758,7 @@ export class ApiChatService implements ChatService {
     if (attachment) {
       result.attachmentName = attachment.fileName;
       result.attachmentMimeType = attachment.mimeType;
+      if (attachmentError) result.attachmentError = attachmentError;
       if (attachment.width !== null) result.attachmentWidth = attachment.width;
       if (attachment.height !== null) result.attachmentHeight = attachment.height;
       if (uri) {

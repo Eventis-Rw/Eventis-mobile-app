@@ -32,6 +32,7 @@ import { shareEvent } from "@/utils/shareEvent";
 import { getEventImage } from "@/constants/eventImages";
 import { useAnalytics } from "@/context/AnalyticsContext";
 import type { AnalyticsSource } from "@/services/analyticsService";
+import { EventInteractions } from "@/components/EventInteractions";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -1264,10 +1265,9 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
         <View style={styles.instaActionBar}>
           {/* Left: Interactive Share with count */}
           <View style={styles.instaLeftActions}>
-            <View style={styles.instaActionPill} accessible accessibilityLabel={`${viewsCount} views`}>
-              <Ionicons name="eye-outline" size={21} color={colors.foreground} />
-              <Text style={[styles.instaActionCount, { color: colors.foreground }]}>{formatCount(viewsCount)}</Text>
-            </View>
+            {event.ownerId ? (
+              <EventInteractions eventId={event.id} userId={user?.id} ownerId={event.ownerId} />
+            ) : null}
             {/* Share action with count kept */}
             <Pressable
               style={({ pressed }) => [styles.instaActionPill, pressed && { opacity: 0.7 }]}
@@ -1280,6 +1280,10 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
                 {formatCount(shareCount)}
               </Text>
             </Pressable>
+            <View style={styles.instaActionPill} accessible accessibilityLabel={`${viewsCount} views`}>
+              <Ionicons name="eye-outline" size={21} color={colors.foreground} />
+              <Text style={[styles.instaActionCount, { color: colors.foreground }]}>{formatCount(viewsCount)}</Text>
+            </View>
           </View>
 
           {/* Right: Save Post action with count */}

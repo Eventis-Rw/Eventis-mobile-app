@@ -13,6 +13,11 @@
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.eventis.rw",
+        "EXPO_PUBLIC_USE_ORGANISER_API": "true"
+      },
       "android": {
         "buildType": "apk"
       },
@@ -30,7 +35,12 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.eventis.rw",
+        "EXPO_PUBLIC_USE_ORGANISER_API": "true"
+      }
     }
   }
 }

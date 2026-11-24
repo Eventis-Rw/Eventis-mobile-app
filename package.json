@@ -10,7 +10,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:auth": "node --test scripts/auth-integration.test.cjs scripts/auth-providers.test.cjs",
+    "test:auth": "node --test scripts/auth-integration.test.cjs scripts/auth-providers.test.cjs scripts/organiser-account-sync.test.cjs",
     "test:events-api": "node scripts/events-integration.test.cjs",
     "test:status": "node --test scripts/status-service.test.cjs",
     "test:chat": "node scripts/chat-service.test.cjs",

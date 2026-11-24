@@ -48,6 +48,16 @@ test("phone lookup distinguishes registered, inviteable, and unknown identities"
   );
 });
 
+test("registered-user search is paginated and matches usernames or names", async () => {
+  const service = freshService();
+  const aline = await service.searchUsers("aline");
+  assert.ok(aline.items.some((item) => item.id === "contact-aline"));
+  assert.equal(aline.page, 1);
+  assert.equal(aline.hasMore, false);
+  const kevin = await service.searchUsers("Kevin", 1);
+  assert.ok(kevin.items.some((item) => item.id === "contact-kevin"));
+});
+
 test("contact names and invitations persist and existing chats are reused", async () => {
   const service = freshService();
   await service.updateContactName("contact-aline", "My friend");

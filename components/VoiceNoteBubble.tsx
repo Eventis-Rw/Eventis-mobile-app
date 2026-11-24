@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useChatColors } from "@/hooks/useChatColors";
@@ -22,18 +23,26 @@ export function VoiceNoteBubble({
   const colors = useChatColors();
   const player = useAudioPlayer(uri, { updateInterval: 150 });
   const status = useAudioPlayerStatus(player);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const duration = status.duration || durationMs / 1000;
   const progress = duration ? Math.min(1, status.currentTime / duration) : 0;
 
   const togglePlayback = async () => {
-    if (status.playing) {
-      player.pause();
-      return;
+    try {
+      setPlaybackError(null);
+      if (status.playing) {
+        player.pause();
+        return;
+      }
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true, shouldRouteThroughEarpiece: false });
+      if (status.didJustFinish || (duration && status.currentTime >= duration)) {
+        await player.seekTo(0);
+      }
+      player.play();
+    } catch (error) {
+      console.warn("Voice message playback failed:", error);
+      setPlaybackError("Voice message could not be played.");
     }
-    if (status.didJustFinish || (duration && status.currentTime >= duration)) {
-      await player.seekTo(0);
-    }
-    player.play();
   };
 
   return (
@@ -73,7 +82,7 @@ export function VoiceNoteBubble({
           })}
         </View>
         <Text style={[styles.duration, { color: colors.mutedForeground }]}>
-          {formatDuration(status.playing ? status.currentTime : duration)}
+          {playbackError || status.error ? "Could not play voice message" : formatDuration(status.playing ? status.currentTime : duration)}
         </Text>
       </View>
     </View>

@@ -77,6 +77,7 @@ export function OrganisationFields({
   errorFor,
   logoUri,
   onLogoChange,
+  showLogo = true,
 }: {
   values: OrganisationFormValues;
   onChange: (key: keyof OrganisationFormValues, text: string) => void;
@@ -85,6 +86,7 @@ export function OrganisationFields({
   errorFor: (key: keyof OrganisationFormValues) => string | undefined;
   logoUri?: string;
   onLogoChange: (uri: string | undefined) => void;
+  showLogo?: boolean;
 }) {
   const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
@@ -115,7 +117,7 @@ export function OrganisationFields({
 
   return (
     <View style={[styles.section, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-      <View style={styles.logoRow}>
+      {showLogo && <View style={styles.logoRow}>
         <Pressable
           onPress={pickLogo}
           style={[styles.logo, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}
@@ -145,7 +147,7 @@ export function OrganisationFields({
           </View>
           {logoError && <Text style={[styles.error, { color: colors.destructive }]}>{logoError}</Text>}
         </View>
-      </View>
+      </View>}
 
       <FormField
         label="Organisation name"

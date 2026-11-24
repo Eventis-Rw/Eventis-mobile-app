@@ -1,4 +1,4 @@
-import { api } from "@/utils/apiClient";
+import { api, ApiError } from "@/utils/apiClient";
 import { appendLocalFile } from "@/utils/formDataFile";
 
 /**
@@ -156,6 +156,11 @@ export async function submitManualPayment(input: {
     receipt_upload_id: input.receiptUploadId,
   });
   return normalizeSubmission(row);
+}
+
+export function isDuplicateManualPaymentError(error: unknown): boolean {
+  if (error instanceof ApiError && error.status === 409) return true;
+  return error instanceof Error && /already have a payment|awaiting review/i.test(error.message);
 }
 
 /** GET /api/v1/manual-payments/mine. Newest first. */

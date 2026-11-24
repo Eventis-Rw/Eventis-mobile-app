@@ -7,6 +7,7 @@ export interface ChatContact {
   avatarUrl: string;
   headline: string;
   isEventisUser: boolean;
+  username?: string;
   isOnline?: boolean;
   invited?: boolean;
   blocked?: boolean;
@@ -52,6 +53,7 @@ export interface ChatMessage {
   videoDurationMs?: number;
   attachmentName?: string;
   attachmentMimeType?: string;
+  attachmentError?: string;
   attachmentWidth?: number;
   attachmentHeight?: number;
 }
@@ -71,12 +73,15 @@ export interface SendMessageOptions {
 }
 
 export function chatMessagePreview(
-  message: Pick<ChatMessage, "text" | "imageUri" | "audioUri" | "videoUri">,
+  message: Pick<ChatMessage, "text" | "imageUri" | "audioUri" | "videoUri" | "attachmentMimeType">,
 ) {
   if (message.text) return message.text;
   if (message.audioUri) return "Voice message";
   if (message.videoUri) return "Video";
   if (message.imageUri) return "Photo";
+  if (message.attachmentMimeType?.startsWith("audio/")) return "Voice message";
+  if (message.attachmentMimeType?.startsWith("video/")) return "Video";
+  if (message.attachmentMimeType?.startsWith("image/")) return "Photo";
   return "Message";
 }
 
@@ -99,6 +104,12 @@ export type PhoneLookupResult =
   | { kind: "eventis"; contact: ChatContact }
   | { kind: "invite"; contact: ChatContact }
   | { kind: "not_found"; phone: string };
+
+export interface ChatUserSearchPage {
+  items: ChatContact[];
+  page: number;
+  hasMore: boolean;
+}
 
 export interface ChatService {
   load(): Promise<ChatSnapshot>;
@@ -135,6 +146,7 @@ export interface ChatService {
   syncContacts(
     contacts: Array<{ name?: string; phoneNumber: string }>,
   ): Promise<ChatContact[]>;
+  searchUsers(query: string, page?: number): Promise<ChatUserSearchPage>;
   acceptInvitation(token: string): Promise<ChatConversation>;
 }
 
@@ -688,6 +700,15 @@ export class MockChatService implements ChatService {
     return contact.isEventisUser
       ? { kind: "eventis", contact: { ...contact } }
       : { kind: "invite", contact: { ...contact } };
+  }
+
+  async searchUsers(query: string, page = 1): Promise<ChatUserSearchPage> {
+    const state = await this.getState();
+    const term = query.trim().replace(/^@+/, "").toLowerCase();
+    const matches = state.contacts.filter((contact) => contact.isEventisUser &&
+      `${contact.username ?? ""} ${contact.name}`.toLowerCase().includes(term));
+    const start = (page - 1) * 20;
+    return { items: matches.slice(start, start + 20), page, hasMore: matches.length > start + 20 };
   }
 
   async markConversationRead(conversationId: string) {

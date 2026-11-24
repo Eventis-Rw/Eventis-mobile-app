@@ -48,11 +48,18 @@ export default function BecomeOrganiserScreen() {
   const { step } = useOrganiserAccess();
 
   const { user } = useAuth();
+  const application = user?.organiserApplication;
   const postsLeft = user?.organiserSubscription?.postsRemaining ?? 0;
   const quickPost = () =>
     router.push((postsLeft > 0 ? "/business/create-event" : "/organiser/subscribe") as any);
 
   const continueFlow = () => {
+    if (USE_ORGANISER_API && !user?.isDemo && step !== "ready") {
+      if (application?.status === "IN_REVIEW") return;
+      if (application?.status === "PENDING_PAYMENT") router.push((application.manualPaymentId ? "/organiser/payments" : "/organiser/subscribe") as any);
+      else router.push("/organiser/application" as any);
+      return;
+    }
     if (step === "ready") {
       router.replace("/business/dashboard" as any);
     } else if (step === "setup") {
@@ -62,7 +69,10 @@ export default function BecomeOrganiserScreen() {
     }
   };
 
-  const ctaLabel = step === "ready"
+  const ctaLabel = application?.status === "IN_REVIEW" ? "Application in review"
+    : application?.status === "PENDING_PAYMENT" ? application.manualPaymentId ? "Track payment verification" : "Continue to payment"
+    : application?.status === "REJECTED" ? "Apply again"
+    : step === "ready"
     ? "Open organiser workspace"
     : step === "setup"
       ? "Continue profile setup"
@@ -98,6 +108,15 @@ export default function BecomeOrganiserScreen() {
             </View>
           </View>
         ) : null}
+        {application?.status === "IN_REVIEW" ? (
+          <View style={[styles.resumeCard, { backgroundColor: palette.blueSoft, borderColor: palette.blue }]}>
+            <Text style={{ color: palette.text }}>Your payment was successful, and your organizer application has been submitted successfully. Our administration team is currently reviewing your application. You will receive a notification once a decision has been made.</Text>
+          </View>
+        ) : application?.status === "REJECTED" ? (
+          <View style={[styles.resumeCard, { backgroundColor: palette.blueSoft, borderColor: palette.blue }]}>
+            <Text style={{ color: palette.text }}>Application rejected: {application.rejectionReason}. You may apply again with a new payment.</Text>
+          </View>
+        ) : null}
 
         <Animated.View entering={enter(40)}>
           <LinearGradient
@@ -117,6 +136,7 @@ export default function BecomeOrganiserScreen() {
             </Text>
             <Pressable
               onPress={continueFlow}
+              disabled={application?.status === "IN_REVIEW"}
               style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
               accessibilityRole="button"
             >

@@ -1,5 +1,9 @@
 import { api } from "@/utils/apiClient";
 
+export const USE_NOTIFICATIONS_API =
+  process.env.EXPO_PUBLIC_USE_PROFILE_API === "true" ||
+  process.env.EXPO_PUBLIC_USE_ORGANISER_API === "true";
+
 export type BackendNotificationCategory = "EVENTS" | "ACTIVITY" | "ORGANIZERS" | "FINDLOVE" | "SYSTEM";
 
 export interface ApiNotification {
