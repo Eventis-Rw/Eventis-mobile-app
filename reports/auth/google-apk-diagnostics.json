@@ -1,0 +1,11 @@
+{
+  "package": "com.nzizaprince5.mobile",
+  "sha1": "16:BA:2A:24:DC:C8:5C:17:71:30:B2:97:D7:57:15:0E:E5:4E:98:1E",
+  "fullApkSignatureVerified": true,
+  "googleClientIdCount": 1,
+  "bundledGoogleClientMatchesLocal": true,
+  "productionApiUrlEmbedded": true,
+  "bundledGoogleClientCheck": "Current Web client ID found in Hermes bytecode; raw regex included neighboring string-table digits.",
+  "hermesGoogleClientStringVerified": true,
+  "liveBackendAcceptsCurrentMobileClient": true
+}

@@ -35,10 +35,6 @@ export function LiveWatchEntry({
     setSession(null);
     setError("");
     setUnavailable(false);
-    if (/^sample_[0-4]$/.test(id)) {
-      setSession(sampleBroadcastSession(id, person, liveRequestId()));
-      return () => { disposed = true; };
-    }
     void liveDirectoryApi
       .watch(id)
       .then((value) => {

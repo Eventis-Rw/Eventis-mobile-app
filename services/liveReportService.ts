@@ -41,10 +41,5 @@ export async function reportLive(input: LiveReportInput): Promise<LiveReportRece
       hostId: input.hostId,
     });
   }
-  await wait(500);
-  const receipt = { reference: "LIV-" + Date.now().toString(36).toUpperCase().slice(-6), submittedAt: new Date().toISOString() };
-  const raw = await AsyncStorage.getItem(REPORTS_KEY);
-  const existing = raw ? (JSON.parse(raw) as unknown[]) : [];
-  await AsyncStorage.setItem(REPORTS_KEY, JSON.stringify([{ ...input, details, ...receipt }, ...existing].slice(0, 50)));
-  return receipt;
+  throw new Error("Live reporting is unavailable. Please contact support.");
 }
