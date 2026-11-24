@@ -17,6 +17,8 @@ export type PublishedStory = {
   background: string;
   fit: "cover" | "contain";
   overlays: StoryOverlay[];
+  /** A caption written separately from the on-canvas text, shown under the story. */
+  caption?: string;
   createdAt: number;
   expiresAt: number;
   viewsCount?: number;

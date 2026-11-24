@@ -69,6 +69,17 @@ test("authenticated requests attach the access token", async () => {
   assert.equal(request.options.headers.Authorization, "Bearer access-token");
 });
 
+test("a DELETE answered with 200 and an empty body resolves instead of failing", async () => {
+  const client = loadApiClient();
+  await client.setToken("access-token");
+  global.fetch = async () => ({
+    ...response(200, undefined),
+    headers: { get: (name) => (name.toLowerCase() === "content-length" ? "0" : null) },
+  });
+
+  assert.equal(await client.api.delete("/api/v1/statuses/4d6a1c44-8f45-4eb8-9b69-52ec76cf9f0f"), undefined);
+});
+
 test("expired access tokens refresh once and retry with rotated tokens", async () => {
   const client = loadApiClient();
   await client.setAuthTokens("expired-access", "refresh-token");

@@ -233,7 +233,7 @@ export default function BookingScreen() {
               </View>
             </View>
             <Text style={[styles.ticketTypePriceText, { color: colors.foreground }]}>
-              {event.price === 0 ? "Free" : formatPrice(event.price)}
+              {!event.isPaid ? "Free" : event.price > 0 ? formatPrice(event.price) : "On ticket page"}
             </Text>
           </View>
         </Animated.View>
@@ -297,7 +297,7 @@ export default function BookingScreen() {
               {event.isPaid ? "General Admission" : "Free Reservation"} × {quantity}
             </Text>
             <Text style={[styles.summaryValue, { color: colors.foreground }]}>
-              {event.price === 0 ? "Free" : formatPrice(event.price * quantity)}
+              {!event.isPaid ? "Free" : event.price > 0 ? formatPrice(event.price * quantity) : "On ticket page"}
             </Text>
           </View>
           <View style={styles.summaryRow}>
@@ -305,13 +305,13 @@ export default function BookingScreen() {
               Service fee
             </Text>
             <Text style={[styles.summaryValue, { color: colors.mutedForeground }]}>
-              {event.price === 0 ? "—" : "Included"}
+              {!event.isPaid || event.price <= 0 ? "—" : "Included"}
             </Text>
           </View>
           <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
             <Text style={[styles.totalLabel, { color: colors.foreground }]}>Total</Text>
             <Text style={[styles.totalValue, { color: event.isPaid ? colors.foreground : colors.success }]}>
-              {event.price === 0 ? "Free" : formatPrice(total)}
+              {!event.isPaid ? "Free" : event.price > 0 ? formatPrice(total) : "On ticket page"}
             </Text>
           </View>
         </Animated.View>

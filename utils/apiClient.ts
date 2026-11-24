@@ -216,7 +216,8 @@ async function request<T>(
   }
 
   if (!response.ok) throw await toApiError(response);
-  if (response.status === 204) return undefined as T;
+  // Some endpoints (e.g. DELETE) answer 200 with an empty body; parsing that as JSON would throw.
+  if (response.status === 204 || response.headers?.get?.("content-length") === "0") return undefined as T;
   return response.json() as Promise<T>;
 }
 

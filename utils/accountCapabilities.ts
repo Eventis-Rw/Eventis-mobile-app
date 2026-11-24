@@ -30,7 +30,7 @@ export interface AccountCapabilities {
   canViewAnalytics: boolean;
   /** Promotional banners/posts/stories are a business-only tool. */
   canPromote: boolean;
-  /** Paid tickets need a verified business (journey compliance rule). */
+  /** Paid entry sends attendees to an external ticket link, so any organiser can publish it. */
   canPublishPaidEvents: boolean;
   /** Human-readable reason when paid publishing is blocked, for inline guidance. */
   paidEventsBlockedReason?: string;
@@ -68,12 +68,9 @@ export function getAccountCapabilities(input: CapabilityInput): AccountCapabilit
 
   const canManageEvents = isPublisher && hasOrganiserAccess;
   const canViewAnalytics = isBusiness && hasOrganiserAccess;
-  const isVerifiedBusiness = isBusiness && input.businessVerification === "verified";
-
-  let paidEventsBlockedReason: string | undefined;
-  if (!canManageEvents) paidEventsBlockedReason = "Organiser access is required to publish events.";
-  else if (!isBusiness) paidEventsBlockedReason = "Paid events can only be published by verified business accounts.";
-  else if (!isVerifiedBusiness) paidEventsBlockedReason = "Complete business verification to publish paid events.";
+  // Eventis doesn't sell tickets itself: paid entry links out to the organiser's ticket
+  // platform, so it no longer depends on business verification.
+  const paidEventsBlockedReason = canManageEvents ? undefined : "Organiser access is required to publish events.";
 
   const profileTabs: ProfileTabDef[] = isPublisher
     ? [
@@ -94,7 +91,7 @@ export function getAccountCapabilities(input: CapabilityInput): AccountCapabilit
     canManageEvents,
     canViewAnalytics,
     canPromote: isBusiness && hasOrganiserAccess,
-    canPublishPaidEvents: canManageEvents && isVerifiedBusiness,
+    canPublishPaidEvents: canManageEvents,
     paidEventsBlockedReason,
     settings: {
       editBusinessProfile: isBusiness && hasOrganiserAccess,

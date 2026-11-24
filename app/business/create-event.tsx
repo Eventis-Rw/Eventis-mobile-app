@@ -11,7 +11,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -27,7 +26,6 @@ import { getEventImage } from "@/constants/eventImages";
 import { CATEGORIES, type EventCategory } from "@/constants/events";
 import { useAuth } from "@/context/AuthContext";
 import { useEvents } from "@/context/EventsContext";
-import { useAccountCapabilities } from "@/hooks/useAccountCapabilities";
 import { useOrganiserColors } from "@/hooks/useOrganiserPalette";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { describeProfileError } from "@/services/profileService";
@@ -87,7 +85,8 @@ function toInput(form: FormState): PublisherEventInput {
     time: form.time.trim(),
     capacity: form.capacity.trim() ? Number(form.capacity) : 0,
     isPaid: form.isPaid,
-    price: Number(form.price),
+    // Blank price is allowed for paid entry; "5,000" style input is accepted.
+    price: form.price.trim() ? Number(form.price.replace(/[\s,]/g, "")) : 0,
     websiteUrl: form.websiteUrl,
   };
 }
@@ -105,7 +104,7 @@ function toForm(event: PublisherEvent): FormState {
     time: event.time,
     capacity: event.capacity ? String(event.capacity) : "",
     isPaid: event.isPaid,
-    price: event.isPaid ? String(event.price) : "",
+    price: event.isPaid && event.price > 0 ? String(event.price) : "",
     websiteUrl: event.organizerWebsite ?? "",
   };
 }
@@ -141,8 +140,6 @@ export default function CreateEventScreen() {
   const { id: editId } = useLocalSearchParams<{ id?: string }>();
   const { user, consumePost } = useAuth();
   const { refreshEvents } = useEvents();
-  // Journey rule: only verified businesses can charge for tickets.
-  const { canPublishPaidEvents, paidEventsBlockedReason, accountType } = useAccountCapabilities();
   const [form, setForm] = useState<FormState>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,10 +230,6 @@ export default function CreateEventScreen() {
   async function handleSubmit() {
     if (!isValid || submitting || !user) return;
     const input = toInput(form);
-    if (input.isPaid && !canPublishPaidEvents) {
-      setError(paidEventsBlockedReason ?? "Paid events need a verified business account.");
-      return;
-    }
     const problem = validateEventInput(input);
     if (problem) {
       setError(problem);
@@ -477,63 +470,83 @@ export default function CreateEventScreen() {
               style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>03  Tickets & entry (optional)</Text>
-              <Text style={[styles.switchSub, { color: colors.mutedForeground }]}>Publish without ticket details, or turn on paid entry to add a price and booking link.</Text>
+              <Text style={[styles.switchSub, { color: colors.mutedForeground }]}>Choose how people get in. Paid entry links to the platform where tickets are sold.</Text>
 
-              <View style={styles.switchRow}>
-                <View style={styles.switchLabel}>
-                  <Text style={[styles.label, { color: colors.foreground }]}>Paid Event</Text>
-                  <Text style={[styles.switchSub, { color: colors.mutedForeground }]}>
-                    {canPublishPaidEvents ? "Customers pay on your website" : paidEventsBlockedReason}
-                  </Text>
-                  {!canPublishPaidEvents && accountType === "business" ? (
+              <View style={styles.entryOptions} accessibilityRole="radiogroup">
+                {([
+                  { paid: false, title: "Free Entry", subtitle: "Anyone can come", icon: "people-outline" },
+                  { paid: true, title: "Paid Entry", subtitle: "Tickets sold externally", icon: "ticket-outline" },
+                ] as const).map((option) => {
+                  const selected = form.isPaid === option.paid;
+                  return (
                     <Pressable
-                      onPress={() => router.push("/business/verification" as any)}
-                      hitSlop={6}
-                      accessibilityRole="button"
+                      key={option.title}
+                      onPress={() => set("isPaid", option.paid)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected }}
+                      accessibilityLabel={`${option.title}. ${option.subtitle}`}
+                      style={({ pressed }) => [
+                        styles.entryOption,
+                        {
+                          backgroundColor: selected ? colors.primary + "14" : colors.input,
+                          borderColor: selected ? colors.primary : colors.border,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}
                     >
-                      <Text style={[styles.gateLink, { color: colors.primary }]}>Get verified</Text>
+                      <View style={styles.entryOptionHeader}>
+                        <Ionicons name={option.icon} size={20} color={selected ? colors.primary : colors.mutedForeground} />
+                        <Ionicons
+                          name={selected ? "radio-button-on" : "radio-button-off"}
+                          size={18}
+                          color={selected ? colors.primary : colors.mutedForeground}
+                        />
+                      </View>
+                      <Text style={[styles.label, { color: colors.foreground }]}>{option.title}</Text>
+                      <Text style={[styles.switchSub, { color: colors.mutedForeground }]}>{option.subtitle}</Text>
                     </Pressable>
-                  ) : null}
-                </View>
-                <Switch
-                  value={form.isPaid}
-                  onValueChange={(v) => set("isPaid", v)}
-                  // An existing paid event can still be switched to free.
-                  disabled={!canPublishPaidEvents && !form.isPaid}
-                  trackColor={{ true: colors.primary, false: colors.border }}
-                  thumbColor="#fff"
-                  accessibilityLabel="Paid event"
-                  accessibilityHint={canPublishPaidEvents ? undefined : paidEventsBlockedReason}
-                />
+                  );
+                })}
               </View>
+
+              {!form.isPaid && (
+                <View style={[styles.infoBox, { backgroundColor: colors.success + "11", borderColor: colors.success + "44" }]}>
+                  <Ionicons name="checkmark-circle-outline" size={16} color={colors.success} />
+                  <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
+                    No reservation needed · Free community access.
+                  </Text>
+                </View>
+              )}
 
               {form.isPaid && (
                 <>
-                  <Field label="Ticket Price (RWF)" colors={colors}>
+                  <Field label="Ticket Price (RWF) · optional" colors={colors}>
                     <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
                       <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>RWF</Text>
                       <TextInput
                         style={[styles.iconInputText, { color: colors.foreground }]}
-                        placeholder="0"
+                        placeholder="e.g. 5000"
                         placeholderTextColor={colors.mutedForeground}
                         value={form.price}
                         onChangeText={(v) => set("price", v)}
-                        keyboardType="decimal-pad"
+                        keyboardType="number-pad"
                       />
                     </View>
                   </Field>
 
-                  <Field label="Booking / Payment URL" required colors={colors}>
+                  <Field label="Ticket purchase link" required colors={colors}>
                     <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
                       <Ionicons name="globe-outline" size={18} color={colors.mutedForeground} />
                       <TextInput
                         style={[styles.iconInputText, { color: colors.foreground }]}
-                        placeholder="https://yourticketing.com/event"
+                        placeholder="https://tickets.example.com/your-event"
                         placeholderTextColor={colors.mutedForeground}
                         value={form.websiteUrl}
                         onChangeText={(v) => set("websiteUrl", v)}
                         keyboardType="url"
                         autoCapitalize="none"
+                        autoCorrect={false}
+                        accessibilityLabel="Ticket purchase link"
                       />
                     </View>
                   </Field>
@@ -541,7 +554,7 @@ export default function CreateEventScreen() {
                   <View style={[styles.infoBox, { backgroundColor: colors.primary + "11", borderColor: colors.primary + "44" }]}>
                     <Ionicons name="information-circle-outline" size={16} color={colors.primary} />
                     <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-                      Eventis redirects customers to your URL for payment. We do not process payments directly.
+                      Attendees tap Get Tickets and buy on this link (your website or a ticket platform). Eventis doesn't process payments. Leave the price blank to hide it.
                     </Text>
                   </View>
                 </>
@@ -581,7 +594,6 @@ export default function CreateEventScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   kav: { flex: 1 },
-  gateLink: { fontSize: 13, fontFamily: "Inter_600SemiBold", marginTop: 4 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
   submitBlock: { gap: 10 },
   scroll: { flex: 1 },
@@ -703,13 +715,9 @@ const styles = StyleSheet.create({
   },
   catChipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
 
-  switchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  switchLabel: { flex: 1, gap: 2 },
+  entryOptions: { flexDirection: "row", gap: 10 },
+  entryOption: { flex: 1, borderWidth: 1.5, borderRadius: 14, padding: 12, gap: 4 },
+  entryOptionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 2 },
   switchSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
 
   infoBox: {

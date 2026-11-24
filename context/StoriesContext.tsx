@@ -6,7 +6,7 @@ import { buildStorySession } from "@/utils/storyPlayback";
 import { deleteStatus, fetchStatusStories, recordStatusView } from "@/services/statusService";
 import { getViewedStories, groupStories, persistStoryView, storyKey, subscribeStories,
   type PublishedStory, type StoryCollection, type ViewedStories } from "@/services/storyService";
-import { getToken } from "@/utils/apiClient";
+import { ApiError, getToken } from "@/utils/apiClient";
 
 type Session = NonNullable<ReturnType<typeof buildStorySession>>;
 type StoriesState = {
@@ -112,8 +112,13 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
   }, [items, viewed, ownId]);
   const close = useCallback(() => setSession(null), []);
   const remove = useCallback(async (story: PublishedStory) => {
-    if (story.ownerId !== ownId || story.source !== "api") return;
-    await deleteStatus(story.id);
+    if (story.ownerId !== ownId || story.source !== "api") throw new Error("You can only delete your own stories.");
+    try {
+      await deleteStatus(story.id);
+    } catch (error) {
+      // Already gone (e.g. an earlier attempt succeeded): just drop it from the list.
+      if (!(error instanceof ApiError && error.status === 404)) throw error;
+    }
     setItems((previous) => previous.filter((item) => storyKey(item) !== storyKey(story)));
   }, [ownId]);
   const viewerOpen = session !== null;

@@ -25,6 +25,10 @@ export const STORY_BACKGROUNDS = [
   { name: "Ocean", color: "#075DA3", foreground: "#FFFFFF" },
   { name: "Slate", color: "#182C43", foreground: "#FFFFFF" },
   { name: "Cloud", color: "#F1F5FA", foreground: "#08111F" },
+  { name: "Berry", color: "#7A1F5C", foreground: "#FFFFFF" },
+  { name: "Forest", color: "#1F5C3A", foreground: "#FFFFFF" },
+  { name: "Sunset", color: "#C2410C", foreground: "#FFFFFF" },
+  { name: "Violet", color: "#4C1D95", foreground: "#FFFFFF" },
 ] as const;
 
 type CanvasProps = {
@@ -39,6 +43,8 @@ type CanvasProps = {
   editable?: boolean;
   onSelect?: (id: string) => void;
   onMove?: (id: string, x: number, y: number) => void;
+  /** A press without dragging, e.g. to open the text editor. */
+  onTapLayer?: (id: string) => void;
 };
 
 function StoryLayer({
@@ -49,6 +55,7 @@ function StoryLayer({
   editable,
   onSelect,
   onMove,
+  onTap,
 }: {
   overlay: StoryOverlay;
   width: number;
@@ -57,11 +64,12 @@ function StoryLayer({
   editable: boolean;
   onSelect?: CanvasProps["onSelect"];
   onMove?: CanvasProps["onMove"];
+  onTap?: CanvasProps["onTapLayer"];
 }) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const translation = useRef(new Animated.ValueXY()).current;
-  const latest = useRef({ overlay, width, height, editable, onSelect, onMove, size });
-  latest.current = { overlay, width, height, editable, onSelect, onMove, size };
+  const latest = useRef({ overlay, width, height, editable, onSelect, onMove, onTap, size });
+  latest.current = { overlay, width, height, editable, onSelect, onMove, onTap, size };
 
   const responder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => latest.current.editable,
@@ -79,6 +87,11 @@ function StoryLayer({
     },
     onPanResponderRelease: (_, gesture) => {
       const current = latest.current;
+      if (Math.abs(gesture.dx) < 6 && Math.abs(gesture.dy) < 6) {
+        translation.setValue({ x: 0, y: 0 });
+        current.onTap?.(current.overlay.id);
+        return;
+      }
       const x = Math.max(current.size.width / 2, Math.min(current.width - current.size.width / 2, current.overlay.x * current.width + gesture.dx));
       const y = Math.max(current.size.height / 2, Math.min(current.height - current.size.height / 2, current.overlay.y * current.height + gesture.dy));
       current.onMove?.(current.overlay.id, x / Math.max(1, current.width), y / Math.max(1, current.height));
@@ -133,7 +146,7 @@ function StoryLayer({
 }
 
 /** A portrait canvas; normalized positions stay consistent in the larger preview. */
-export function StoryCanvas({ image, background, fit, overlays, selectedId, editable = false, onSelect, onMove, media, onImageLoad, onImageError }: CanvasProps) {
+export function StoryCanvas({ image, background, fit, overlays, selectedId, editable = false, onSelect, onMove, onTapLayer, media, onImageLoad, onImageError }: CanvasProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
     <View
@@ -159,6 +172,7 @@ export function StoryCanvas({ image, background, fit, overlays, selectedId, edit
           editable={editable}
           onSelect={onSelect}
           onMove={onMove}
+          onTap={onTapLayer}
         />
       )) : null}
     </View>

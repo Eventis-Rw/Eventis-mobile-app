@@ -63,7 +63,7 @@ export const ORGANISATION_ACTIONS: PortalAction[] = [
   {
     key: "verification",
     title: "Verification",
-    description: "Verify your business to publish paid events.",
+    description: "Confirm your business details with Eventis.",
     icon: "shield-checkmark-outline",
     href: "/business/verification",
   },

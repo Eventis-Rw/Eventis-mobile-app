@@ -70,8 +70,9 @@ export function validateEventInput(input: PublisherEventInput, today = localDate
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.time)) return "Enter the time as HH:MM, e.g. 18:30.";
   if (!Number.isInteger(input.capacity) || input.capacity < 0) return "Enter a valid capacity, or leave it blank.";
   if (input.isPaid) {
-    if (!(input.price > 0)) return "Paid events need a ticket price.";
-    if (!isWebsite(input.websiteUrl)) return "Paid events need your payment website (https://…).";
+    // Paid entry: the ticket price is optional (0 = not shown), the ticket link is required.
+    if (!Number.isFinite(input.price) || input.price < 0) return "Enter a valid ticket price, or leave it blank.";
+    if (!isWebsite(input.websiteUrl)) return "Paid entry needs the link where people buy tickets (https://…).";
   }
   return null;
 }
@@ -202,7 +203,7 @@ function addHours(time: string, hours: number) {
 }
 
 function toEventFields(input: PublisherEventInput) {
-  const price = input.isPaid ? Math.round(input.price) : 0;
+  const price = input.isPaid && input.price > 0 ? Math.round(input.price) : 0;
   return {
     image: input.image.trim(),
     title: input.title.trim(),
@@ -214,7 +215,7 @@ function toEventFields(input: PublisherEventInput) {
     time: input.time,
     endTime: addHours(input.time, 3),
     price,
-    isPaid: input.isPaid && price > 0,
+    isPaid: input.isPaid,
     capacity: input.capacity,
     organizerWebsite: input.isPaid ? input.websiteUrl?.trim() : undefined,
   };

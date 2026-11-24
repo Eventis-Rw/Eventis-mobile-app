@@ -265,6 +265,17 @@ function captionOverlay(caption: string | null): StoryOverlay[] {
   }];
 }
 
+/**
+ * Older stories stored the on-canvas text as the caption. Only return a caption when it
+ * says something the text layers don't, so those stories don't show their text twice.
+ */
+export function separateCaption(caption: string | null | undefined, overlays: StoryOverlay[]): string | undefined {
+  const value = caption?.trim();
+  if (!value || !overlays.length) return undefined;
+  const layered = overlays.map((layer) => layer.text.trim()).filter(Boolean).join("\n");
+  return value === layered || value === layered.slice(0, MAX_CAPTION_LENGTH) ? undefined : value;
+}
+
 export function mapApiStatus(record: ApiStatus): PublishedStory {
   const overlays = normalizeOverlays(record.overlays);
   return {
@@ -278,6 +289,7 @@ export function mapApiStatus(record: ApiStatus): PublishedStory {
     background: record.background || "#101827",
     fit: record.fit === "contain" ? "contain" : "cover",
     overlays: overlays.length ? overlays : captionOverlay(record.caption),
+    caption: separateCaption(record.caption, overlays),
     createdAt: Date.parse(record.created_at),
     expiresAt: Date.parse(record.expires_at),
     viewsCount: typeof record.views_count === "number" ? record.views_count : 0,

@@ -220,6 +220,37 @@ test("create uploads the cover and sends the backend's event field names", async
   assert.equal(call.body.parts.get("cover_image").filename, "event-cover.jpg");
 });
 
+test("paid entry without a ticket price sends the ticket link and clears the price", async () => {
+  const { createApiEvent, updateApiEvent, mapApiEvent } = loadEventApi();
+  const input = {
+    image: "file:///event-cover.jpg",
+    title: "Kigali Music Night",
+    description: "Live music",
+    category: "Music",
+    location: "Kigali Arena",
+    date: "2026-12-10",
+    time: "18:30",
+    capacity: 0,
+    isPaid: true,
+    price: 0,
+    websiteUrl: " https://tickets.example.rw/night ",
+  };
+
+  await createApiEvent(input);
+  assert.equal(calls[0].body.parts.get("is_paid").value, "true");
+  assert.equal(calls[0].body.parts.get("price_minor").value, "null");
+  assert.equal(calls[0].body.parts.get("booking_url").value, "https://tickets.example.rw/night");
+
+  await updateApiEvent("event-1", { ...input, image: "https://cdn.eventis.rw/event.jpg" });
+  assert.equal(calls[1].body.price_minor, null);
+  assert.equal(calls[1].body.booking_url, "https://tickets.example.rw/night");
+
+  const mapped = mapApiEvent({ ...record(), is_paid: true, price_minor: null, booking_url: "https://tickets.example.rw/night" });
+  assert.equal(mapped.isPaid, true);
+  assert.equal(mapped.price, 0);
+  assert.equal(mapped.organizerWebsite, "https://tickets.example.rw/night");
+});
+
 test("updates use PATCH and omit unsupported image/status fields when unchanged", async () => {
   const { updateApiEvent } = loadEventApi();
   const input = {

@@ -42,8 +42,8 @@ type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
 const STATUS: Record<BusinessVerificationStatus, { title: string; body: string; icon: IconName; tone: "success" | "warning" | "destructive" | "mutedForeground" }> = {
   unverified: {
-    title: "Get verified to sell tickets",
-    body: "Free events don't need this. To publish paid events, send us your business details below.",
+    title: "Verify your business",
+    body: "Optional. Free and paid events don't need this. Verification confirms your business details with Eventis.",
     icon: "shield-outline",
     tone: "mutedForeground",
   },
@@ -55,7 +55,7 @@ const STATUS: Record<BusinessVerificationStatus, { title: string; body: string; 
   },
   verified: {
     title: "Your business is verified",
-    body: "You can now publish paid events. Customers pay on your website.",
+    body: "Your business details are confirmed with Eventis.",
     icon: "shield-checkmark",
     tone: "success",
   },
@@ -333,7 +333,7 @@ export default function BusinessVerificationScreen() {
                 style={({ pressed }) => [styles.primaryBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
                 accessibilityRole="button"
               >
-                <Text style={styles.primaryText}>Create a paid event</Text>
+                <Text style={styles.primaryText}>Create an event</Text>
               </Pressable>
             ) : null}
 

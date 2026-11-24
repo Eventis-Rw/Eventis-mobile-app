@@ -84,8 +84,8 @@ export default function SearchScreen() {
     if (selectedCategory !== "All") {
       evts = evts.filter((e) => e.category === selectedCategory);
     }
-    if (priceFilter === "free") evts = evts.filter((e) => e.price === 0);
-    if (priceFilter === "paid") evts = evts.filter((e) => e.price > 0);
+    if (priceFilter === "free") evts = evts.filter((e) => !e.isPaid);
+    if (priceFilter === "paid") evts = evts.filter((e) => e.isPaid);
     if (sort === "date") evts.sort((a, b) => a.date.localeCompare(b.date));
     if (sort === "distance") evts.sort((a, b) => a.distance - b.distance);
     if (sort === "price") evts.sort((a, b) => a.price - b.price);

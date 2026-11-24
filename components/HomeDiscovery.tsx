@@ -8,6 +8,7 @@ import { getEventImage } from "@/constants/eventImages";
 import { getEventTiming } from "@/constants/eventPresentation";
 import type { Event } from "@/constants/events";
 import { useColors } from "@/hooks/useColors";
+import { admissionLabel } from "@/utils/admission";
 
 type HomeDiscoveryProps = {
   events: Event[];
@@ -115,7 +116,7 @@ function QuickAction({ icon, label, caption, onPress }: { icon: React.ComponentP
 }
 
 function priceLabel(event: Event) {
-  return !event.isPaid || event.price <= 0 ? "Free entry" : `${event.currency} ${event.price.toLocaleString()}`;
+  return admissionLabel(event);
 }
 
 const styles = StyleSheet.create({
