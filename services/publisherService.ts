@@ -33,6 +33,7 @@ export interface PublisherEvent extends Event {
 }
 
 export interface PublisherEventInput {
+  organisationId?: string;
   /** Remote URL, local media URI, or bundled demo image key. */
   image: string;
   imageMimeType?: string;

@@ -24,7 +24,6 @@ export async function registerForCallPushToken(): Promise<void> {
       await Notifications.setNotificationChannelAsync("calls", {
         name: "Calls",
         importance: Notifications.AndroidImportance.MAX,
-        sound: "default",
         vibrationPattern: [0, 250, 250, 250],
       });
     }

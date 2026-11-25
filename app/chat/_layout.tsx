@@ -13,7 +13,8 @@ export default function ChatLayout() {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
-        <Stack.Screen name="index" />
+        <Stack.Screen name="index" dangerouslySingular />
+        <Stack.Screen name="[id]" dangerouslySingular />
         <Stack.Screen name="search" options={{ animation: "none" }} />
       </Stack>
     </View>

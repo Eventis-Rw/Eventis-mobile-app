@@ -32,6 +32,7 @@ export interface ApiEvent {
   rating_avg: number;
   review_count: number;
   poster_id: string;
+  organizer_avatar_url?: string | null;
   organizer_name?: string | null;
   created_at: string;
   updated_at: string;
@@ -45,6 +46,7 @@ interface ApiEventPage {
 }
 
 export interface EventWriteInput {
+  organisationId?: string;
   image: string;
   imageMimeType?: string;
   imageFileName?: string;
@@ -170,6 +172,7 @@ export function mapApiEvent(record: ApiEvent, organizer?: string): Event {
     endDate: record.end_date?.slice(0, 10),
     price: record.price_minor === null ? 0 : Number(record.price_minor),
     currency: record.currency,
+    organizerAvatarUrl: record.organizer_avatar_url ?? undefined,
     organizer: record.organizer_name?.trim() || organizer || "Event organiser",
     organizerWebsite: record.booking_url ?? undefined,
     attendees: 0,
@@ -237,7 +240,8 @@ function toApiPayload(
     description: input.description.trim(),
     category: input.category,
     location: input.location.trim(),
-    city: input.location.split(",").pop()?.trim() || input.location.trim(),
+    ...(input.location.includes(",") ? { city: input.location.split(",").pop()?.trim() } : {}),
+    ...(input.organisationId ? { organisation_id: input.organisationId } : {}),
     start_date: input.date,
     time: input.time,
     timezone: "Africa/Kigali",

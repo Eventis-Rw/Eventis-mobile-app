@@ -39,6 +39,7 @@ const REALTIME_SYNC_EVENTS = [
 ] as const;
 
 interface IncomingRealtimeMessage {
+  id?: string;
   conversationId?: string;
   senderId?: string;
   service?: string;
@@ -92,7 +93,7 @@ interface ChatContextValue {
   ) => Promise<void>;
   simulateIncoming: (conversationId: string) => Promise<void>;
   typingConversationId: string | null;
-  notification: { conversationId: string; text: string; senderId?: string } | null;
+  notification: { conversationId: string; text: string; senderId?: string; previews?: string[] } | null;
   dismissNotification: (expected?: NonNullable<ChatContextValue["notification"]>) => void;
   setActiveConversation: (id: string | null) => void;
   inviteContact: (contactId: string) => Promise<void>;
@@ -146,6 +147,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     conversationId: string;
     text: string;
     senderId?: string;
+    previews?: string[];
   } | null>(null);
   const activeConversation = useRef<string | null>(null);
   const conversationsRef = useRef<ChatConversation[]>(conversations);
@@ -154,6 +156,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [conversations]);
   const setActiveConversation = useCallback((id: string | null) => {
     activeConversation.current = id;
+    if (id) setNotification(current => current?.conversationId === id ? null : current);
   }, []);
   const dismissNotification = useCallback((expected?: NonNullable<ChatContextValue["notification"]>) => {
     setNotification(current => !expected || current === expected ? null : current);
@@ -162,7 +165,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const snapshot = await serviceRef.current.load();
+      const source = serviceRef.current;
+      const snapshot = await source.load();
+      if (source !== serviceRef.current) return;
       setContacts(snapshot.contacts);
       setConversations(snapshot.conversations);
       setAllMessages(snapshot.messages);
@@ -179,6 +184,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setIsLoading(true);
+    setNotification(null);
     setMessagesByConversation({});
     setAllMessages([]);
     void refresh();
@@ -197,11 +203,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const loadMessages = useCallback(async (conversationId: string) => {
     try {
-      const messages = await serviceRef.current.getMessages(conversationId);
+      const source = serviceRef.current;
+      const messages = await source.getMessages(conversationId);
+      if (source !== serviceRef.current) return;
       setError(null);
       setMessagesByConversation((current) => ({
         ...current,
-        [conversationId]: messages,
+        [conversationId]: [...messages, ...(current[conversationId] ?? []).filter(item => item.status === "pending")],
       }));
     } catch {
       setError("Messages could not be loaded.");
@@ -219,6 +227,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return conversation;
   }, []);
 
+  const pendingId = useRef(0);
   const sendMessage = useCallback(
     async (
       conversationId: string,
@@ -226,7 +235,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       options?: SendMessageOptions,
     ) => {
       const pendingMessage: ChatMessage = {
-        id: `pending-${Date.now()}`,
+        id: `pending-${Date.now()}-${++pendingId.current}`,
         conversationId,
         text: text.trim(),
         sentAt: new Date().toISOString(),
@@ -246,7 +255,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                   ...conversation,
                   lastMessage: chatMessagePreview(pendingMessage),
                   lastMessageAt: pendingMessage.sentAt,
-                  unreadCount: 0,
+
                 }
               : conversation,
           ),
@@ -261,9 +270,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setAllMessages((current) => [...current, message]);
         setMessagesByConversation((current) => ({
           ...current,
-          [conversationId]: (current[conversationId] ?? []).map((item) =>
-            item.id === pendingMessage.id ? message : item,
-          ),
+          [conversationId]: [...(current[conversationId] ?? []).filter(item => item.id !== pendingMessage.id && item.id !== message.id), message]
+            .sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt)),
         }));
       } catch (error) {
         setMessagesByConversation((current) => ({
@@ -485,10 +493,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (!realtimeActive || !user) return;
     let cancelled = false;
     let socket: Socket | null = null;
-    const sync = () => {
-      void refresh();
-      const active = activeConversation.current;
-      if (active) void loadMessages(active);
+    // A burst of messages and receipts needs one catch-up after the current fetch.
+    let syncing = false;
+    let dirty = false;
+    const sync = async () => {
+      dirty = true;
+      if (syncing) return;
+      syncing = true;
+      try {
+        while (dirty && !cancelled) {
+          dirty = false;
+          const active = activeConversation.current;
+          if (active) await loadMessages(active).catch(() => undefined);
+          if (!cancelled) await refresh();
+        }
+      } finally {
+        syncing = false;
+      }
     };
     const onNewMessage = (payload: IncomingRealtimeMessage) => {
       if (payload.service && payload.service !== "EVENTIS") return;
@@ -500,19 +521,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             (conversation) => conversation.id === conversationId,
           )?.muted
         : undefined;
-      void refresh().then(() => {
-        if (!conversationId || fromSelf) return;
+      if (!conversationId) return;
+      void sync();
+      if (!fromSelf) {
         if (active === conversationId) {
           void markConversationRead(conversationId).catch(() => undefined);
-        } else if (!muted) {
-          setNotification({
-            conversationId,
-            text: realtimePreview(payload),
-            ...(payload.senderId ? { senderId: payload.senderId } : {}),
-          });
+        } else {
+          if (payload.id) socket?.emit("chat:receipt:delivered", { conversationId, messageId: payload.id });
+          if (!muted) {
+            const text = realtimePreview(payload);
+            setNotification(previous => ({
+              conversationId, senderId: payload.senderId, text,
+              previews: previous?.conversationId === conversationId
+                ? [...(previous.previews ?? [previous.text]), text].slice(-3) : [text],
+            }));
+          }
         }
-      });
-      if (active) void loadMessages(active);
+      }
+
     };
     void getToken().then((token) => {
       if (cancelled || !token) return;
@@ -525,6 +551,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       let authRetries = 0;
       client.on("connect", () => {
         authRetries = 0;
+        void sync();
       });
       client.on("connect_error", () => {
         if (cancelled || authRetries >= 2) return;

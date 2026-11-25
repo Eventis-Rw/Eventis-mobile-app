@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Image,
   PanResponder,
   Platform,
   Pressable,
@@ -41,6 +42,7 @@ export function NotificationPopupHost() {
   const conversation = message
     ? chat?.getConversation(message.conversationId)
     : undefined;
+  const senderPhoto = chat?.contacts.find(c => c.id === (message?.senderId ?? conversation?.contactId))?.avatarUrl;
   const senderName =
     (message?.senderId
       ? chat?.contacts.find((contact) => contact.id === message.senderId)?.name
@@ -81,7 +83,7 @@ export function NotificationPopupHost() {
     swipeY.setValue(0);
   }, [message, popup, swipeX, swipeY]);
 
-  useEffect(() => setReply(""), [message]);
+  useEffect(() => setReply(""), [message?.conversationId]);
 
   useEffect(() => {
     if (visible) {
@@ -120,9 +122,13 @@ export function NotificationPopupHost() {
     pendingReply.current = true;
     setFailedReply(null);
     setSending(true);
+    void chat.markConversationRead(message.conversationId).catch(() => undefined);
     void chat
       .sendMessage(message.conversationId, text)
-      .then(() => chat.dismissNotification(message))
+      .then(() => {
+        setReply(current => current.trim() === text ? "" : current);
+        chat.dismissNotification(message);
+      })
       .catch(() => setFailedReply(message))
       .finally(() => {
         pendingReply.current = false;
@@ -161,13 +167,13 @@ export function NotificationPopupHost() {
           >
             <View style={styles.row}>
               <View style={[styles.icon, { backgroundColor: palette.input }]}>
-                <Ionicons
+                {message && senderPhoto ? <Image source={{ uri: senderPhoto }} style={{ width: 40, height: 40, borderRadius: 20 }} /> : <Ionicons
                   name={
                     message ? "chatbubble-ellipses" : "notifications-outline"
                   }
                   size={20}
                   color={colors.primary}
-                />
+                />}
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -175,7 +181,7 @@ export function NotificationPopupHost() {
                 onPress={() => {
                   dismiss?.();
                   if (message)
-                    router.push({
+                    router.navigate({
                       pathname: "/chat/[id]",
                       params: { id: message.conversationId },
                     });
@@ -190,9 +196,9 @@ export function NotificationPopupHost() {
                 </Text>
                 <Text
                   style={[styles.text, { color: colors.mutedForeground }]}
-                  numberOfLines={2}
+                  numberOfLines={3}
                 >
-                  {message ? message.text : popup?.body}
+                  {message ? message.previews?.join("\n") ?? message.text : popup?.body}
                 </Text>
               </Pressable>
               <Pressable

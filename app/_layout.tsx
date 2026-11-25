@@ -102,7 +102,7 @@ function RootLayoutNav() {
         options={{ animation: "slide_from_right" }}
       />
       <Stack.Screen name="love" options={{ animation: "fade" }} />
-      <Stack.Screen name="chat" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="chat" dangerouslySingular options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="invite/[token]" options={{ animation: "fade" }} />
       <Stack.Screen
         name="booking/[id]"

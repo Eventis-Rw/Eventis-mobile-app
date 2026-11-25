@@ -1,9 +1,23 @@
+import type { Event } from "@/constants/events";
 import { api } from "@/utils/apiClient";
 
 export interface EventComment {
   id: string; eventId: string; userId: string; body: string; createdAt: string;
   user: { id: string; username: string | null; displayName: string | null; avatarUrl: string | null };
 }
+export function commentAuthor(
+  comment: EventComment,
+  event: Pick<Event, "ownerId" | "organizer" | "organizerAvatarUrl">,
+  viewer?: { id: string; avatarUrl?: string } | null,
+) {
+  const personalPhoto = comment.userId === viewer?.id ? viewer.avatarUrl : comment.user.avatarUrl;
+  const isHost = comment.userId === event.ownerId;
+  return {
+    name: (isHost && event.organizer) || comment.user.username || comment.user.displayName || "Eventis member",
+    photo: (isHost && event.organizerAvatarUrl) || personalPhoto,
+  };
+}
+
 export interface EventInteractionSummary { eventId: string; likeCount: number; commentCount: number; liked: boolean }
 export interface EventCommentPage { items: EventComment[]; page: number; limit: number; total: number }
 

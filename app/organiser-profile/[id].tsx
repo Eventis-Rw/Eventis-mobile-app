@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { EventCard } from "@/components/EventCard";
 import { GlassSurface } from "@/components/GlassSurface";
@@ -74,7 +74,9 @@ export default function OrganiserProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <GlassSurface style={styles.hero}>
-          <OrganiserAvatar name={name} size={72} />
+          {hosted[0]?.organizerAvatarUrl ? (
+            <Image source={{ uri: hosted[0].organizerAvatarUrl }} style={{ width: 72, height: 72, borderRadius: 36 }} />
+          ) : <OrganiserAvatar name={name} size={72} />}
           <Text style={[styles.name, { color: colors.foreground }]} accessibilityRole="header">
             {name}
           </Text>

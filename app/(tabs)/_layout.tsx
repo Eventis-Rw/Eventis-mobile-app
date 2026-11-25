@@ -370,7 +370,7 @@ function TabLayout() {
           listeners={{
             tabPress: (event) => {
               event.preventDefault();
-              router.push("/chat");
+              router.navigate("/chat");
             },
           }}
           options={{
