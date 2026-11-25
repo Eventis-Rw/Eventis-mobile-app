@@ -35,8 +35,8 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: { user: User | null;
   }, [loading, viewerOpen, focused, foreground, reduceMotion]);
   const pauseTray = () => { scroll.current.touching = true; };
   const resumeTray = () => { scroll.current.touching = false; scroll.current.resumeAt = Date.now() + 5000; };
-  const mine = collections.find((group) => group.ownerId === user?.id);
-  const others = collections.filter((group) => group.ownerId !== user?.id);
+  const mine = collections.find(group => group.id === user?.organisation?.id) ?? collections.find(group => group.id === user?.id);
+  const others = collections.filter((group) => group !== mine);
   const addStory = () => {
     if (user?.isBusinessAccount) router.push("/business/create-story");
     else onOpenBecomeOrganizer();
@@ -49,14 +49,14 @@ export function StoriesBar({ user, onOpenBecomeOrganizer }: { user: User | null;
       onScroll={(event) => { scroll.current.offset = event.nativeEvent.contentOffset.x; }}
       onTouchStart={pauseTray} onTouchEnd={resumeTray} onTouchCancel={resumeTray}
       onScrollBeginDrag={pauseTray} onScrollEndDrag={resumeTray} onMomentumScrollEnd={resumeTray}>
-      <Pressable style={styles.item} disabled={loading} onPress={() => mine ? openStories(mine.ownerId, true) : addStory()}
+      <Pressable style={styles.item} disabled={loading && !mine} onPress={() => mine ? openStories(mine.id, true) : addStory()}
         accessibilityRole="button" accessibilityLabel={mine ? `Your story, ${mine.hasUnwatched ? "unwatched" : "watched"}` : "Add your story"}>
-        <StoryAvatar name={user?.organisation?.name ?? user?.username ?? "You"} uri={user?.organisation?.logoUrl || user?.avatarUrl}
+        <StoryAvatar name={user?.organisation?.name ?? user?.username ?? "You"} uri={user?.organisation ? user.organisation.logoUrl : mine?.organizerAvatar ?? user?.avatarUrl}
           ring={mine ? mine.hasUnwatched ? "new" : "watched" : undefined} add={!mine} />
         <Text style={[styles.label, { color: colors.foreground }]} numberOfLines={1}>Your story</Text>
       </Pressable>
       {loading ? [0, 1, 2].map((index) => <View key={index} style={styles.item} accessibilityLabel="Loading stories"><View style={[styles.skeleton, { backgroundColor: colors.secondary }]} /></View>)
-        : others.map((group) => <Pressable key={group.ownerId} style={styles.item} onPress={() => openStories(group.ownerId)}
+        : others.map((group) => <Pressable key={group.id} style={styles.item} onPress={() => openStories(group.id)}
           accessibilityRole="button" accessibilityLabel={`${group.organizerName} stories, ${group.hasUnwatched ? "unwatched" : "watched"}`}>
           <StoryAvatar name={group.organizerName} uri={group.organizerAvatar} ring={group.hasUnwatched ? "new" : "watched"} />
           <Text style={[styles.label, { color: group.hasUnwatched ? colors.foreground : colors.mutedForeground }]} numberOfLines={1}>{group.organizerName}</Text>

@@ -10,6 +10,7 @@ export type StatusFit = "cover" | "contain";
 export interface ApiStatus {
   id: string;
   user_id: string;
+  organisation_id?: string | null;
   event_id: string | null;
   media_url: string | null;
   media_type: StatusMediaType;
@@ -54,6 +55,7 @@ export interface StatusCreateInput {
   background?: string;
   overlays?: StoryOverlay[];
   eventId?: string;
+  organisationId?: string;
 }
 
 const STATUS_PATH = "/api/v1/statuses";
@@ -164,6 +166,7 @@ export async function createStatus(input: StatusCreateInput): Promise<ApiStatus>
   };
   if (mediaUrl) body.media_url = mediaUrl;
   if (input.caption?.trim()) body.caption = input.caption.trim();
+  if (input.organisationId) body.organisation_id = input.organisationId;
   if (input.eventId) body.event_id = input.eventId;
   return api.post<ApiStatus>(STATUS_PATH, body);
 }
@@ -275,6 +278,7 @@ export function mapApiStatus(record: ApiStatus): PublishedStory {
   return {
     id: record.id,
     ownerId: record.user_id,
+    organisationId: record.organisation_id ?? undefined,
     eventId: record.event_id ?? undefined,
     mediaType: record.media_type,
     mediaUrl: record.media_url ?? undefined,

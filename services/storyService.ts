@@ -28,7 +28,7 @@ const key = (userId: string) => `@eventis_stories_v1:${userId}`;
 const DAY = 24 * 60 * 60 * 1000;
 export type StoryDraft = Omit<PublishedStory, "id" | "ownerId" | "createdAt" | "expiresAt">;
 export type ViewedStories = Record<string, number>;
-export type StoryCollection = { ownerId: string; organizerName: string; organizerAvatar: string; items: PublishedStory[]; hasUnwatched: boolean };
+export type StoryCollection = { id: string; ownerId: string; organizerName: string; organizerAvatar: string; items: PublishedStory[]; hasUnwatched: boolean };
 export const storyKey = (story: Pick<PublishedStory, "ownerId" | "id">) => `${story.ownerId}:${story.id}`;
 const listeners = new Set<() => void>();
 export function subscribeStories(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
@@ -39,7 +39,7 @@ function serialized<T>(work: () => Promise<T>): Promise<T> {
   return result;
 }
 export function isStoryAvailable(story: PublishedStory, now = Date.now()) {
-  return Boolean(story.id && story.ownerId && Number.isFinite(story.createdAt) && story.createdAt <= now && Number.isFinite(story.expiresAt) && story.expiresAt > now &&
+  return Boolean(story.id && story.ownerId && Number.isFinite(story.createdAt) && (story.source === "api" || story.createdAt <= now) && Number.isFinite(story.expiresAt) && story.expiresAt > now &&
     (story.mediaType === "video" ? story.mediaUrl : story.storyImage || story.mediaUrl ||
       (Array.isArray(story.overlays) && story.overlays.some((layer) => typeof layer?.text === "string" && layer.text.trim()))));
 }
@@ -47,11 +47,16 @@ export function groupStories(items: PublishedStory[], viewed: ViewedStories, own
   const unique = new Map<string, PublishedStory>();
   for (const item of items) if (isStoryAvailable(item, now)) unique.set(storyKey(item), item);
   const groups = new Map<string, PublishedStory[]>();
-  for (const item of unique.values()) groups.set(item.ownerId, [...(groups.get(item.ownerId) ?? []), item]);
-  return Array.from(groups, ([ownerId, stories]) => {
+  for (const item of unique.values()) {
+    const id = item.organisationId ?? item.ownerId;
+    const group = groups.get(id);
+    if (group) group.push(item);
+    else groups.set(id, [item]);
+  }
+  return Array.from(groups, ([id, stories]) => {
     stories.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
     const latest = stories[stories.length - 1];
-    return { ownerId, organizerName: latest.organizerName, organizerAvatar: latest.organizerAvatar, items: stories,
+    return { id, ownerId: latest.ownerId, organizerName: latest.organizerName, organizerAvatar: latest.organizerAvatar, items: stories,
       hasUnwatched: stories.some((story) => !viewed[storyKey(story)]) };
   }).sort((a, b) => Number(b.ownerId === ownId) - Number(a.ownerId === ownId) ||
     Number(b.hasUnwatched) - Number(a.hasUnwatched) || b.items[b.items.length - 1].createdAt - a.items[a.items.length - 1].createdAt || a.ownerId.localeCompare(b.ownerId));

@@ -31,6 +31,7 @@ export interface ChatConversation {
   id: string;
   contactId: string;
   lastMessage: string;
+  lastMessageStatus?: ChatMessage["status"];
   lastMessageAt: string;
   unreadCount: number;
   muted?: boolean;
@@ -54,6 +55,7 @@ export interface ChatMessage {
   attachmentName?: string;
   attachmentMimeType?: string;
   attachmentError?: string;
+  attachmentDeferred?: boolean;
   attachmentWidth?: number;
   attachmentHeight?: number;
 }
@@ -112,8 +114,9 @@ export interface ChatUserSearchPage {
 }
 
 export interface ChatService {
-  load(): Promise<ChatSnapshot>;
-  getMessages(conversationId: string): Promise<ChatMessage[]>;
+  load(reuseDirectory?: boolean): Promise<ChatSnapshot>;
+  getMessages(conversationId: string, deferAttachments?: boolean): Promise<ChatMessage[]>;
+  loadAttachment?(messageId: string): Promise<Partial<ChatMessage>>;
   startConversation(contactId: string): Promise<ChatConversation>;
   sendMessage(
     conversationId: string,
@@ -392,11 +395,13 @@ export class MockChatService implements ChatService {
 
   async load(): Promise<ChatSnapshot> {
     const state = await this.getState();
+    const latest = new Map(state.messages.map(message => [message.conversationId, message]));
     return {
       contacts: state.contacts.map(hydrateContact),
-      conversations: sortConversations(state.conversations).map(
-        (conversation) => ({ ...conversation }),
-      ),
+      conversations: sortConversations(state.conversations).map(conversation => {
+        const last = latest.get(conversation.id);
+        return { ...conversation, lastMessageStatus: last?.direction === "outgoing" ? last.status : undefined };
+      }),
       messages: state.messages.map((message) => ({ ...message })),
     };
   }
@@ -762,12 +767,13 @@ export class MockChatService implements ChatService {
 
 // Serialize local operations so concurrent actions cannot overwrite each other's snapshots.
 // A real service keeps this same interface and supplies server transactions/events instead.
-export function serializeChatService(service: ChatService): ChatService {
+export function serializeChatService(service: ChatService, independentReads: (keyof ChatService)[] = []): ChatService {
   let queue: Promise<unknown> = Promise.resolve();
   return new Proxy(service, {
     get(target, property) {
       const method = Reflect.get(target, property);
       if (typeof method !== "function") return method;
+      if (independentReads.includes(property as keyof ChatService)) return method.bind(target);
       return (...args: unknown[]) => {
         const task = queue.then(() => method.apply(target, args));
         queue = task.catch(() => {});
