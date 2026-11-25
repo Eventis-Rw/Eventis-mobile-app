@@ -43,9 +43,21 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
     });
     const browser = Platform.OS === "web" && typeof document !== "undefined" && typeof window.addEventListener === "function";
     const visibility = () => setForeground(document.visibilityState === "visible");
-    const storage = (event: StorageEvent) => { if (event.key === ANALYTICS_KEY) void refresh(); };
+    let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+    const storage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== ANALYTICS_KEY && !event.key.startsWith(ANALYTICS_KEY + ":")) return;
+      clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        void getAnalyticsRecords(true).then(setRecords).catch(() => setError("Device activity couldn't be loaded."));
+      }, 50);
+    };
     if (browser) { visibility(); document.addEventListener("visibilitychange", visibility); window.addEventListener("storage", storage); }
-    return () => { unsubscribe(); app.remove(); if (browser) { document.removeEventListener("visibilitychange", visibility); window.removeEventListener("storage", storage); } };
+    return () => {
+      clearTimeout(reloadTimer);
+      unsubscribe();
+      app.remove();
+      if (browser) { document.removeEventListener("visibilitychange", visibility); window.removeEventListener("storage", storage); }
+    };
   }, [refresh]);
   const track = useCallback((input: Omit<AnalyticsInput, "viewerId">) => {
     if (!foreground) return;

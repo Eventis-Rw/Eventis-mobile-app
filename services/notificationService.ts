@@ -22,6 +22,7 @@ export interface NotificationsResponse {
   page: number;
   limit: number;
   total: number;
+  unreadCount?: number;
 }
 
 export async function fetchNotifications(params?: {

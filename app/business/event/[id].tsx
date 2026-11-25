@@ -43,7 +43,7 @@ export default function ManageEventScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { refreshEvents } = useEvents();
+  const { refreshEvents } = useEvents(false);
   const { canPromote } = useAccountCapabilities();
 
   const [event, setEvent] = useState<PublisherEvent | undefined>();

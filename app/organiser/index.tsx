@@ -47,7 +47,7 @@ export default function BecomeOrganiserScreen() {
   const { from } = useLocalSearchParams<{ from?: string }>();
   const { step } = useOrganiserAccess();
 
-  const { user } = useAuth();
+  const { user, isRestoringOrganiser } = useAuth();
   const application = user?.organiserApplication;
   const postsLeft = user?.organiserSubscription?.postsRemaining ?? 0;
   const quickPost = () =>
@@ -60,7 +60,7 @@ export default function BecomeOrganiserScreen() {
     else router.push({ pathname: destination as any, params: from ? { from } : {} });
   };
 
-  const ctaLabel = application?.status === "IN_REVIEW" ? "Application in review"
+  const ctaLabel = isRestoringOrganiser ? "Checking access…" : application?.status === "IN_REVIEW" ? "Application in review"
     : application?.status === "PENDING_PAYMENT" ? application.manualPaymentId ? "Track payment verification" : "Continue to payment"
     : application?.status === "REJECTED" ? "Apply again"
     : step === "ready"
@@ -127,7 +127,7 @@ export default function BecomeOrganiserScreen() {
             </Text>
             <Pressable
               onPress={continueFlow}
-              disabled={application?.status === "IN_REVIEW"}
+              disabled={isRestoringOrganiser || application?.status === "IN_REVIEW"}
               style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
               accessibilityRole="button"
             >
@@ -182,6 +182,7 @@ export default function BecomeOrganiserScreen() {
 
         {step === "intro" || (step === "setup" && postsLeft > 0) ? (
           <Pressable
+            disabled={isRestoringOrganiser}
             onPress={quickPost}
             style={({ pressed }) => [styles.note, { backgroundColor: palette.surfaceRaised, borderColor: palette.blue }, pressed && styles.pressed]}
             accessibilityRole="button"
@@ -223,6 +224,7 @@ export default function BecomeOrganiserScreen() {
 
         <Pressable
           onPress={continueFlow}
+          disabled={isRestoringOrganiser || application?.status === "IN_REVIEW"}
           style={({ pressed }) => [styles.primaryButton, { backgroundColor: palette.blue }, pressed && styles.pressed]}
           accessibilityRole="button"
         >

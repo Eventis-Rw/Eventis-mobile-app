@@ -36,7 +36,7 @@ export function usePublisherEvents({
   listedEvents: Event[];
 }) {
   const { user } = useAuth();
-  const { refreshEvents } = useEvents();
+  const { refreshEvents } = useEvents(false);
   const userId = user?.id;
   const enabled = active && !!userId;
 

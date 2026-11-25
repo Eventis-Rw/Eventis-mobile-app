@@ -190,9 +190,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     void refresh();
   }, [service, refresh]);
 
+  const contactsById = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
   const getContact = useCallback(
-    (contactId: string) => contacts.find((contact) => contact.id === contactId),
-    [contacts],
+    (contactId: string) => contactsById.get(contactId),
+    [contactsById],
   );
 
   const getConversation = useCallback(

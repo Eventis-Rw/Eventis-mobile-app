@@ -5,12 +5,21 @@ const path = require("node:path");
 const ts = require("typescript");
 let storage = new Map();
 let failWrites = false;
+let successfulBatchesLeft = Infinity;
 function load(file, resolve = () => undefined) {
   const source = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   const result = {};
   new Function("require", "exports", js)((name) => {
     if (name === "@react-native-async-storage/async-storage") return { __esModule: true, default: {
+      getAllKeys: async () => [...storage.keys()],
+      multiGet: async keys => keys.map(key => [key, storage.get(key) ?? null]),
+      removeItem: async key => { storage.delete(key); },
+      multiRemove: async keys => keys.forEach(key => storage.delete(key)),
+      multiSet: async pairs => {
+        if (failWrites || successfulBatchesLeft-- <= 0) throw Error("Storage unavailable");
+        for (const [key, value] of pairs) storage.set(key, value);
+      },
       getItem: async (key) => storage.get(key) ?? null,
       setItem: async (key, value) => { if (failWrites) throw Error("Storage unavailable"); storage.set(key, value); },
     } };
@@ -18,11 +27,11 @@ function load(file, resolve = () => undefined) {
   }, result);
   return result;
 }
-const service = load("services/analyticsService.ts");
+let service;
 const { summarizeLocalAnalytics } = load("utils/localAnalytics.ts");
 const { createQualifiedViewTracker } = load("utils/qualifiedViews.ts");
 const event = (viewerId = "customer", extra = {}) => ({ type: "feed_view", entityType: "event", entityId: "e1", ownerId: "host", viewerId, source: "home", ...extra });
-beforeEach(() => { storage = new Map(); failWrites = false; });
+beforeEach(() => { storage = new Map(); failWrites = false; successfulBatchesLeft = Infinity; service = load("services/analyticsService.ts"); });
 
 test("qualified views reset for fast scrolls, backgrounding and overlays; re-renders don't add timers", () => {
   const timers = new Map(); const seen = []; let seq = 0;
@@ -46,6 +55,8 @@ test("views persist, deduplicate across surfaces/reloads, and separate viewers a
   const records = await service.getAnalyticsRecords(); assert.equal(records.length, 3);
   assert.equal(new Set(records.map((r) => r.id)).size, 3);
   const [first, ...rest] = records;
+  storage.clear();
+  service = load("services/analyticsService.ts");
   storage.set(service.ANALYTICS_KEY, JSON.stringify([{ ...first, occurredAt: Date.now() - service.VIEW_WINDOW_MS - 1 }, ...rest]));
   assert.equal(await service.recordAnalytics(event()), true);
 });
@@ -73,8 +84,12 @@ test("concurrent actions retain every event; acknowledgement is scoped and prese
 test("malformed and expired activity is discarded and failed writes don't create counts", async () => {
   await service.recordAnalytics(event());
   const [valid] = await service.getAnalyticsRecords();
+  storage.clear();
+  service = load("services/analyticsService.ts");
   storage.set(service.ANALYTICS_KEY, JSON.stringify([null, {}, valid, valid, { ...valid, id: "old", occurredAt: Date.now() - 91 * 86400000 }, { ...valid, id: "future", occurredAt: Date.now() + 60000 }]));
   assert.equal((await service.getAnalyticsRecords()).length, 1);
+  assert.equal(storage.has(service.ANALYTICS_KEY), false);
+  assert.equal(storage.size, 1);
   failWrites = true;
   await assert.rejects(service.recordAnalytics(event("other")), /Storage unavailable/);
   assert.equal((await service.getAnalyticsRecords()).length, 1);
@@ -144,4 +159,24 @@ test("deleting an account clears its own and attributed activity but preserves o
   await service.deleteAccountAnalytics("host");
   const records = await service.getAnalyticsRecords();
   assert.equal(records.length, 1); assert.equal(records[0].entityId, "e2");
+});
+
+test("interrupted migration resumes without duplicating records or rewriting history on append", async () => {
+  const records = Array.from({ length: 250 }, (_, i) => ({
+    ...event("customer", { type: "share" }), id: String(i), sessionId: "previous",
+    schemaVersion: 1, occurredAt: Date.now() - 1000,
+  }));
+  storage.set(service.ANALYTICS_KEY, JSON.stringify(records));
+  successfulBatchesLeft = 1;
+  await assert.rejects(service.getAnalyticsRecords(), /Storage unavailable/);
+  assert.ok(storage.has(service.ANALYTICS_KEY));
+  assert.ok(storage.size > 1);
+  successfulBatchesLeft = Infinity;
+  service = load("services/analyticsService.ts");
+  assert.equal((await service.getAnalyticsRecords()).length, 250);
+  assert.equal(storage.size, 250);
+  const before = new Map(storage);
+  await service.recordAnalytics(event("customer", { type: "share" }));
+  assert.equal(storage.size, 251);
+  for (const [id, value] of before) assert.equal(storage.get(id), value);
 });
