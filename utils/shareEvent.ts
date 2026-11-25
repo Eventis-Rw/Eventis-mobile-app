@@ -17,5 +17,8 @@ export async function shareEvent(event: Event): Promise<boolean> {
       message: `Check out "${event.title}" on ${date} at ${event.location}, ${event.city}\nhttps://eventis.app/event/${encodeURIComponent(event.id)}`,
     });
     return result.action === Share.sharedAction;
-  } catch { return false; }
+  } catch (error) {
+    console.warn("shareEvent: native share failed", error);
+    return false;
+  }
 }

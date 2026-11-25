@@ -121,10 +121,15 @@ export default function EventDetailScreen() {
     setTimeout(() => setCopyFeedback(false), 2000);
   }, [event, trackEvent]);
 
-  const handleNativeShare = useCallback(async () => {
+  const handleNativeShare = useCallback(() => {
     if (!event) return;
     setShowShareModal(false);
-    if (await shareEvent(event)) trackEvent(event, "share", "details");
+    // Let the share-sheet modal finish its dismiss animation before handing off
+    // to the native share Intent — firing it in the same tick races the modal's
+    // closing window transition on Android release builds and gets swallowed.
+    setTimeout(async () => {
+      if (await shareEvent(event)) trackEvent(event, "share", "details");
+    }, 300);
   }, [event, trackEvent]);
 
   const handleSendToChat = useCallback(

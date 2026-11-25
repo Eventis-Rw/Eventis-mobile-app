@@ -71,15 +71,18 @@ export default function HomeScreen() {
       selectedCategory === "All"
         ? events
         : events.filter((e) => e.category === selectedCategory);
+    // Demo/featured posts are pinned first; everything else keeps the API's
+    // order (most recently posted first) — Array.sort is stable, so returning
+    // 0 here preserves that order instead of re-ranking by distance.
     return [...list].sort((a, b) => {
       const first = DEMO_POST_ORDER.indexOf(a.id);
       const second = DEMO_POST_ORDER.indexOf(b.id);
       if (first >= 0 || second >= 0) {
         return (first < 0 ? Infinity : first) - (second < 0 ? Infinity : second);
       }
-      return location.status === "granted" ? a.distance - b.distance : 0;
+      return 0;
     });
-  }, [events, selectedCategory, location.status]);
+  }, [events, selectedCategory]);
   const onRefresh = useCallback(async () => {
     setVisibleCount(FEED_PAGE_SIZE);
     setRefreshing(true);

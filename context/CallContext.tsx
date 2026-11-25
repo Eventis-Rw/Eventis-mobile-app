@@ -1,8 +1,11 @@
+import NetInfo from "@react-native-community/netinfo";
+import * as Notifications from "expo-notifications";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, Pressable, Text, View } from "react-native";
 import { io, type Socket } from "socket.io-client";
 import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
+import { registerForCallPushToken } from "@/services/callPushNotifications";
 import { mediaUnavailableReason, prepareLiveMedia, stopLiveMedia } from "@/services/liveMedia";
 import { API_BASE, api, getToken } from "@/utils/apiClient";
 
@@ -180,6 +183,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     if (callRef.current) throw new Error("Finish your current call first.");
     const unavailable = mediaUnavailableReason();
     if (unavailable) throw new Error(unavailable);
+    const net = await NetInfo.fetch();
+    if (net.isConnected === false || net.isInternetReachable === false) {
+      throw new Error("No internet connection. Check your network and try again.");
+    }
     try {
       const created = await api.post<ChatCall>("/api/v1/chat/calls", { conversationId, type });
       const active: ActiveCall = { ...created, direction: "outgoing", peerName };
@@ -262,6 +269,47 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       socketRef.current = null;
     };
   }, [chat.getContact, chat.getConversation, cleanup, handleSignal, transition, updateCall, user?.id, user?.isDemo]);
+
+  useEffect(() => {
+    if (Platform.OS === "web" || !user || user.isDemo) return;
+    void registerForCallPushToken();
+  }, [user?.id, user?.isDemo]);
+
+  const presentIncomingCallFromPush = useCallback(async (callId: string) => {
+    if (!user || user.isDemo || callRef.current) return;
+    try {
+      const latest = await api.get<ChatCall & { service?: string }>(`/api/v1/chat/calls/${callId}`);
+      if (latest.service && latest.service !== "EVENTIS") return;
+      if (latest.status !== "RINGING") return;
+      const conversation = chat.getConversation(latest.conversationId);
+      const contact = conversation ? chat.getContact(conversation.contactId) : undefined;
+      updateCall({ ...latest, direction: "incoming", peerName: contact?.name || "Eventis contact" });
+    } catch {
+      // The call may already have ended by the time the notification was tapped.
+    }
+  }, [chat, updateCall, user]);
+
+  useEffect(() => {
+    // Push notifications (and this listener) aren't supported on web — calls
+    // there rely entirely on the live socket above, same as before.
+    if (Platform.OS === "web") return;
+    // Covers both a live tap (app backgrounded) and a cold start (app was fully
+    // killed, this launch is the result of tapping the call notification) —
+    // the handled-ids set guards against both firing for the same tap.
+    const handledIds = new Set<string>();
+    const handle = (response: Notifications.NotificationResponse | null | undefined) => {
+      const id = response?.notification?.request?.identifier;
+      if (!id || handledIds.has(id)) return;
+      handledIds.add(id);
+      const data = response?.notification?.request?.content?.data as
+        | { type?: string; callId?: string }
+        | undefined;
+      if (data?.type === "incoming_call" && data.callId) void presentIncomingCallFromPush(data.callId);
+    };
+    void Notifications.getLastNotificationResponseAsync().then(handle).catch(() => {});
+    const subscription = Notifications.addNotificationResponseReceivedListener(handle);
+    return () => subscription.remove();
+  }, [presentIncomingCallFromPush]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {

@@ -229,9 +229,14 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
     finally { setSendingAll(false); }
   }, [conversations, sendingAll, event, sendMessage, sentChatIds, source, trackEvent]);
 
-  const handleNativeShare = useCallback(async () => {
+  const handleNativeShare = useCallback(() => {
     setShowShareModal(false);
-    if (await shareEvent(event)) trackEvent(event, "share", source);
+    // Let the share-sheet modal finish its dismiss animation before handing off
+    // to the native share Intent — firing it in the same tick races the modal's
+    // closing window transition on Android release builds and gets swallowed.
+    setTimeout(async () => {
+      if (await shareEvent(event)) trackEvent(event, "share", source);
+    }, 300);
   }, [event, source, trackEvent]);
 
   const handleShareToChat = useCallback(() => {
