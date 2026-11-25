@@ -1,4 +1,4 @@
-import { getEventTiming } from "@/constants/eventPresentation";
+import { formatEventLocation, getEventTiming } from "@/constants/eventPresentation";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -200,7 +200,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
       if (sentChatIds[convId]) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSentChatIds((prev) => ({ ...prev, [convId]: true }));
-      const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+      const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
       try {
         setShareError("");
         await sendMessage(convId, shareText);
@@ -217,7 +217,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
     if (!conversations.length || sendingAll) return;
     setSendingAll(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+    const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
     try {
       setShareError("");
       for (const conv of conversations) {
@@ -1108,7 +1108,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
                 <View style={styles.metaRow}>
                   <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.8)" />
                   <Text style={[styles.metaText, styles.flexText]} numberOfLines={1}>
-                    {event.location}, {event.city}
+                    {formatEventLocation(event)}
                   </Text>
                 </View>
               </View>
@@ -1173,7 +1173,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
               style={[styles.compactMeta, { color: colors.mutedForeground }]}
               numberOfLines={1}
             >
-              {event.location}, {event.city}
+              {formatEventLocation(event)}
             </Text>
             <View style={styles.compactFooter}>
               <View style={styles.ratingRow}>
@@ -1221,9 +1221,9 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
         <View style={styles.instaHeader}>
           <View style={styles.instaOrganizerInfo}>
             <View style={[styles.instaOrganizerAvatar, { backgroundColor: colors.primary }]}>
-              <Text style={styles.instaOrganizerAvatarLetter}>
+              {event.organizerAvatarUrl ? <Image source={{ uri: event.organizerAvatarUrl }} style={styles.instaOrganizerAvatar} /> : (<Text style={styles.instaOrganizerAvatarLetter}>
                 {event.organizer.charAt(0).toUpperCase()}
-              </Text>
+              </Text>)}
             </View>
             <View style={styles.instaOrganizerTextCol}>
               <View style={styles.instaOrganizerNameRow}>
@@ -1237,7 +1237,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
                 )}
               </View>
               <Text style={[styles.instaLocationText, { color: colors.mutedForeground }]} numberOfLines={1}>
-                {event.location}, {event.city}
+                {formatEventLocation(event)}
               </Text>
             </View>
           </View>
@@ -1272,7 +1272,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
           {/* Left: Interactive Share with count */}
           <View style={styles.instaLeftActions}>
             {event.ownerId ? (
-              <EventInteractions eventId={event.id} userId={user?.id} ownerId={event.ownerId} />
+              <EventInteractions event={event} viewer={user} />
             ) : null}
             {/* Share action with count kept */}
             <Pressable

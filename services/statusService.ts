@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { appendLocalFile } from "@/utils/formDataFile";
 
 import type { StoryOverlay } from "@/components/StoryCanvas";
 import type { PublishedStory } from "@/services/storyService";
@@ -116,13 +116,7 @@ async function appendMedia(
   index: number,
 ): Promise<void> {
   const file = resolveStatusMediaFile(asset, mediaType, index);
-  if (Platform.OS === "web") {
-    const response = await fetch(asset.uri);
-    if (!response.ok) throw new Error("We couldn't read the selected media.");
-    form.append("media", await response.blob(), file.name);
-    return;
-  }
-  form.append("media", { uri: asset.uri, name: file.name, type: file.type } as unknown as Blob);
+  await appendLocalFile(form, "media", asset.uri, file.name, file.type);
 }
 
 export function validateStatusInput(input: StatusCreateInput): string | null {

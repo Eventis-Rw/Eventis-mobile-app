@@ -31,6 +31,7 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
+  const [accountMissing, setAccountMissing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState(false);
   const [socialLoading, setSocialLoading] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export default function LoginScreen() {
     if (loading || submitting.current) return;
     const cleanEmail = email.trim().toLowerCase();
     setError("");
+    setAccountMissing(false);
 
     if (!cleanEmail) {
       setError("Please enter your email address.");
@@ -67,6 +69,7 @@ export default function LoginScreen() {
       });
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
+        setAccountMissing(true);
         setError("No account found with this email. Please sign up first.");
       } else if (err instanceof ApiError && err.status === 429) {
         setError("Too many attempts. Please wait a moment and try again.");
@@ -198,6 +201,16 @@ export default function LoginScreen() {
                 {error}
               </Animated.Text>
             ) : null}
+            {accountMissing && (
+              <Pressable
+                onPress={() => router.push("/auth/register" as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Create an account"
+                style={{ paddingVertical: 12 }}
+              >
+                <Text style={{ color: colors.primary, fontWeight: "700" }}>Create account</Text>
+              </Pressable>
+            )}
           </Animated.View>
 
           {/* Primary Action Button ("Continue") */}

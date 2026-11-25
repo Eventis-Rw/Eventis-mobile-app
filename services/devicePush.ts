@@ -39,12 +39,10 @@ export async function syncDevicePush(
       name: "Eventis notifications",
       importance: notifications.AndroidImportance.HIGH,
       lockscreenVisibility: notifications.AndroidNotificationVisibility.PRIVATE,
-      sound: "default",
     });
     await notifications.setNotificationChannelAsync("calls", {
       name: "Calls",
       importance: notifications.AndroidImportance.MAX,
-      sound: "default",
       vibrationPattern: [0, 250, 250, 250],
     });
   }

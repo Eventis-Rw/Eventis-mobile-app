@@ -67,6 +67,15 @@ function loadStatusService() {
   const exportsObject = {};
   new Function("require", "exports", "process", compiled)(
     (name) => {
+      if (name === "@/utils/formDataFile") {
+        const helper = fs.readFileSync(path.join(__dirname, "../utils/formDataFile.ts"), "utf8");
+        const compiledHelper = ts.transpileModule(helper, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+        const exports = {};
+        new Function("require", "exports", compiledHelper)(key => key === "react-native"
+          ? { Platform: { OS: "android" } }
+          : { File: class { async bytes() { return Uint8Array.of(1, 2); } } }, exports);
+        return exports;
+      }
       if (name === "react-native") return { Platform: { OS: "ios" } };
       if (name === "@/utils/apiClient") return { api, ApiError: FakeApiError };
       throw new Error(`Unexpected dependency: ${name}`);
@@ -167,7 +176,7 @@ test("uploads media first and submits the returned URL with the status", async (
     "POST /api/v1/statuses",
   ]);
   const formFile = calls[0].body.parts.get("media");
-  assert.equal(formFile.value.uri, "file:///story.png");
+  assert.deepEqual(await formFile.value.bytes(), Uint8Array.of(1, 2));
   assert.equal(formFile.value.type, "image/png");
   assert.match(formFile.value.name, /^status-.*\.png$/);
   assert.equal(calls[1].body.media_type, "image");

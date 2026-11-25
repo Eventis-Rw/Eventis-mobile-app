@@ -26,6 +26,7 @@ export interface Event {
   price: number;
   currency: string;
   organizer: string;
+  organizerAvatarUrl?: string;
   organizerWebsite?: string;
   attendees: number;
   capacity: number;

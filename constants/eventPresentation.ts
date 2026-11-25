@@ -109,3 +109,10 @@ function isSameDay(first: Date, second: Date) {
 function formatShortDate(date: Date) {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
+
+export function formatEventLocation(event: Pick<Event, "city" | "location">): string {
+  const city = event.city.trim();
+  const location = event.location.trim();
+  const includesCity = location.split(",").some(part => part.trim().toLowerCase() === city.toLowerCase());
+  return [location, includesCity ? "" : city].filter(Boolean).join(", ");
+}

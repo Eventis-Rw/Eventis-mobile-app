@@ -213,7 +213,7 @@ export default function ChatSearchScreen() {
     void run(async () => {
       const conversation = await chat.startConversation(contact.id);
       Keyboard.dismiss();
-      router.push({ pathname: "/chat/[id]", params: { id: conversation.id } });
+      router.navigate({ pathname: "/chat/[id]", params: { id: conversation.id } });
     });
   }
   const phoneQuery =
@@ -369,7 +369,7 @@ export default function ChatSearchScreen() {
                 time={item.message.sentAt}
                 onPress={() => {
                   Keyboard.dismiss();
-                  router.push({
+                  router.navigate({
                     pathname: "/chat/[id]",
                     params: {
                       id: item.message.conversationId,

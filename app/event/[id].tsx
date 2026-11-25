@@ -24,7 +24,7 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { DetailSurface } from "@/components/DetailSurface";
 import { getEventImage } from "@/constants/eventImages";
 import { useEventClock } from "@/hooks/useEventClock";
-import { getEventTiming } from "@/constants/eventPresentation";
+import { formatEventLocation, getEventTiming } from "@/constants/eventPresentation";
 import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
 import { useEvents } from "@/context/EventsContext";
@@ -139,7 +139,7 @@ export default function EventDetailScreen() {
       if (!event || sentChatIds[convId]) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSentChatIds((prev) => ({ ...prev, [convId]: true }));
-      const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+      const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
       try {
         setShareError("");
         await sendMessage(convId, shareText);
@@ -156,7 +156,7 @@ export default function EventDetailScreen() {
     if (!event || !conversations.length || sendingAll) return;
     setSendingAll(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const shareText = `Check out this event: ${event.title}\n📍 ${event.location}, ${event.city}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+    const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
     try {
       setShareError("");
       for (const conv of conversations) {
@@ -189,7 +189,7 @@ export default function EventDetailScreen() {
 
   const openMaps = useCallback(async () => {
     if (!event) return;
-    const query = encodeURIComponent(`${event.location}, ${event.city}`);
+    const query = encodeURIComponent(`${formatEventLocation(event)}`);
     try {
       await Linking.openURL(`https://maps.google.com/?q=${query}`);
       trackEvent(event, "directions_click", "details");
@@ -376,7 +376,7 @@ export default function EventDetailScreen() {
                 <Ionicons name="location" size={14} color={colors.primary} />
               </View>
               <Text style={styles.heroLocationText} numberOfLines={1}>
-                {event.location}, {event.city}
+                {formatEventLocation(event)}
               </Text>
               <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.55)" />
             </Pressable>
@@ -421,9 +421,7 @@ export default function EventDetailScreen() {
               <View style={styles.cardInfoCol}>
                 <Text style={styles.cardInfoEyebrow}>VENUE & LOCATION</Text>
                 <Text style={styles.cardInfoMainText} numberOfLines={1}>{event.location}</Text>
-                <Text style={styles.cardInfoSubText}>
-                  {event.city} · {event.distance} km away
-                </Text>
+                {formatEventLocation(event) !== event.location && <Text style={styles.cardInfoSubText}>{event.city}</Text>}
               </View>
               <View style={styles.cardActionPill}>
                 <Text style={styles.cardActionPillText}>Maps</Text>
@@ -478,9 +476,9 @@ export default function EventDetailScreen() {
               accessibilityLabel={`View ${event.organizer}'s organiser page`}
             >
               <View style={[styles.organizerAvatar, { backgroundColor: palette.accent }]}>
-                <Text style={styles.organizerAvatarLetter}>
+                {event.organizerAvatarUrl ? <Image source={{ uri: event.organizerAvatarUrl }} style={styles.organizerAvatar} /> : (<Text style={styles.organizerAvatarLetter}>
                   {event.organizer.charAt(0).toUpperCase()}
-                </Text>
+                </Text>)}
               </View>
               <View style={styles.organizerMetaCol}>
                 <View style={styles.organizerNameRow}>

@@ -343,6 +343,7 @@ export default function ConversationScreen() {
     description: string;
     action: () => Promise<void>;
   } | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -420,13 +421,19 @@ export default function ConversationScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      let focused = true;
       setActiveConversation(id);
+      setLoadingHistory(true);
       if (id && conversation?.id) {
-        void Promise.all([loadMessages(id), markConversationRead(id)]).catch(
-          () => setError("Could not load this conversation. Try again."),
-        );
+        void loadMessages(id).then(() => {
+          if (focused) {
+            setLoadingHistory(false);
+            return markConversationRead(id);
+          }
+        }).catch(() => { if (focused) setError("Could not load this conversation. Try again."); })
+          .finally(() => { if (focused) setLoadingHistory(false); });
       }
-      return () => setActiveConversation(null);
+      return () => { focused = false; setActiveConversation(null); };
     }, [
       id,
       conversation?.id,
@@ -491,6 +498,12 @@ export default function ConversationScreen() {
     const text = composer.trim();
     setBusy(true);
     setError(null);
+    setComposer("");
+    setReply(null);
+    setEditing(null);
+    setMedia(null);
+    setEmojiOpen(false);
+    showNewest();
     try {
       if (editing) await chat.editMessage(id, editing.id, text);
       else
@@ -509,15 +522,11 @@ export default function ConversationScreen() {
             ? { id: reply.id, text: reply.text, direction: reply.direction }
             : undefined,
         });
-      setComposer("");
-      setEmojiOpen(false);
-      setReply(null);
-      setEditing(null);
-      setMedia(null);
-      await AsyncStorage.removeItem(`@eventis_chat_draft_${id}`);
-      nearBottom.current = true;
-      showNewest();
     } catch (cause) {
+      setComposer(current => current || composer);
+      setMedia(current => current ?? media);
+      setEditing(editing);
+      setReply(reply);
       setError(
         cause instanceof Error
           ? cause.message
@@ -859,7 +868,7 @@ export default function ConversationScreen() {
 
   if (
     chat.isLoading ||
-    (conversation && !chat.messagesByConversation[id] && !error)
+    (conversation && loadingHistory && !error)
   )
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
@@ -1363,9 +1372,7 @@ export default function ConversationScreen() {
                 accessibilityLabel="Send voice message"
                 style={[styles.send, { backgroundColor: colors.primary }]}
               >
-                {busy ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
+                {(
                   <Ionicons name="send" size={23} color="#FFFFFF" />
                 )}
               </Pressable>
@@ -1416,6 +1423,7 @@ export default function ConversationScreen() {
                 <TextInput
                   ref={input}
                   value={composer}
+                  editable={!busy}
                   onChangeText={(value) => {
                     setComposer(value);
                     if (emojiOpen) setEmojiOpen(false);
@@ -1521,18 +1529,16 @@ export default function ConversationScreen() {
                 style={[
                   styles.send,
                   {
-                    backgroundColor: busy ? colors.disabled : colors.primary,
+                    backgroundColor: colors.primary,
                   },
                 ]}
               >
-                {busy ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
+                {(
                   <Ionicons
                     name={
                       editing
                         ? "checkmark"
-                        : composer.trim() || media
+                        : busy || composer.trim() || media
                           ? "send"
                           : "mic"
                     }

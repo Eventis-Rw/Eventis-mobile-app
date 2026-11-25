@@ -315,7 +315,7 @@ export default function ChatScreen() {
                   unreadCount={item.unreadCount}
                   muted={item.muted}
                   onPress={() =>
-                    router.push({
+                    router.navigate({
                       pathname: "/chat/[id]",
                       params: { id: item.id },
                     })

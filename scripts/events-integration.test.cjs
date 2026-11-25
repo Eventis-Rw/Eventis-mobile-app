@@ -195,6 +195,7 @@ test("organiser events use the owner-only endpoint so paused events remain manag
 test("create uploads the cover and sends the backend's event field names", async () => {
   const { createApiEvent } = loadEventApi();
   const input = {
+    organisationId: "org-1",
     image: "file:///event-cover.jpg",
     title: "Kigali Music Night",
     description: "Live music",
@@ -212,6 +213,8 @@ test("create uploads the cover and sends the backend's event field names", async
   const call = calls[0];
   assert.equal(call.method, "POST");
   assert.equal(call.url, "/api/v1/events");
+  assert.equal(call.body.parts.get("organisation_id").value, "org-1");
+  assert.equal(call.body.parts.has("city"), false);
   assert.equal(call.body.parts.get("start_date").value, "2026-12-10");
   assert.equal(call.body.parts.get("is_paid").value, "true");
   assert.equal(call.body.parts.get("price_minor").value, "5000");

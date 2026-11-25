@@ -21,7 +21,7 @@ export function useDevicePush(userId?: string) {
           data.conversationId ? "/love/(tabs)/messages" : "/love/notifications",
         );
       } else if (typeof data.conversationId === "string") {
-        router.push({
+        router.navigate({
           pathname: "/chat/[id]",
           params: { id: data.conversationId },
         });

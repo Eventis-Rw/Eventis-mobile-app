@@ -3,11 +3,29 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import type { Event } from "@/constants/events";
 import { KeyboardAvoidingView } from "@/components/KeyboardCompat";
 import { useColors } from "@/hooks/useColors";
-import { createEventComment, deleteEventComment, getEventInteractions, listEventComments, setEventLike, updateEventComment, type EventComment } from "@/services/eventInteractionService";
+import { commentAuthor, createEventComment, deleteEventComment, getEventInteractions, listEventComments, setEventLike, updateEventComment, type EventComment } from "@/services/eventInteractionService";
 
-export function EventInteractions({ eventId, userId, ownerId, onCommentCount }: { eventId: string; userId?: string; ownerId?: string; onCommentCount?: (count: number) => void }) {
+function CommentPhoto({ name, photo }: { name: string; photo?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const colors = useColors();
+  if (photo && !failed) {
+    return <Image source={{ uri: photo }} style={styles.avatar} onError={() => setFailed(true)} />;
+  }
+  return <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: colors.secondary }]}>
+    <Text style={{ color: colors.foreground }}>{name.slice(0, 1).toUpperCase()}</Text>
+  </View>;
+}
+
+export function EventInteractions({ event, viewer, onCommentCount }: {
+  event: Event;
+  viewer?: { id: string; avatarUrl?: string } | null;
+  onCommentCount?: (count: number) => void;
+}) {
+  const { id: eventId, ownerId } = event;
+  const userId = viewer?.id;
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [liked, setLiked] = useState(false);
@@ -161,12 +179,17 @@ export function EventInteractions({ eventId, userId, ownerId, onCommentCount }: 
           <View style={[styles.grabber, { backgroundColor: colors.border }]} />
           <View style={styles.heading}><Text style={[styles.title, { color: colors.foreground }]}>Comments</Text><Pressable onPress={closeComments} accessibilityRole="button" accessibilityLabel="Close comments"><Ionicons name="close" size={24} color={colors.foreground} /></Pressable></View>
           <ScrollView ref={listRef} style={styles.list} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (scrollToNewComment.current) { scrollToNewComment.current = false; listRef.current?.scrollToEnd({ animated: true }); } }}>
-            {comments.map((comment) => <View key={comment.id} style={styles.commentRow}>
-              {comment.user.avatarUrl ? <Image source={{ uri: comment.user.avatarUrl }} style={styles.avatar} /> : <View style={[styles.avatar, styles.avatarFallback]}><Text>{(comment.user.username ?? comment.user.displayName ?? "?").slice(0, 1).toUpperCase()}</Text></View>}
-              <View style={styles.commentBody}><Text style={{ color: colors.foreground }}><Text style={styles.username}>{comment.user.username ?? comment.user.displayName ?? "Eventis member"} </Text>{comment.body}</Text><Text style={[styles.timestamp, { color: colors.mutedForeground }]}>{new Date(comment.createdAt).toLocaleString()}</Text></View>
-              {userId && userId === comment.userId ? <Pressable disabled={busy || loadingComments} onPress={() => { setEditing(comment); setText(comment.body); setError(""); inputRef.current?.focus(); }} hitSlop={8} accessibilityRole="button" accessibilityLabel="Edit comment"><Ionicons name="create-outline" size={19} color={colors.mutedForeground} /></Pressable> : null}
-              {userId && (userId === comment.userId || userId === ownerId) ? <Pressable disabled={busy || loadingComments} onPress={() => void removeComment(comment)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Delete comment"><Ionicons name="trash-outline" size={17} color={colors.mutedForeground} /></Pressable> : null}
-            </View>)}
+            {comments.map((comment) => {
+              const { name, photo } = commentAuthor(comment, event, viewer);
+              return (
+                <View key={comment.id} style={styles.commentRow}>
+                  <CommentPhoto key={photo || "initial"} name={name} photo={photo} />
+                  <View style={styles.commentBody}><Text style={{ color: colors.foreground }}><Text style={styles.username}>{name} </Text>{comment.body}</Text><Text style={[styles.timestamp, { color: colors.mutedForeground }]}>{new Date(comment.createdAt).toLocaleString()}</Text></View>
+                  {userId && userId === comment.userId ? <Pressable disabled={busy || loadingComments} onPress={() => { setEditing(comment); setText(comment.body); setError(""); inputRef.current?.focus(); }} hitSlop={8} accessibilityRole="button" accessibilityLabel="Edit comment"><Ionicons name="create-outline" size={19} color={colors.mutedForeground} /></Pressable> : null}
+                  {userId && (userId === comment.userId || userId === ownerId) ? <Pressable disabled={busy || loadingComments} onPress={() => void removeComment(comment)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Delete comment"><Ionicons name="trash-outline" size={17} color={colors.mutedForeground} /></Pressable> : null}
+                </View>
+              );
+            })}
             {commentPage > 0 && commentPage * 100 < commentsCount ? <Pressable disabled={busy || loadingComments} onPress={() => void loadComments(commentPage + 1)} accessibilityRole="button" style={styles.loadMore}><Text style={{ color: colors.primary }}>Load more comments</Text></Pressable> : null}
             {loadingComments ? <ActivityIndicator color={colors.primary} style={styles.empty} /> : null}
             {!loadingComments && !comments.length && !error ? <Text style={[styles.empty, { color: colors.mutedForeground }]}>No comments yet. Start the conversation.</Text> : null}

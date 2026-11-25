@@ -239,7 +239,7 @@ export default function CreateEventScreen() {
     try {
       if (editId) await updatePublisherEvent(user.id, editId, input);
       else {
-        await createPublisherEvent(user.id, user.organisation?.name ?? user.username, input);
+        await createPublisherEvent(user.id, user.organisation?.name ?? user.username, { ...input, organisationId: user.organisation?.id });
         await consumePost();
       }
       void refreshEvents();
