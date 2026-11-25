@@ -19,6 +19,8 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { EventScheduleFields } from "@/components/EventScheduleFields";
+import { LocationAutocompleteInput } from "@/components/LocationAutocompleteInput";
+import { CoverImageCropper } from "@/components/media/CoverImageCropper";
 import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { PortalScreenHeader } from "@/components/PortalScreenHeader";
 import { InlineError } from "@/components/profile/ProfileSection";
@@ -146,6 +148,7 @@ export default function CreateEventScreen() {
   const [imageError, setImageError] = useState<string | null>(null);
   const [pickingImage, setPickingImage] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(!!editId);
+  const [cropSource, setCropSource] = useState<{ uri: string; width: number; height: number } | null>(null);
 
   useEffect(() => {
     if (!editId || !user) return;
@@ -199,8 +202,6 @@ export default function CreateEventScreen() {
       const options: ImagePicker.ImagePickerOptions = {
         mediaTypes: ["images"],
         quality: 0.9,
-        allowsEditing: true,
-        aspect: [4, 5],
       };
       const result = source === "camera"
         ? await ImagePicker.launchCameraAsync(options)
@@ -208,13 +209,7 @@ export default function CreateEventScreen() {
       const selected = result.canceled ? undefined : result.assets[0];
       if (selected) {
         setError(null);
-        setForm((current) => ({
-          ...current,
-          image: selected.uri,
-          imageMimeType: selected.mimeType ?? "",
-          imageFileName: selected.fileName ?? "",
-        }));
-        if (Platform.OS !== "web") void Haptics.selectionAsync();
+        setCropSource({ uri: selected.uri, width: selected.width, height: selected.height });
       }
     } catch {
       setImageError(
@@ -435,16 +430,12 @@ export default function CreateEventScreen() {
               </Text>
 
               <Field label="Venue / Address" required colors={colors}>
-                <View style={[styles.iconInput, { backgroundColor: colors.input, borderColor: colors.border }]}>
-                  <Ionicons name="location-outline" size={18} color={colors.mutedForeground} />
-                  <TextInput
-                    style={[styles.iconInputText, { color: colors.foreground }]}
-                    placeholder="e.g. Roundhouse, Camden"
-                    placeholderTextColor={colors.mutedForeground}
-                    value={form.location}
-                    onChangeText={(v) => set("location", v)}
-                  />
-                </View>
+                <LocationAutocompleteInput
+                  value={form.location}
+                  onChangeText={(v) => set("location", v)}
+                  placeholder="e.g. Roundhouse, Camden"
+                  colors={colors}
+                />
               </Field>
 
               <EventScheduleFields date={form.date} time={form.time} onDate={(value) => set("date", value)} onTime={(value) => set("time", value)} />
@@ -587,6 +578,25 @@ export default function CreateEventScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       )}
+
+      <CoverImageCropper
+        visible={!!cropSource}
+        imageUri={cropSource?.uri ?? null}
+        imageWidth={cropSource?.width ?? 0}
+        imageHeight={cropSource?.height ?? 0}
+        aspect={[4, 5]}
+        onCancel={() => setCropSource(null)}
+        onConfirm={(cropped) => {
+          setForm((current) => ({
+            ...current,
+            image: cropped.uri,
+            imageMimeType: cropped.mimeType,
+            imageFileName: cropped.fileName,
+          }));
+          setCropSource(null);
+          if (Platform.OS !== "web") void Haptics.selectionAsync();
+        }}
+      />
     </View>
   );
 }

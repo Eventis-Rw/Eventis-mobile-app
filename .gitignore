@@ -34,6 +34,8 @@ GoogleService-Info.plist
 Thumbs.db
 npm-debug.log
 yarn-error.log
+# This project uses pnpm (pnpm-lock.yaml) — npm/npx sometimes drops this anyway.
+package-lock.json
 
 # Locally packaged development builds
 artifacts/

@@ -99,6 +99,7 @@
       "expo-image",
       "expo-status-bar",
       "expo-asset",
+      "expo-notifications",
       [
         "expo-build-properties",
         {
