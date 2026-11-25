@@ -351,3 +351,26 @@ test("event cards use the server's public organiser name after reload and publis
   assert.equal(mapApiEvent(record({ organizer_name: "New organiser name" }), "Old cached name").organizer, "New organiser name");
   assert.equal(mapApiEvent(record(), "Chosen organiser").organizer, "Chosen organiser");
 });
+
+test("Home reads one page and carries the viewer's interactions into the feed", async () => {
+  const interactions = { liked: true, likeCount: 3, commentCount: 2 };
+  const urls = [];
+  api.get = async url => {
+    urls.push(new URL(url, "http://fixture"));
+    return { items: [record({ interactions })], limit: 12, total: 1000 };
+  };
+  const { fetchHomeEventPage } = loadEventApi();
+  const first = await fetchHomeEventPage(1, "Music", "2026-11-25");
+  assert.equal(urls.length, 1);
+  assert.deepEqual(Object.fromEntries(urls[0].searchParams), {
+    page: "1", limit: "12", category: "Music", activeSince: "2026-11-25",
+  });
+  assert.deepEqual(first.items[0].interactions, interactions);
+  assert.equal(first.nextPage, 2);
+  const last = await fetchHomeEventPage(84, "All", "2026-11-25");
+  assert.equal(last.nextPage, undefined);
+  assert.equal(urls[1].searchParams.has("category"), false);
+  await fetchHomeEventPage(1, "Community", "2026-11-25");
+  assert.equal(urls[2].searchParams.has("category"), false);
+  assert.equal(urls[2].searchParams.get("excludeCategories"), "Music,Sports,Business,Food,Tech,Art,Nightlife");
+});

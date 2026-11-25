@@ -27,7 +27,7 @@ import { useEventClock } from "@/hooks/useEventClock";
 import { formatEventLocation, getEventTiming } from "@/constants/eventPresentation";
 import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
-import { useEvents } from "@/context/EventsContext";
+import { useListedEvent } from "@/context/EventsContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
@@ -51,7 +51,7 @@ export default function EventDetailScreen() {
   const router = useRouter();
 
   const { user, toggleSaveEvent } = useAuth();
-  const { getEventById, isLoading } = useEvents();
+  const { event, isLoading } = useListedEvent(id);
   const { conversations, getContact, sendMessage } = useChat();
 
   const [showShareModal, setShowShareModal] = useState(false);
@@ -66,7 +66,6 @@ export default function EventDetailScreen() {
   const saving = useRef(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
-  const event = getEventById(id ?? "");
   useEffect(() => {
     if (!event || !focused || !foreground || showShareModal || showOptionsModal) return;
     const timer = setTimeout(() => trackEvent(event, "detail_view", source), 1000);

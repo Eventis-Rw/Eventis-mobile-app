@@ -56,18 +56,21 @@ export function FindLoveChatProvider({ children }: { children: React.ReactNode }
 
   // ---- Loading ------------------------------------------------------------------
 
+  const listRevision = useRef(0);
   const refreshChats = useCallback(async () => {
+    const revision = ++listRevision.current;
     if (!USE_FINDLOVE_API || !userId) return;
     const summaries = await apiListChats();
     // A waiting request holds at most one message from each side, so load those
     // in full: the Received/Sent cards show both the note and the reply.
-    const pendingIds = summaries.filter((summary) => summary.connectionStatus !== "ACCEPTED").map((summary) => summary.profileId);
+    const pending = summaries.filter(summary => summary.connectionStatus !== "ACCEPTED");
     const pendingMessages = new Map(
       await Promise.all(
-        pendingIds.map(async (profileId) => [profileId, (await apiChatMessages(profileId, { limit: 10 })).items] as const),
+        pending.map(async ({ profileId, pendingMessages }) => [profileId, pendingMessages ?? (await apiChatMessages(profileId, { limit: 10 })).items] as const),
       ),
     );
-    setPendingChatIds(new Set(pendingIds));
+    if (revision !== listRevision.current) return;
+    setPendingChatIds(new Set(pendingMessages.keys()));
     setThreads((current) => {
       const next: LoveChatThreads = {};
       for (const summary of summaries) {
@@ -93,6 +96,7 @@ export function FindLoveChatProvider({ children }: { children: React.ReactNode }
   }, [userId]);
 
   useEffect(() => {
+    listRevision.current++;
     setThreads({});
     setPendingChatIds(new Set());
     openChatId.current = null;

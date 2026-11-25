@@ -32,6 +32,7 @@ export interface ApiEvent {
   rating_avg: number;
   review_count: number;
   poster_id: string;
+  interactions?: Event["interactions"];
   organizer_avatar_url?: string | null;
   organizer_name?: string | null;
   created_at: string;
@@ -187,7 +188,23 @@ export function mapApiEvent(record: ApiEvent, organizer?: string): Event {
     reviewCount: record.review_count,
     viewCount: record.views_count,
     savesCount: record.saves_count,
+    interactions: record.interactions,
     instructions: record.instructions?.split(/\r?\n/).filter(Boolean),
+  };
+}
+
+export async function fetchHomeEventPage(page: number, category: string, activeSince: string) {
+  const query = new URLSearchParams({ page: String(page), limit: "12", activeSince });
+  if (category === "Community") {
+    // Uncategorised and older custom categories also map to Community.
+    query.set("excludeCategories", CATEGORIES.filter(name => name !== "All" && name !== "Community").join(","));
+  } else if (category !== "All") {
+    query.set("category", category);
+  }
+  const result = await api.get<ApiEventPage>(`/api/v1/events?${query}`);
+  return {
+    items: result.items.map(record => mapApiEvent(record)),
+    nextPage: result.items.length > 0 && page * result.limit < result.total ? page + 1 : undefined,
   };
 }
 

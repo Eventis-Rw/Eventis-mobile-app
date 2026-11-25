@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, AppState, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useEvents } from "@/context/EventsContext";
+import { useListedEvent } from "@/context/EventsContext";
 import { StoryCanvas } from "@/components/StoryCanvas";
 import { StoryVideo } from "@/components/StoryVideo";
 import { StoryAvatar } from "@/components/StoryAvatar";
@@ -62,8 +62,7 @@ function StoryPlayback({ story, group, own, onNext, onPrevious, onClose, onViewe
   const trackStory = useCallback((type: AnalyticsType) => {
     track({ type, entityType: "story", entityId: story.id, ownerId: story.ownerId, organisationId: story.organisationId, source: "stories" });
   }, [track, story.id, story.ownerId, story.organisationId]);
-  const { getEventById, isLoading: eventsLoading } = useEvents();
-  const linkedEvent = story.eventId ? getEventById(story.eventId) : undefined;
+  const { event: linkedEvent, isLoading: eventsLoading } = useListedEvent(story.eventId);
   const [viewport, setViewport] = useState({ width, height });
   const video = story.mediaType === "video";
   const image = story.storyImage ?? (story.mediaUrl && !video ? { uri: story.mediaUrl } : undefined);

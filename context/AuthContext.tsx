@@ -174,6 +174,7 @@ async function fetchSavedEventIds(): Promise<string[]> {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  isRestoringOrganiser: boolean;
   isLoading: boolean;
   hasCompletedOnboarding: boolean;
   pendingOTPContext: { purpose: "register" | "payment" | "chat"; eventId?: string } | null;
@@ -286,8 +287,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const userRef = useRef<User | null>(null);
   const userRevision = useRef(0);
+  const restoredAccount = useRef<ApiUser | null>(null);
+  const restoredSavedFor = useRef<string | null>(null);
   const organiserSync = useRef<Promise<void> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [checkingOrganiserFor, setCheckingOrganiserFor] = useState<string | null>(null);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [pendingOTPContext, setPendingOTPContext] = useState<{
     purpose: "register" | "payment" | "chat";
@@ -321,15 +325,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (token && !token.startsWith("demo_token_")) {
           const remote = await fetchAccountWithCurrentRoles<ApiUser>(cachedUser?.serverRoles);
-          const mappedUser = mapApiUser(remote, cachedUser ?? undefined);
-          const mapped = await hydrateOrganiserState(mappedUser).catch((error) => {
-            console.warn("Could not refresh organiser access:", error);
-            return mappedUser;
-          });
-          cachedUser = {
-            ...mapped,
-            savedEvents: await fetchSavedEventIds().catch(() => mapped.savedEvents),
-          };
+          cachedUser = mapApiUser(remote, cachedUser ?? undefined);
+          restoredAccount.current = remote;
+          restoredSavedFor.current = remote.id;
+          if (USE_ORGANISER_API) setCheckingOrganiserFor(remote.id);
           await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(cachedUser));
         }
       } catch (error) {
@@ -350,13 +349,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const normalisedUser = normaliseOrganisationState(u);
     userRevision.current += 1;
     userRef.current = normalisedUser;
+    await AsyncStorage.multiSet([
+      [USER_CACHE_KEY, JSON.stringify(normalisedUser)],
+      [ONBOARDING_KEY, "true"],
+      [ONBOARDING_COMPLETE_KEY, "true"],
+    ]);
     await AsyncStorage.removeItem("@eventis_logged_out");
-    await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(normalisedUser));
-    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-    await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+    if (userRef.current !== normalisedUser) return;
     setHasCompletedOnboarding(true);
     setUser(normalisedUser);
   }, []);
+
+  useEffect(() => {
+    const current = userRef.current;
+    if (!current || restoredSavedFor.current !== current.id) return;
+    const generation = getSessionGeneration();
+    let active = true;
+    void fetchSavedEventIds().then(async saved => {
+      const latest = userRef.current;
+      if (!active || latest?.id !== current.id || generation !== getSessionGeneration()) return;
+      // Keep bookmark changes made while later pages were loading.
+      const initial = new Set(current.savedEvents);
+      const local = new Set(latest.savedEvents);
+      const merged = new Set(saved);
+      for (const id of initial) if (!local.has(id)) merged.delete(id);
+      for (const id of local) if (!initial.has(id)) merged.add(id);
+      const same = merged.size === local.size && [...merged].every(id => local.has(id));
+      if (!same) await persistUser({ ...latest, savedEvents: [...merged] });
+      restoredSavedFor.current = null;
+    }).catch(() => { /* Cached bookmarks remain available offline. */ });
+    return () => { active = false; };
+  }, [user?.id, persistUser]);
 
   const exploreDemo = useCallback(async () => {
     await clearToken();
@@ -403,6 +426,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     userRevision.current += 1;
     userRef.current = null;
+    restoredAccount.current = null;
+    restoredSavedFor.current = null;
     try {
       if (organiserSync.current) {
         await organiserSync.current.catch((error) => console.warn("Could not finish organiser refresh:", error));
@@ -587,12 +612,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const toggleSaveEvent = useCallback(
     async (eventId: string) => {
-      if (!user) return false;
-      const isSaved = user.savedEvents.includes(eventId);
+      const current = userRef.current;
+      if (!current || current.id !== user?.id) return false;
+      const isSaved = current.savedEvents.includes(eventId);
       const optimistic = isSaved
-        ? user.savedEvents.filter((id) => id !== eventId)
-        : [...user.savedEvents, eventId];
-      const updated = { ...user, savedEvents: optimistic };
+        ? current.savedEvents.filter((id) => id !== eventId)
+        : [...current.savedEvents, eventId];
+      const updated = { ...current, savedEvents: optimistic };
       await persistUser(updated);
       if (user.isDemo) return true;
       try {
@@ -603,7 +629,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await api.post<{ eventId: string; saved: boolean }>(path);
         }
       } catch {
-        await persistUser(user);
+        const latest = userRef.current;
+        if (latest?.id === current.id) {
+          const restored = new Set(latest.savedEvents);
+          if (isSaved) restored.add(eventId); else restored.delete(eventId);
+          await persistUser({ ...latest, savedEvents: [...restored] });
+        }
         return false;
       }
       return true;
@@ -715,13 +746,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const generation = getSessionGeneration();
       const token = await getToken();
       if (!token || token.startsWith("demo_token_")) return;
-      const remote = await fetchAccountWithCurrentRoles<ApiUser>(current.serverRoles, current.id);
+      const restored = restoredAccount.current;
+      restoredAccount.current = null;
+      const remote = restored?.id === current.id ? restored : await fetchAccountWithCurrentRoles<ApiUser>(current.serverRoles, current.id);
       const next = await hydrateOrganiserState(mapApiUser(remote, current));
-      if (revision !== userRevision.current || generation !== getSessionGeneration() || userRef.current?.id !== current.id) return;
-      if (JSON.stringify(next) === JSON.stringify(current)) return;
-      await persistUser(next);
+      const latest = userRef.current;
+      if (generation !== getSessionGeneration() || latest?.id !== current.id) return;
+      if (revision !== userRevision.current &&
+          JSON.stringify({ ...latest, savedEvents: current.savedEvents }) !== JSON.stringify(current)) return;
+      const updated = { ...next, savedEvents: latest.savedEvents };
+      if (JSON.stringify(updated) !== JSON.stringify(latest)) await persistUser(updated);
     };
-    const pending = sync().finally(() => { organiserSync.current = null; });
+    const checking = userRef.current?.id;
+    const pending = sync().finally(() => {
+      organiserSync.current = null;
+      setCheckingOrganiserFor(id => id === checking ? null : id);
+    });
     organiserSync.current = pending;
     return pending;
   }, [persistUser]);
@@ -823,6 +863,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isAuthenticated: !!user,
+        isRestoringOrganiser: !!user && checkingOrganiserFor === user.id,
         isLoading,
         hasCompletedOnboarding,
         pendingOTPContext,
