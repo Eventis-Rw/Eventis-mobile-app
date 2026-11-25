@@ -212,6 +212,7 @@ export class ApiChatService implements ChatService {
   private readonly attachmentDownloads = new Map<string, Promise<string>>();
   private readonly webAttachmentUrls = new Map<string, string>();
   private selfId = "";
+  private directoryLoadedAt = 0;
 
   constructor(private readonly getSelfId: () => string) {}
 
@@ -220,13 +221,11 @@ export class ApiChatService implements ChatService {
     return this.selfId;
   }
 
-  async load(): Promise<ChatSnapshot> {
-    this.aliases.clear();
-    this.aliasByUserId.clear();
-    this.contacts.clear();
-    this.blockedIds.clear();
-    this.invitedPhones.clear();
-    const [aliases, invitations, blocks] = await Promise.all([
+  async load(reuseDirectory = false): Promise<ChatSnapshot> {
+    if (reuseDirectory && Date.now() - this.directoryLoadedAt < 120_000) {
+      return this.mapInbox(await this.fetchConversations());
+    }
+    const [aliases, invitations, blocks, conversations] = await Promise.all([
       api
         .get<{ items: ApiAlias[] }>("/api/v1/chat/contacts/aliases")
         .catch(() => ({ items: [] as ApiAlias[] })),
@@ -234,7 +233,14 @@ export class ApiChatService implements ChatService {
       api
         .get<{ userIds: string[] }>("/api/v1/chat/blocks")
         .catch(() => ({ userIds: [] as string[] })),
+      this.fetchConversations(),
     ]);
+    this.directoryLoadedAt = Date.now();
+    this.aliases.clear();
+    this.aliasByUserId.clear();
+    this.contacts.clear();
+    this.blockedIds.clear();
+    this.invitedPhones.clear();
     for (const invitation of invitations) {
       if (invitation.status === "PENDING") {
         this.invitedPhones.add(normalizePhone(invitation.phoneNumber));
@@ -252,7 +258,10 @@ export class ApiChatService implements ChatService {
       this.contacts.set(contact.id, contact);
     }
 
-    const conversations = await this.fetchConversations();
+    return this.mapInbox(conversations);
+  }
+
+  private mapInbox(conversations: ApiConversation[]): ChatSnapshot {
     const mapped = conversations.map((conversation) =>
       this.mapConversation(conversation),
     );
@@ -267,7 +276,7 @@ export class ApiChatService implements ChatService {
     };
   }
 
-  async getMessages(conversationId: string): Promise<ChatMessage[]> {
+  async getMessages(conversationId: string, deferAttachments = false): Promise<ChatMessage[]> {
     const result = await api.get<{ items: ApiMessage[] }>(
       `/api/v1/chat/conversations/${conversationId}/messages?limit=100`,
     );
@@ -278,7 +287,7 @@ export class ApiChatService implements ChatService {
     return Promise.all(
       ascending
         .filter((message) => !message.deletedAt)
-        .map((message) => this.mapMessage(message)),
+        .map((message) => this.mapMessage(message, undefined, deferAttachments)),
     );
   }
 
@@ -616,6 +625,8 @@ export class ApiChatService implements ChatService {
       id: conversation.id,
       contactId: contact.id,
       lastMessage: messagePreview(conversation.lastMessage),
+      lastMessageStatus: conversation.lastMessage && conversation.lastMessage.senderId === this.currentUserId()
+        ? this.receiptStatus(conversation.lastMessage) : undefined,
       lastMessageAt:
         conversation.lastMessage?.createdAt ?? conversation.updatedAt,
       unreadCount: conversation.unreadCount,
@@ -714,9 +725,17 @@ export class ApiChatService implements ChatService {
     }
   }
 
+  async loadAttachment(messageId: string): Promise<Partial<ChatMessage>> {
+    const message = this.messageCache.get(messageId);
+    if (!message?.attachments.length) throw new Error("This attachment is unavailable.");
+    const { imageUri, audioUri, videoUri, attachmentError, audioDurationMs, videoDurationMs } = await this.mapMessage(message);
+    return { imageUri, audioUri, videoUri, attachmentError, audioDurationMs, videoDurationMs };
+  }
+
   private async mapMessage(
     message: ApiMessage,
     localMediaUri?: string,
+    deferAttachments = false,
   ): Promise<ChatMessage> {
     const reply = message.replyToId
       ? this.messageCache.get(message.replyToId)
@@ -724,7 +743,7 @@ export class ApiChatService implements ChatService {
     const attachment = message.attachments[0];
     let uri = localMediaUri;
     let attachmentError: string | undefined;
-    if (!uri && attachment) {
+    if (!uri && attachment && !deferAttachments) {
       try {
         uri = await this.resolveAttachment(attachment);
       } catch (error) {
@@ -757,6 +776,7 @@ export class ApiChatService implements ChatService {
         : {}),
     };
     if (attachment) {
+      if (deferAttachments) result.attachmentDeferred = true;
       result.attachmentName = attachment.fileName;
       result.attachmentMimeType = attachment.mimeType;
       if (attachmentError) result.attachmentError = attachmentError;
@@ -783,9 +803,10 @@ export class ApiChatService implements ChatService {
     message: ApiMessage,
   ): "sent" | "delivered" | "read" {
     if (message.senderId !== this.currentUserId()) return "read";
-    const statuses = new Set(message.receipts.map((receipt) => receipt.status));
-    if (statuses.has("READ")) return "read";
-    if (statuses.has("DELIVERED")) return "delivered";
+    const receipts = message.receipts;
+    if (!receipts.length) return "sent";
+    if (receipts.every(receipt => receipt.status === "READ")) return "read";
+    if (receipts.every(receipt => receipt.status === "DELIVERED" || receipt.status === "READ")) return "delivered";
     return "sent";
   }
 }

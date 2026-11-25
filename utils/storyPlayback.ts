@@ -9,8 +9,8 @@ export function hydrateStoryViews(saved: ViewedStories, session: ViewedStories, 
 }
 
 /** Freeze playback order at opening; ring updates must never reorder an active session. */
-export function buildStorySession(collections: StoryCollection[], ownerId: string, viewed: ViewedStories, ownOnly = false) {
-  const selectedIndex = collections.findIndex((group) => group.ownerId === ownerId);
+export function buildStorySession(collections: StoryCollection[], collectionId: string, viewed: ViewedStories, ownOnly = false) {
+  const selectedIndex = collections.findIndex((group) => group.id === collectionId);
   const selected = collections[selectedIndex];
   if (!selected?.items.length) return null;
   const previous = ownOnly ? [] : collections.slice(0, selectedIndex);

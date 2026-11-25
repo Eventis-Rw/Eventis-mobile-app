@@ -11,7 +11,8 @@ import { ApiError, getToken } from "@/utils/apiClient";
 type Session = NonNullable<ReturnType<typeof buildStorySession>>;
 type StoriesState = {
   collections: StoryCollection[]; loading: boolean; error: string | null; viewerOpen: boolean;
-  openStories: (ownerId: string, ownOnly?: boolean) => void;
+  openStories: (collectionId: string, ownOnly?: boolean) => void;
+  addPublishedStory: (story: PublishedStory) => void;
   refresh: () => Promise<void>;
 };
 const StoriesContext = createContext<StoriesState | null>(null);
@@ -32,9 +33,16 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
   const [session, setSession] = useState<Session | null>(null);
   const optimistic = useRef<ViewedStories>({});
   const pending = useRef(new Map<string, PublishedStory>());
+  const recentPublications = useRef(new Map<string, PublishedStory>());
+  const addPublishedStory = useCallback((story: PublishedStory) => {
+    recentPublications.current.set(story.id, story);
+    setItems(current => [...current.filter(item => item.id !== story.id), story]);
+    setNow(Date.now());
+  }, []);
   const request = useRef(0);
   const mounted = useRef(true);
-  const refresh = useCallback(async () => {
+  const inFlight = useRef<Promise<void> | null>(null);
+  const fetchStories = useCallback(async () => {
     const version = ++request.current;
     try {
       for (const [id, story] of pending.current) {
@@ -45,7 +53,16 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
       const useStatusApi = token !== null && !token.startsWith("demo_token_");
       const remote = useStatusApi ? await fetchStatusStories() : [];
       if (!mounted.current || version !== request.current) return;
-      setItems(remote);
+      const synced = new Map(remote.map(item => [item.id, item]));
+      for (const [id, item] of recentPublications.current) {
+        const serverStory = synced.get(id);
+        if (item.expiresAt <= Date.now() || (serverStory && (!item.organisationId || serverStory.organisationId))) {
+          recentPublications.current.delete(id);
+        } else {
+          synced.set(id, item);
+        }
+      }
+      setItems([...synced.values()]);
       setViewed({ ...savedViews, ...optimistic.current });
       setNow(Date.now());
       setError(null);
@@ -55,6 +72,14 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
       if (mounted.current && version === request.current) setLoading(false);
     }
   }, [viewerId]);
+  const refresh = useCallback(() => {
+    if (inFlight.current) return inFlight.current;
+    const operation = fetchStories().finally(() => {
+      if (inFlight.current === operation) inFlight.current = null;
+    });
+    inFlight.current = operation;
+    return operation;
+  }, [fetchStories]);
 
   useEffect(() => {
     mounted.current = true;
@@ -78,6 +103,7 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
     return () => {
       mounted.current = false;
       request.current++;
+      inFlight.current = null;
       unsubscribe();
       subscription.remove();
       if (canUseBrowserEvents) {
@@ -106,9 +132,9 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
     });
     if (story.source === "api") void recordStatusView(story.id).catch(() => {});
   }, [viewerId]);
-  const openStories = useCallback((ownerId: string, ownOnly = false) => {
+  const openStories = useCallback((collectionId: string, ownOnly = false) => {
     setNow(Date.now());
-    setSession(buildStorySession(groupStories(items, viewed, ownId), ownerId, viewed, ownOnly));
+    setSession(buildStorySession(groupStories(items, viewed, ownId), collectionId, viewed, ownOnly));
   }, [items, viewed, ownId]);
   const close = useCallback(() => setSession(null), []);
   const remove = useCallback(async (story: PublishedStory) => {
@@ -119,10 +145,16 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
       // Already gone (e.g. an earlier attempt succeeded): just drop it from the list.
       if (!(error instanceof ApiError && error.status === 404)) throw error;
     }
+    if (inFlight.current) {
+      request.current++;
+      inFlight.current = null;
+      void refresh();
+    }
+    recentPublications.current.delete(story.id);
     setItems((previous) => previous.filter((item) => storyKey(item) !== storyKey(story)));
-  }, [ownId]);
+  }, [ownId, refresh]);
   const viewerOpen = session !== null;
-  const value = useMemo(() => ({ collections, loading, error, refresh, openStories, viewerOpen }), [collections, loading, error, refresh, openStories, viewerOpen]);
+  const value = useMemo(() => ({ collections, loading, error, refresh, addPublishedStory, openStories, viewerOpen }), [collections, loading, error, refresh, addPublishedStory, openStories, viewerOpen]);
   return (
     <StoriesContext.Provider value={value}>
       {children}

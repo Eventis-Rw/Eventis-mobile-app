@@ -53,12 +53,20 @@ export default function ForwardMessageScreen() {
     setSendingId(contactId);
     setError("");
     try {
+      const media = message.attachmentDeferred ? await chat.loadAttachment(message.id) : message;
+      if (media.attachmentError) throw new Error(media.attachmentError);
       const target = await chat.startConversation(contactId);
       await chat.sendMessage(target.id, message.text, {
         forwarded: true,
-        imageUri: message.imageUri,
-        audioUri: message.audioUri,
-        audioDurationMs: message.audioDurationMs,
+        imageUri: media.imageUri,
+        audioUri: media.audioUri,
+        audioDurationMs: media.audioDurationMs,
+        videoUri: media.videoUri,
+        videoDurationMs: media.videoDurationMs,
+        attachmentName: message.attachmentName,
+        attachmentMimeType: message.attachmentMimeType,
+        attachmentWidth: message.attachmentWidth,
+        attachmentHeight: message.attachmentHeight,
       });
       router.dismissTo({
         pathname: "/chat/[id]",

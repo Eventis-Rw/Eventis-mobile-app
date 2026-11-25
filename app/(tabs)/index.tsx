@@ -62,7 +62,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [showOrganizerModal, setShowOrganizerModal] = useState(false);
-  const { viewerOpen } = useStories();
+  const { viewerOpen, refresh: refreshStories } = useStories();
   const [cardCovered, setCardCovered] = useState(false);
   const feedAnalytics = useFeedAnalytics(selectedCategory === "All" ? "home" : "category", viewerOpen || showOrganizerModal || cardCovered);
   const location = useLocationPermission();
@@ -132,11 +132,11 @@ export default function HomeScreen() {
     setVisibleCount(FEED_PAGE_SIZE);
     setRefreshing(true);
     try {
-      await refreshEvents();
+      await Promise.all([refreshEvents(), refreshStories()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refreshEvents]);
+  }, [refreshEvents, refreshStories]);
 
   useFocusEffect(
     useCallback(() => {
@@ -144,7 +144,10 @@ export default function HomeScreen() {
       // Recheck the feed while the landing page is open, so a dropped
       // connection recovers on its own when the API becomes reachable again.
       const interval = setInterval(() => {
-        if (AppState.currentState === "active") recheck();
+        if (AppState.currentState === "active") {
+          recheck();
+          void refreshStories();
+        }
       }, 30_000);
       const appState = AppState.addEventListener("change", (state) => {
         if (state === "active") recheck();
@@ -157,7 +160,7 @@ export default function HomeScreen() {
         appState.remove();
         if (Platform.OS === "web") window.removeEventListener("online", onOnline);
       };
-    }, [recheck, queryClient, queryKey, refreshEvents]),
+    }, [recheck, queryClient, queryKey, refreshEvents, refreshStories]),
   );
 
   const categoryScrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -216,12 +219,6 @@ export default function HomeScreen() {
 
     return (
       <>
-        {/* Instagram-style Stories Bar */}
-        <StoriesBar
-          user={user}
-          onOpenBecomeOrganizer={() => setShowOrganizerModal(true)}
-        />
-
         {location.status === "undetermined" && (
           <LocationPrompt onAllow={location.request} onDismiss={location.decline} />
         )}
@@ -386,6 +383,7 @@ export default function HomeScreen() {
                 ) : null}
               </View>
             ) : null}
+            <StoriesBar user={user} onOpenBecomeOrganizer={() => setShowOrganizerModal(true)} />
             {renderBody()}
           </>
         }

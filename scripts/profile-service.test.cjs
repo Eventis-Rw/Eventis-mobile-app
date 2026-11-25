@@ -691,3 +691,17 @@ test("stories expire after 24 hours and an empty story cannot be published", asy
   stored.set("@eventis_stories_v1:u1", JSON.stringify([{ ...saved, expiresAt: Date.now() - 1 }]));
   assert.deepEqual(await stories.getLocalStories("u1"), []);
 });
+
+test("two organisations run by the same publisher have independent story rings", () => {
+  const now = Date.now();
+  const first = { id: "one", ownerId: "publisher", organisationId: "org-1", mediaType: "image",
+    mediaUrl: "https://cdn.example/one.jpg", organizerName: "First", organizerAvatar: "first-logo",
+    createdAt: now + 1000, expiresAt: now + 86400000, source: "api" };
+  const second = { ...first, id: "two", organisationId: "org-2", organizerName: "Second", organizerAvatar: "second-logo" };
+  const viewed = { [stories.storyKey(first)]: first.expiresAt };
+  const groups = stories.groupStories([first, second], viewed, first.ownerId, now);
+  assert.equal(groups.length, 2);
+  assert.equal(groups.find(group => group.id === "org-1").hasUnwatched, false);
+  assert.equal(groups.find(group => group.id === "org-2").organizerAvatar, "second-logo");
+  assert.deepEqual(playback.buildStorySession(groups, "org-2", viewed, true).ids, [stories.storyKey(second)]);
+});

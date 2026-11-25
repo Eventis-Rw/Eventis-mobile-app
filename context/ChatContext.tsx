@@ -67,6 +67,7 @@ interface ChatContextValue {
   refresh: () => Promise<void>;
   getContact: (contactId: string) => ChatContact | undefined;
   getConversation: (conversationId: string) => ChatConversation | undefined;
+  loadAttachment: (messageId: string) => Promise<Partial<ChatMessage>>;
   loadMessages: (conversationId: string) => Promise<void>;
   startConversation: (contactId: string) => Promise<ChatConversation>;
   sendMessage: (
@@ -124,7 +125,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const isDemoMode = !user || Boolean(user.isDemo);
   const service = useMemo<ChatService>(() => {
     if (user && !user.isDemo) {
-      return serializeChatService(createApiChatService(() => user.id));
+      return serializeChatService(createApiChatService(() => user.id), ["getMessages", "loadAttachment"]);
     }
     return chatService;
   }, [user?.id, user?.isDemo]);
@@ -162,29 +163,39 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setNotification(current => !expected || current === expected ? null : current);
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (reuseDirectory = false) => {
+    const source = serviceRef.current;
     setError(null);
     try {
-      const source = serviceRef.current;
-      const snapshot = await source.load();
+      const snapshot = await source.load(reuseDirectory);
       if (source !== serviceRef.current) return;
       setContacts(snapshot.contacts);
-      setConversations(snapshot.conversations);
+      setConversations(current => {
+        const pending = new Map(current.filter(item => item.lastMessageStatus === "pending").map(item => [item.id, item]));
+        if (!pending.size) return snapshot.conversations;
+        return sortConversations(snapshot.conversations.map(item => {
+          const sending = pending.get(item.id);
+          return sending ? { ...item, lastMessage: sending.lastMessage, lastMessageAt: sending.lastMessageAt, lastMessageStatus: sending.lastMessageStatus } : item;
+        }));
+      });
       setAllMessages(snapshot.messages);
     } catch (cause) {
+      if (source !== serviceRef.current) return;
       setError(
         cause instanceof Error
           ? cause.message
           : "Your conversations could not be loaded.",
       );
     } finally {
-      setIsLoading(false);
+      if (source === serviceRef.current) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     setIsLoading(true);
     setNotification(null);
+    setContacts([]);
+    setConversations([]);
     setMessagesByConversation({});
     setAllMessages([]);
     void refresh();
@@ -202,19 +213,31 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [conversations],
   );
 
+  const historyRequests = useRef(new Map<string, Set<string>>());
+  const loadAttachment = useCallback(async (messageId: string) => {
+    return await serviceRef.current.loadAttachment?.(messageId) ?? {};
+  }, []);
   const loadMessages = useCallback(async (conversationId: string) => {
+    const source = serviceRef.current;
+    const sentDuringRequest = new Set<string>();
+    historyRequests.current.set(conversationId, sentDuringRequest);
+    const isCurrent = () => source === serviceRef.current && historyRequests.current.get(conversationId) === sentDuringRequest;
     try {
-      const source = serviceRef.current;
-      const messages = await source.getMessages(conversationId);
-      if (source !== serviceRef.current) return;
+      const messages = await source.getMessages(conversationId, true);
+      if (!isCurrent()) return;
+      const ids = new Set(messages.map(message => message.id));
       setError(null);
-      setMessagesByConversation((current) => ({
-        ...current,
-        [conversationId]: [...messages, ...(current[conversationId] ?? []).filter(item => item.status === "pending")],
-      }));
+      setMessagesByConversation(current => {
+        const local = (current[conversationId] ?? []).filter(item =>
+          !ids.has(item.id) && (item.status === "pending" || sentDuringRequest.has(item.id)));
+        return { ...current, [conversationId]: [...messages, ...local] };
+      });
     } catch {
+      if (!isCurrent()) return;
       setError("Messages could not be loaded.");
       throw new Error("Messages could not be loaded. Please try again.");
+    } finally {
+      if (isCurrent()) historyRequests.current.delete(conversationId);
     }
   }, []);
 
@@ -235,6 +258,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       text: string,
       options?: SendMessageOptions,
     ) => {
+      const source = serviceRef.current;
       const pendingMessage: ChatMessage = {
         id: `pending-${Date.now()}-${++pendingId.current}`,
         conversationId,
@@ -256,18 +280,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                   ...conversation,
                   lastMessage: chatMessagePreview(pendingMessage),
                   lastMessageAt: pendingMessage.sentAt,
-
+                  lastMessageStatus: "pending",
                 }
               : conversation,
           ),
         ),
       );
       try {
-        const message = await serviceRef.current.sendMessage(
+        const message = await source.sendMessage(
           conversationId,
           text,
           options,
         );
+        if (source !== serviceRef.current) return;
+        historyRequests.current.get(conversationId)?.add(message.id);
+        setConversations(current => current.map(item =>
+          item.id === conversationId && item.lastMessageAt === pendingMessage.sentAt && item.lastMessageStatus === "pending"
+            ? { ...item, lastMessageAt: message.sentAt, lastMessageStatus: message.status }
+            : item));
         setAllMessages((current) => [...current, message]);
         setMessagesByConversation((current) => ({
           ...current,
@@ -275,12 +305,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             .sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt)),
         }));
       } catch (error) {
+        if (source !== serviceRef.current) throw error;
         setMessagesByConversation((current) => ({
           ...current,
           [conversationId]: (current[conversationId] ?? []).filter(
             (item) => item.id !== pendingMessage.id,
           ),
         }));
+        setConversations(current => current.map(item =>
+          item.id === conversationId && item.lastMessageAt === pendingMessage.sentAt
+            ? { ...item, lastMessageStatus: undefined } : item));
         await refresh();
         throw error;
       }
@@ -505,8 +539,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         while (dirty && !cancelled) {
           dirty = false;
           const active = activeConversation.current;
-          if (active) await loadMessages(active).catch(() => undefined);
-          if (!cancelled) await refresh();
+          await Promise.all([
+            active ? loadMessages(active).catch(() => undefined) : undefined,
+            refresh(true),
+          ]);
         }
       } finally {
         syncing = false;
@@ -619,6 +655,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       refresh,
       getContact,
       getConversation,
+      loadAttachment,
       loadMessages,
       startConversation,
       sendMessage,
@@ -653,6 +690,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       refresh,
       getContact,
       getConversation,
+      loadAttachment,
       loadMessages,
       startConversation,
       sendMessage,

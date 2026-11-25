@@ -23,7 +23,7 @@ export function OrganiserPortalHeader({
   const router = useRouter();
   const { user } = useAuth();
   const { collections, openStories, loading } = useStories();
-  const mine = collections.find((collection) => collection.ownerId === user?.id);
+  const mine = collections.find(group => group.id === user?.organisation?.id) ?? collections.find(group => group.id === user?.id);
   const orgName = user?.organisation?.name ?? user?.businessName ?? "Your organisation";
   const logoUrl = user?.organisation?.logoUrl;
   const topPad = insets.top;
@@ -36,10 +36,10 @@ export function OrganiserPortalHeader({
   return (
     <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: palette.canvas, borderBottomColor: palette.line }]}>
       <View style={styles.workspaceRow}>
-        <Pressable disabled={loading} accessibilityRole="button"
+        <Pressable disabled={loading && !mine} accessibilityRole="button"
           accessibilityLabel={mine ? `View your stories, ${mine.hasUnwatched ? "unwatched" : "watched"}` : "Add to your story"}
-          onPress={() => mine ? openStories(mine.ownerId, true) : router.push("/business/create-story")}>
-          <StoryAvatar name={orgName} uri={logoUrl || user?.avatarUrl} size={42} surfaceColor={palette.canvas}
+          onPress={() => mine ? openStories(mine.id, true) : router.push("/business/create-story")}>
+          <StoryAvatar name={orgName} uri={user?.organisation ? logoUrl : mine?.organizerAvatar ?? user?.avatarUrl} size={42} surfaceColor={palette.canvas}
             ring={mine ? mine.hasUnwatched ? "new" : "watched" : undefined} add={!mine && !loading} />
         </Pressable>
         <View style={styles.identity}>

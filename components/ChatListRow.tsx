@@ -1,11 +1,12 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useChatColors } from "@/hooks/useChatColors";
-import type { ChatContact } from "@/services/chatService";
+import type { ChatContact, ChatMessage } from "@/services/chatService";
 
 export function ChatListRow({
   contact,
   subtitle,
+  lastMessageStatus,
   time,
   unreadCount = 0,
   muted,
@@ -17,6 +18,7 @@ export function ChatListRow({
 }: {
   contact: ChatContact;
   subtitle: string;
+  lastMessageStatus?: ChatMessage["status"];
   time?: string;
   unreadCount?: number;
   muted?: boolean;
@@ -51,7 +53,7 @@ export function ChatListRow({
         onLongPress={onLongPress}
         delayLongPress={350}
         accessibilityRole="button"
-        accessibilityLabel={`${displayName}, ${subtitle}${unreadCount ? `, ${unreadCount} unread` : ""}`}
+        accessibilityLabel={`${displayName}, ${subtitle}${lastMessageStatus && !contact.blocked ? `, ${lastMessageStatus}` : ""}${unreadCount ? `, ${unreadCount} unread` : ""}`}
         accessibilityHint={
           onLongPress ? "Hold to open conversation options" : undefined
         }
@@ -94,6 +96,10 @@ export function ChatListRow({
             ) : null}
           </View>
           <View style={styles.line}>
+            {lastMessageStatus && !contact.blocked ? <MaterialCommunityIcons
+              name={lastMessageStatus === "pending" ? "clock-outline" : lastMessageStatus === "sent" ? "check" : "check-all"}
+              size={16} color={lastMessageStatus === "read" ? colors.receipt : colors.mutedForeground}
+            /> : null}
             <Text
               numberOfLines={1}
               style={[styles.subtitle, { color: colors.mutedForeground }]}

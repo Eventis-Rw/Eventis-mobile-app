@@ -113,3 +113,41 @@ test("a direct chat follows replacement and removal of the peer's avatar across 
   avatarUrl = null;
   assert.equal(await readPhoto(), "");
 });
+
+test("opening history leaves media on the server until a bubble requests it", async () => {
+  const { service, calls } = setup();
+  const [preview] = await service.getMessages("c1", true);
+  assert.equal(preview.attachmentDeferred, true);
+  assert.equal(preview.attachmentMimeType, "audio/mp4");
+  assert.equal(calls.length, 0);
+  const attachment = await service.loadAttachment(preview.id);
+  assert.equal(attachment.audioUri, "cache/chat-v2-self-a1.m4a");
+  assert.equal(calls.length, 1);
+});
+
+test("inbox receipts follow the last outgoing message, including group delivery", async () => {
+  const { api, service } = setup();
+  let senderId = "self";
+  let statuses = [];
+  let directoryCalls = 0;
+  api.get = async url => {
+    if (!url.includes("/conversations?")) {
+      directoryCalls++;
+      return url.endsWith("/blocks") ? { userIds: [] } : url.endsWith("/aliases") ? { items: [] } : [];
+    }
+    return { total: 1, items: [{ id: "c1", type: "GROUP", participants: [], lastMessage: {
+      senderId, content: "hello", receipts: statuses.map(status => ({ status }))
+    } }] };
+  };
+  const receipt = async () => (await service.load(true)).conversations[0].lastMessageStatus;
+  assert.equal(await receipt(), "sent");
+  statuses = ["READ", "SENT"];
+  assert.equal(await receipt(), "sent");
+  statuses = ["READ", "DELIVERED"];
+  assert.equal(await receipt(), "delivered");
+  statuses = ["READ", "READ"];
+  assert.equal(await receipt(), "read");
+  senderId = "peer";
+  assert.equal(await receipt(), undefined);
+  assert.equal(directoryCalls, 3);
+});
