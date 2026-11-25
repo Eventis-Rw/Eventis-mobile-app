@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
+import { chooseProfilePhoto, ProfilePhotoCrop } from "@/components/profile/ProfilePhotoCrop";
 import React, { useState } from "react";
-import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { FormField } from "@/components/OrganisationForm";
 import { CountryPicker } from "@/components/love/CountryPicker";
@@ -277,21 +277,12 @@ function PhotoSlots({
   const colors = useColors();
   const [pickError, setPickError] = useState<string | null>(null);
 
+  const [crop, setCrop] = useState<{ photo: NonNullable<Awaited<ReturnType<typeof chooseProfilePhoto>>>; index: number }>();
   const pick = async (index: number) => {
     setPickError(null);
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        // Android's crop screen hides its confirm button under the status bar
-        // (edge-to-edge), so only iOS gets the crop step. See app/profile/edit.tsx.
-        allowsEditing: Platform.OS === "ios",
-        aspect: [4, 5],
-        quality: 0.6,
-      });
-      if (result.canceled) return;
-      const next = [...photoUrls];
-      next[Math.min(index, next.length)] = result.assets[0].uri;
-      onChange(next.slice(0, FREE_LOVE_PHOTO_LIMIT));
+      const photo = await chooseProfilePhoto();
+      if (photo) setCrop({ photo, index });
     } catch {
       setPickError("We couldn't open your photos. Check photo permissions and try again.");
     }
@@ -301,6 +292,12 @@ function PhotoSlots({
 
   return (
     <View style={styles.photoBlock}>
+      {crop && <ProfilePhotoCrop photo={crop.photo} onCancel={() => setCrop(undefined)} onSave={uri => {
+        const next = [...photoUrls];
+        next[Math.min(crop.index, next.length)] = uri;
+        onChange(next.slice(0, FREE_LOVE_PHOTO_LIMIT));
+        setCrop(undefined);
+      }} />}
       <View style={styles.photoRow}>
         {Array.from({ length: FREE_LOVE_PHOTO_LIMIT }, (_, index) => {
           const uri = photoUrls[index];

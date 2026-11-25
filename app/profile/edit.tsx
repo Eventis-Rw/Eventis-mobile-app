@@ -1,7 +1,7 @@
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as ImagePicker from "expo-image-picker";
+import { chooseProfilePhoto, ProfilePhotoCrop } from "@/components/profile/ProfilePhotoCrop";
 import { useNavigation, useRouter } from "expo-router";
 import React, { type ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -140,6 +140,7 @@ export default function EditProfileScreen() {
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [cropPhoto, setCropPhoto] = useState<Awaited<ReturnType<typeof chooseProfilePhoto>>>();
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
 
@@ -273,16 +274,7 @@ export default function EditProfileScreen() {
   const pickPhoto = async () => {
     setPhotoError(null);
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        // Android's crop screen hides its confirm button under the status bar
-        // (edge-to-edge), leaving people stuck. The avatar is cropped to a
-        // circle on display anyway, so only iOS gets the crop step.
-        allowsEditing: Platform.OS === "ios",
-        aspect: [1, 1],
-        quality: 0.5,
-      });
-      if (!result.canceled) setAccount("avatarUri", result.assets[0].uri);
+      setCropPhoto(await chooseProfilePhoto());
     } catch {
       setPhotoError("We couldn't open your photos. Check photo permissions and try again.");
     }
@@ -381,6 +373,7 @@ export default function EditProfileScreen() {
       style={[styles.root, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {cropPhoto && <ProfilePhotoCrop photo={cropPhoto} onCancel={() => setCropPhoto(undefined)} onSave={uri => { setAccount("avatarUri", uri); setCropPhoto(undefined); }} />}
       <Header
         title="Edit Profile"
         onBack={() => router.back()}

@@ -6,10 +6,15 @@ module.exports = ({ config }) => {
     : undefined;
   return {
     ...config,
+    android: {
+      ...config.android,
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? (require("fs").existsSync("./google-services.json") ? "./google-services.json" : config.android?.googleServicesFile),
+    },
     ios: { ...config.ios, usesAppleSignIn: true },
     plugins: [
       ...(config.plugins ?? []),
       "expo-apple-authentication",
+      ["expo-notifications", { defaultChannel: "eventis" }],
       ...(iosUrlScheme
         ? [["@react-native-google-signin/google-signin", { iosUrlScheme }]]
         : []),

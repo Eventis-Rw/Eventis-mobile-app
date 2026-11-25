@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { Animated, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
@@ -16,11 +16,11 @@ export function NotificationPopupHost() {
   const visible = Boolean(message || popup);
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const translate = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const swipeX = useRef(new Animated.Value(0)).current;
+  const swipeY = useRef(new Animated.Value(0)).current;
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const conversation = message
@@ -32,43 +32,30 @@ export function NotificationPopupHost() {
       : undefined) ??
     (conversation ? chat?.getContact(conversation.contactId)?.name : undefined);
 
-  const swipeResponder = useMemo(
-    () => PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponderCapture: (_event, gesture) =>
-        Math.abs(gesture.dx) > 8 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.2,
-      onPanResponderGrant: () => swipeX.stopAnimation(),
-      onPanResponderMove: (_event, gesture) => swipeX.setValue(gesture.dx),
-      onPanResponderRelease: (_event, gesture) => {
-        if (Math.abs(gesture.dx) > 65 || Math.abs(gesture.vx) > 0.6) {
-          Animated.timing(swipeX, {
-            toValue: gesture.dx > 0 ? screenWidth : -screenWidth,
-            duration: 160,
-            useNativeDriver: true,
-          }).start(() => {
-            chat?.dismissNotification();
-            swipeX.setValue(0);
-          });
-          return;
-        }
-        Animated.spring(swipeX, {
-          toValue: 0,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 10,
-        }).start();
+  const dismiss = message ? chat?.dismissNotification : ctx?.dismissPopup;
+  const swipeResponder = useMemo(() => {
+    const reset = () => Animated.parallel([swipeX, swipeY].map(value =>
+      Animated.spring(value, { toValue: 0, useNativeDriver: true })
+    )).start();
+    return PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, g) => g.dy < -8 || Math.abs(g.dx) > 12,
+      onPanResponderMove: (_, g) => {
+        swipeX.setValue(g.dx);
+        swipeY.setValue(Math.min(0, g.dy));
       },
-      onPanResponderTerminate: () => {
-        Animated.spring(swipeX, {
-          toValue: 0,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 10,
-        }).start();
+      onPanResponderRelease: (_, g) => {
+        if (g.dy < -32 || g.vy < -0.6 || Math.abs(g.dx) > 65 || Math.abs(g.vx) > 0.6) {
+          dismiss?.();
+        } else reset();
       },
-    }),
-    [chat, screenWidth, swipeX],
-  );
+      onPanResponderTerminate: reset,
+    });
+  }, [dismiss, swipeX, swipeY]);
+
+  useEffect(() => {
+    swipeX.setValue(0);
+    swipeY.setValue(0);
+  }, [message, popup, swipeX, swipeY]);
 
   useEffect(() => setReply(""), [message?.conversationId, message?.text]);
 
@@ -91,19 +78,19 @@ export function NotificationPopupHost() {
   return (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>
       <Animated.View
-        {...(message ? swipeResponder.panHandlers : {})}
+        {...swipeResponder.panHandlers}
         pointerEvents={visible ? "auto" : "none"}
         style={[
           styles.wrap,
           {
             top: insets.top + 8,
-            transform: [{ translateY: translate }],
+            transform: [{ translateY: Animated.add(translate, swipeY) }, { translateX: swipeX }],
             opacity,
           },
         ]}
       >
         {message ? (
-          <Animated.View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, transform: [{ translateX: swipeX }], ...(Platform.OS === "web" ? { boxShadow: "0 8px 24px rgba(0,0,0,0.18)" as any } : { elevation: 8, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }) }]}>
+          <Animated.View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, ...(Platform.OS === "web" ? { boxShadow: "0 8px 24px rgba(0,0,0,0.18)" as any } : { elevation: 8, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }) }]}>
             <Pressable
               style={styles.body}
               onPress={() => {

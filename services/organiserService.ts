@@ -1,3 +1,4 @@
+import { appendLocalFile } from "@/utils/formDataFile";
 import { api, ApiError } from "@/utils/apiClient";
 
 /**
@@ -307,9 +308,19 @@ export async function startSubscription(
   throw new Error("Use the manual payment flow (app/organiser/subscribe.tsx) to buy an organiser plan.");
 }
 
-// INTEGRATION POINT: logo upload. The contracts expect files to go through a
-// presigned upload endpoint and only object keys/URLs to be sent afterwards.
-// POST /api/v1/organisations -> { organisation: Organisation }
+async function organisationBody(input: OrganisationInput, current?: Organisation) {
+  const { logoUri, ...fields } = input;
+  if (logoUri === current?.logoUrl) return fields;
+  if (!logoUri) return { ...fields, logoKey: null };
+
+  const form = new FormData();
+  form.append("purpose", "ORG_LOGO");
+  await appendLocalFile(form, "file", logoUri, "logo.jpg", "image/jpeg");
+  const upload = await api.postForm<{ url: string | null }>("/api/v1/uploads", form);
+  if (!upload.url) throw new Error("Your logo could not be uploaded. Please try again.");
+  return { ...fields, logoKey: upload.url };
+}
+
 export async function createOrganisation(
   input: OrganisationInput,
   demoShouldFail = false,
@@ -320,16 +331,11 @@ export async function createOrganisation(
     const { logoUri, ...rest } = input;
     return { id: "org_" + Date.now().toString(36), ...rest, logoUrl: logoUri };
   }
-  // TODO: upload `input.logoUri` via the presigned upload endpoint once it exists,
-  // then send the returned key instead of the local URI.
-  const { logoUri: _localLogo, ...body } = input;
+  const body = await organisationBody(input);
   const resp = await api.post<Organisation>("/api/v1/organisations", body);
   return normalizeOrganisation(resp);
 }
 
-// INTEGRATION POINT: PATCH /api/v1/organisations/:id -> { organisation: Organisation }
-// Same logo caveat as createOrganisation. Organisers set up before the
-// organisation record existed have no id yet, so the demo creates one.
 export async function updateOrganisation(
   current: Organisation | undefined,
   input: OrganisationInput,
@@ -341,8 +347,8 @@ export async function updateOrganisation(
     const { logoUri, ...rest } = input;
     return { id: current?.id ?? "org_" + Date.now().toString(36), ...rest, logoUrl: logoUri };
   }
-  const { logoUri: _localLogo, ...body } = input;
   if (!current?.id) throw new Error("Choose an organisation before saving changes.");
+  const body = await organisationBody(input, current);
   const resp = await api.patch<Organisation>(`/api/v1/organisations/${current.id}`, body);
   return normalizeOrganisation(resp);
 }
