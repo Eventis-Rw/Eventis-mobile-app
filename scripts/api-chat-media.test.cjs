@@ -44,7 +44,7 @@ function setup({ username = null, downloadFailure = false, initialSize, unauthor
     };
     throw new Error(`Unexpected dependency: ${name}`);
   }, exportsObject);
-  return { service: new exportsObject.ApiChatService(() => "self"), calls, files, allowDownloads: () => { downloadFailure = false; } };
+  return { api, service: new exportsObject.ApiChatService(() => "self"), calls, files, allowDownloads: () => { downloadFailure = false; } };
 }
 
 test("directory profiles without usernames do not display @null", async () => {
@@ -89,4 +89,27 @@ test("concurrent loads share the same attachment download", async () => {
   const [first, second] = await Promise.all([service.getMessages("c1"), service.getMessages("c1")]);
   assert.equal(calls.length, 1);
   assert.equal(first[0].audioUri, second[0].audioUri);
+});
+
+test("a direct chat follows replacement and removal of the peer's avatar across alias edits", async () => {
+  const { api, service } = setup();
+  const alias = { phone: "0780000000", contactUserId: "peer", firstName: "Friend", lastName: null };
+  let avatarUrl = "https://media.example/first.jpg";
+  api.get = async url => {
+    if (url.endsWith("/aliases")) return { items: [alias] };
+    if (url.endsWith("/invitations")) return [];
+    if (url.endsWith("/blocks")) return { userIds: [] };
+    assert.match(url, /chat\/conversations/);
+    return { total: 1, items: [{ id: "chat", type: "DIRECT", participants: [
+      { userId: "self" }, { userId: "peer", profile: { id: "peer", avatarUrl } },
+    ] }] };
+  };
+  api.patch = async () => alias;
+  const readPhoto = async () => (await service.load()).contacts.find(c => c.id === "peer").avatarUrl;
+  assert.equal(await readPhoto(), avatarUrl);
+  avatarUrl = "https://media.example/replacement.jpg";
+  assert.equal(await readPhoto(), avatarUrl);
+  assert.equal((await service.updateContactName("peer", "Friend")).avatarUrl, avatarUrl);
+  avatarUrl = null;
+  assert.equal(await readPhoto(), "");
 });

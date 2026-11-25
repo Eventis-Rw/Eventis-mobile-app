@@ -1,8 +1,9 @@
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { OrganisationFields, organisationFormValues, toOrganisationInput, validateOrganisation, type OrganisationFormValues } from "@/components/OrganisationForm";
+import { getOrganiserStep } from "@/hooks/useOrganiserAccess";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
@@ -13,7 +14,7 @@ export default function OrganiserApplicationScreen() {
   const router = useRouter();
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
-  const { refreshOrganiserSubscription } = useAuth();
+  const { user, isLoading, refreshOrganiserSubscription } = useAuth();
   const [values, setValues] = useState<OrganisationFormValues>(() => organisationFormValues());
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,6 +39,11 @@ export default function OrganiserApplicationScreen() {
       setBusy(false);
     }
   };
+
+  if (isLoading) return <ActivityIndicator accessibilityLabel="Loading organiser access" />;
+  const step = getOrganiserStep(user);
+  if (step === "setup") return <Redirect href="/organiser/setup" />;
+  if (step === "ready") return <Redirect href="/business/dashboard" />;
 
   return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>

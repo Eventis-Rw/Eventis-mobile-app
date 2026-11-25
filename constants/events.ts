@@ -22,6 +22,7 @@ export interface Event {
   date: string;
   time: string;
   endTime: string;
+  endDate?: string;
   price: number;
   currency: string;
   organizer: string;

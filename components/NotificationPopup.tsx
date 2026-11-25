@@ -1,8 +1,19 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Animated,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
+import { notificationPalette } from "@/constants/colors";
+import { useTheme } from "@/context/ThemeContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import { useNotificationsOptional } from "@/context/NotificationsContext";
@@ -15,6 +26,8 @@ export function NotificationPopupHost() {
   const message = chat?.notification;
   const visible = Boolean(message || popup);
   const colors = useColors();
+  const { scheme } = useTheme();
+  const palette = notificationPalette[scheme];
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const translate = useRef(new Animated.Value(-120)).current;
@@ -23,6 +36,8 @@ export function NotificationPopupHost() {
   const swipeY = useRef(new Animated.Value(0)).current;
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [failedReply, setFailedReply] = useState<typeof message>(null);
+  const pendingReply = useRef(false);
   const conversation = message
     ? chat?.getConversation(message.conversationId)
     : undefined;
@@ -34,17 +49,26 @@ export function NotificationPopupHost() {
 
   const dismiss = message ? chat?.dismissNotification : ctx?.dismissPopup;
   const swipeResponder = useMemo(() => {
-    const reset = () => Animated.parallel([swipeX, swipeY].map(value =>
-      Animated.spring(value, { toValue: 0, useNativeDriver: true })
-    )).start();
+    const reset = () =>
+      Animated.parallel(
+        [swipeX, swipeY].map((value) =>
+          Animated.spring(value, { toValue: 0, useNativeDriver: true }),
+        ),
+      ).start();
     return PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_, g) => g.dy < -8 || Math.abs(g.dx) > 12,
+      onMoveShouldSetPanResponderCapture: (_, g) =>
+        g.dy < -8 || Math.abs(g.dx) > 12,
       onPanResponderMove: (_, g) => {
         swipeX.setValue(g.dx);
         swipeY.setValue(Math.min(0, g.dy));
       },
       onPanResponderRelease: (_, g) => {
-        if (g.dy < -32 || g.vy < -0.6 || Math.abs(g.dx) > 65 || Math.abs(g.vx) > 0.6) {
+        if (
+          g.dy < -32 ||
+          g.vy < -0.6 ||
+          Math.abs(g.dx) > 65 ||
+          Math.abs(g.vx) > 0.6
+        ) {
           dismiss?.();
         } else reset();
       },
@@ -57,26 +81,62 @@ export function NotificationPopupHost() {
     swipeY.setValue(0);
   }, [message, popup, swipeX, swipeY]);
 
-  useEffect(() => setReply(""), [message?.conversationId, message?.text]);
+  useEffect(() => setReply(""), [message]);
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.spring(translate, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }),
-        Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.spring(translate, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 80,
+          friction: 10,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(translate, { toValue: -120, duration: 180, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(translate, {
+          toValue: -120,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true,
+        }),
       ]).start();
     }
   }, [visible, translate, opacity]);
 
+  const sendReply = () => {
+    const text = reply.trim();
+    if (!message || !text || pendingReply.current || !chat) return;
+    pendingReply.current = true;
+    setFailedReply(null);
+    setSending(true);
+    void chat
+      .sendMessage(message.conversationId, text)
+      .then(() => chat.dismissNotification(message))
+      .catch(() => setFailedReply(message))
+      .finally(() => {
+        pendingReply.current = false;
+        setSending(false);
+      });
+  };
+
   if (!ctx && !chat) return null;
 
   return (
-    <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>
+    <View
+      pointerEvents="box-none"
+      style={[StyleSheet.absoluteFill, { zIndex: 100 }]}
+    >
       <Animated.View
         {...swipeResponder.panHandlers}
         pointerEvents={visible ? "auto" : "none"}
@@ -84,72 +144,105 @@ export function NotificationPopupHost() {
           styles.wrap,
           {
             top: insets.top + 8,
-            transform: [{ translateY: Animated.add(translate, swipeY) }, { translateX: swipeX }],
+            transform: [
+              { translateY: Animated.add(translate, swipeY) },
+              { translateX: swipeX },
+            ],
             opacity,
           },
         ]}
       >
-        {message ? (
-          <Animated.View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, ...(Platform.OS === "web" ? { boxShadow: "0 8px 24px rgba(0,0,0,0.18)" as any } : { elevation: 8, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }) }]}>
-            <Pressable
-              style={styles.body}
-              onPress={() => {
-                const id = message.conversationId;
-                chat?.dismissNotification();
-                router.push({ pathname: "/chat/[id]", params: { id } });
-              }}
-            >
-              <Text style={[styles.title, { color: colors.foreground }]} numberOfLines={1}>{senderName || "New message"}</Text>
-              <Text style={[styles.text, { color: colors.mutedForeground }]} numberOfLines={2}>{message.text}</Text>
-            </Pressable>
-            <TextInput
-              value={reply}
-              onChangeText={setReply}
-              placeholder="Reply…"
-              placeholderTextColor={colors.mutedForeground}
-              accessibilityLabel="Reply to message"
-              returnKeyType="send"
-              style={[styles.reply, { color: colors.foreground, borderColor: colors.border }]}
-              onSubmitEditing={() => {
-                const text = reply.trim();
-                if (!text || sending) return;
-                setSending(true);
-                void chat?.sendMessage(message.conversationId, text).then(() => setReply("")).catch(() => undefined).finally(() => setSending(false));
-              }}
-            />
-            {reply.trim().length > 0 ? <Pressable accessibilityRole="button" accessibilityLabel="Send reply" disabled={sending} onPress={() => {
-              const text = reply.trim();
-              if (!text || sending) return;
-              setSending(true);
-              void chat?.sendMessage(message.conversationId, text).then(() => setReply("")).catch(() => undefined).finally(() => setSending(false));
-            }} style={styles.close}><Ionicons name="send" size={18} color={colors.primary} /></Pressable> : null}
-          </Animated.View>
-        ) : popup && ctx ? (
-          <Pressable
-            onPress={() => {
-              ctx.dismissPopup();
-              router.push("/notifications" as any);
-            }}
+        {message || popup ? (
+          <View
             style={[
               styles.card,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                ...(Platform.OS === "web" ? { boxShadow: "0 8px 24px rgba(0,0,0,0.18)" as any } : { elevation: 8, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }),
-              },
+              { backgroundColor: palette.surface, borderColor: palette.border },
             ]}
           >
-            <View style={[styles.icon, { backgroundColor: `${colors.primary}22` }]}>
-              <Ionicons name="notifications" size={18} color={colors.primary} />
+            <View style={styles.row}>
+              <View style={[styles.icon, { backgroundColor: palette.input }]}>
+                <Ionicons
+                  name={
+                    message ? "chatbubble-ellipses" : "notifications-outline"
+                  }
+                  size={20}
+                  color={colors.primary}
+                />
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                style={styles.body}
+                onPress={() => {
+                  dismiss?.();
+                  if (message)
+                    router.push({
+                      pathname: "/chat/[id]",
+                      params: { id: message.conversationId },
+                    });
+                  else router.push("/notifications");
+                }}
+              >
+                <Text
+                  style={[styles.title, { color: colors.foreground }]}
+                  numberOfLines={1}
+                >
+                  {message ? senderName || "New message" : popup?.title}
+                </Text>
+                <Text
+                  style={[styles.text, { color: colors.mutedForeground }]}
+                  numberOfLines={2}
+                >
+                  {message ? message.text : popup?.body}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss notification"
+                onPress={() => dismiss?.()}
+                style={styles.close}
+              >
+                <Ionicons
+                  name="close"
+                  size={19}
+                  color={colors.mutedForeground}
+                />
+              </Pressable>
             </View>
-            <View style={styles.body}>
-              <Text style={[styles.title, { color: colors.foreground }]} numberOfLines={1}>{popup.title}</Text>
-              <Text style={[styles.text, { color: colors.mutedForeground }]} numberOfLines={2}>{popup.body}</Text>
-            </View>
-            <Pressable onPress={ctx.dismissPopup} hitSlop={10} style={styles.close}>
-              <Ionicons name="close" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          </Pressable>
+            {message && failedReply === message && (
+              <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive }}>Reply couldn’t send. Try again.</Text>
+            )}
+            {message ? (
+              <View
+                style={[styles.replyRow, { backgroundColor: palette.input }]}
+              >
+                <TextInput
+                  value={reply}
+                  onChangeText={setReply}
+                  placeholder="Reply to message…"
+                  placeholderTextColor={colors.mutedForeground}
+                  accessibilityLabel="Reply to message"
+                  returnKeyType="send"
+                  style={[styles.reply, { color: colors.foreground }]}
+                  onSubmitEditing={sendReply}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Send reply"
+                  disabled={sending || !reply.trim()}
+                  onPress={sendReply}
+                  style={[
+                    styles.send,
+                    {
+                      backgroundColor: colors.primary,
+                      opacity: sending || !reply.trim() ? 0.4 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons name="arrow-up" size={19} color="#FFFFFF" />
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
         ) : null}
       </Animated.View>
     </View>
@@ -158,11 +251,60 @@ export function NotificationPopupHost() {
 
 const styles = StyleSheet.create({
   wrap: { position: "absolute", left: 12, right: 12 },
-  card: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 16, padding: 12, gap: 10 },
-  icon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  body: { flex: 1, gap: 2 },
-  reply: { minWidth: 100, maxWidth: 145, borderWidth: 1, borderRadius: 18, paddingHorizontal: 10, paddingVertical: 7, fontSize: 12 },
+  card: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    gap: 12,
+    ...(Platform.OS === "web"
+      ? { boxShadow: "0 4px 16px rgba(0,0,0,0.10)" }
+      : {
+          elevation: 4,
+          shadowColor: "#000",
+          shadowOpacity: 0.1,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+        }),
+  },
+  row: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  icon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  body: { flex: 1, gap: 4, paddingTop: 1 },
+  replyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    paddingLeft: 12,
+    paddingRight: 5,
+    gap: 8,
+  },
+  reply: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+  },
+  send: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  text: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 16 },
-  close: { padding: 4 },
+  text: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
+  close: {
+    width: 32,
+    height: 40,
+    marginRight: -6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

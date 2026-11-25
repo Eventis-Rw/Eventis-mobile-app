@@ -1,3 +1,4 @@
+import { getEventTiming } from "@/constants/eventPresentation";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -1166,7 +1167,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
               style={[styles.compactDate, { color: colors.mutedForeground }]}
               numberOfLines={1}
             >
-              {formatDate(event.date)} · {event.time}
+              {getEventTiming(event).kind === "ended" ? "Ended · " : ""}{formatDate(event.date)} · {event.time}
             </Text>
             <Text
               style={[styles.compactMeta, { color: colors.mutedForeground }]}

@@ -1,7 +1,6 @@
 import type { Event } from "@/constants/events";
 import { MOCK_EVENTS } from "@/constants/mockData";
 import { FEATURED_DEMO_POSTS } from "@/constants/featuredDemoPosts";
-import { getEventTiming } from "@/constants/eventPresentation";
 import { listApiEvents, mapApiEvent, USE_EVENTS_API } from "@/services/eventApi";
 import { fetchDemoPublishedEvents } from "@/services/publisherService";
 
@@ -12,15 +11,12 @@ export async function fetchEvents(): Promise<Event[]> {
     return (await listApiEvents()).map((event) => mapApiEvent(event));
   }
 
-  const events = [
+  return [
     ...scheduleFlyerDemoEvents(FEATURED_DEMO_POSTS),
     ...scheduleGenericDemoEvents(MOCK_EVENTS),
-        // Events created by publishers on this device (demo store); empty when the profile API is on.
+    // Events created by publishers on this device (demo store); empty when the profile API is on.
     ...(await fetchDemoPublishedEvents().catch(() => [])),
   ];
-
-  // Expired events remain the organizer's historical data, but never appear in public discovery.
-  return events.filter((event) => getEventTiming(event).kind !== "ended");
 }
 
 // Demo records follow the current calendar so presentations always show upcoming content.

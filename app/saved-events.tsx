@@ -19,7 +19,7 @@ export default function SavedEventsScreen() {
   const { events, isLoading, error, refreshEvents } = useEvents();
 
   const saved = useMemo(() => events.filter((e) => user?.savedEvents.includes(e.id)), [events, user?.savedEvents]);
-  // Saved ids whose event is no longer listed (ended or removed).
+  // Some saved posts may have been unpublished.
   const unavailable = (user?.savedEvents.length ?? 0) - saved.length;
 
   return (
@@ -30,7 +30,7 @@ export default function SavedEventsScreen() {
           <SectionState kind="loading" message="Loading saved events…" />
         ) : error && !events.length ? (
           <SectionState kind="error" message={error} onRetry={() => void refreshEvents()} />
-        ) : saved.length ? (
+        ) : saved.length || unavailable > 0 ? (
           <>
             {saved.map((event) => (
               <EventCard key={event.id} event={event} variant="compact" inset={0} />
@@ -39,8 +39,8 @@ export default function SavedEventsScreen() {
               <SectionState
                 kind="empty"
                 icon="time-outline"
-                title={`${unavailable} saved ${unavailable === 1 ? "event has" : "events have"} ended`}
-                message="Events disappear from this list once they're over."
+                title={`${unavailable} saved ${unavailable === 1 ? "event is" : "events are"} unavailable`}
+                message="These posts are no longer available."
               />
             ) : null}
           </>

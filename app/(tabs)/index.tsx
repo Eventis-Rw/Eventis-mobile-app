@@ -20,7 +20,8 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
-import { NotificationPopupHost } from "@/components/NotificationPopup";
+import { getEventTiming } from "@/constants/eventPresentation";
+import { useEventClock } from "@/hooks/useEventClock";
 import { useNotificationsOptional } from "@/context/NotificationsContext";
 import { GlassSurface } from "@/components/GlassSurface";
 import { EventCardSkeleton } from "@/components/SkeletonLoader";
@@ -63,14 +64,17 @@ export default function HomeScreen() {
   const location = useLocationPermission();
   const [headerHeight, setHeaderHeight] = useState(0);
 
-  // Pull-to-refresh shows its own spinner, so skeletons are for the first load only.
-  const showSkeletons = isLoading && !refreshing;
+  // Keep visible events during refresh. Empty feeds show skeletons until the request settles.
+  const showSkeletons = (!user || isLoading) && events.length === 0;
+
+  const now = useEventClock();
+  const currentEvents = useMemo(() => events.filter(event => getEventTiming(event, now).kind !== "ended"), [events, now]);
 
   const filtered = useMemo(() => {
     const list =
       selectedCategory === "All"
-        ? events
-        : events.filter((e) => e.category === selectedCategory);
+        ? currentEvents
+        : currentEvents.filter((e) => e.category === selectedCategory);
     // Demo/featured posts are pinned first; everything else keeps the API's
     // order (most recently posted first) — Array.sort is stable, so returning
     // 0 here preserves that order instead of re-ranking by distance.
@@ -82,7 +86,7 @@ export default function HomeScreen() {
       }
       return 0;
     });
-  }, [events, selectedCategory]);
+  }, [currentEvents, selectedCategory]);
   const onRefresh = useCallback(async () => {
     setVisibleCount(FEED_PAGE_SIZE);
     setRefreshing(true);
@@ -143,7 +147,7 @@ export default function HomeScreen() {
   }, [router]);
 
   const renderBody = () => {
-    if (error && !events.length) {
+    if (!showSkeletons && error && !currentEvents.length) {
       return (
         <StateMessage
           icon="cloud-offline-outline"
@@ -155,11 +159,11 @@ export default function HomeScreen() {
       );
     }
 
-    if (!showSkeletons && !events.length) {
+    if (!showSkeletons && !currentEvents.length) {
       return (
         <StateMessage
           icon="calendar-clear-outline"
-          title="No events yet"
+          title="No upcoming events"
           text="New events will show up here as soon as they're published."
           actionLabel="Refresh"
           onAction={refreshEvents}

@@ -17,6 +17,21 @@ export function getOrganiserStep(user: User | null): OrganiserStep {
   return "intro";
 }
 
+export function getOrganiserDestination(user: User | null, useApi: boolean): string | null {
+  const step = getOrganiserStep(user);
+  if (step === "ready") return "/business/dashboard";
+  if (step === "setup") return "/organiser/setup";
+  if (useApi && !user?.isDemo) {
+    const application = user?.organiserApplication;
+    if (application?.status === "IN_REVIEW") return null;
+    if (application?.status === "PENDING_PAYMENT") {
+      return application.manualPaymentId ? "/organiser/payments" : "/organiser/subscribe";
+    }
+    return "/organiser/application";
+  }
+  return "/organiser/subscribe";
+}
+
 /**
  * Single place that decides where "Create", "Become an organiser" and the
  * organiser portal entry points lead. The portal lives under /business and is

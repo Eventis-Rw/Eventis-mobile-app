@@ -487,6 +487,7 @@ export class ApiChatService implements ChatService {
     const updated: ChatContact = {
       ...contact,
       id: contactId,
+      avatarUrl: alias.contactUserId === existing.id ? existing.avatarUrl : contact.avatarUrl,
       isInAddressBook: update.isInAddressBook ?? true,
       deviceContactId: update.deviceContactId,
     };

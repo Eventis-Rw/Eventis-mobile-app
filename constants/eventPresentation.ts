@@ -62,19 +62,23 @@ export function getEventGroup(event: Pick<Event, "date" | "time" | "endTime">, n
   return "upcoming";
 }
 
-export function getEventTiming(event: Pick<Event, "date" | "time" | "endTime">, now = new Date()): EventTiming {
+export function getEventTiming(event: Pick<Event, "date" | "time" | "endTime" | "endDate">, now = new Date()): EventTiming {
   const start = parseEventDate(event.date, event.time);
   if (!start) return { kind: "upcoming", label: "Date to be confirmed" };
 
-  const suppliedEnd = event.endTime ? parseEventDate(event.date, event.endTime) : null;
+  const endDate = event.endDate || event.date;
+  const suppliedEnd = event.endTime
+    ? parseEventDate(endDate, event.endTime)
+    : event.endDate ? parseEventDate(endDate, "00:00") : null;
   const end = suppliedEnd ?? new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  if (suppliedEnd && end < start) end.setDate(end.getDate() + 1);
+  if (event.endDate && !event.endTime && suppliedEnd) end.setDate(end.getDate() + 1);
+  if (suppliedEnd && endDate === event.date && end < start) end.setDate(end.getDate() + 1);
 
-  if (now >= start && now <= end) {
+  if (now >= start && now < end) {
     return { kind: "live", label: "Happening now" };
   }
 
-  if (now > end) {
+  if (now >= end) {
     return { kind: "ended", label: `Ended · ${formatShortDate(start)}` };
   }
 

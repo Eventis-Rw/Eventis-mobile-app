@@ -341,3 +341,10 @@ test("delete sends the server event ID to the backend delete endpoint", async ()
   await publisherService.deletePublisherEvent("poster-1", "event-1");
   assert.deepEqual(calls[0], { method: "DELETE", url: "/api/v1/events/event-1" });
 });
+
+test("event cards use the server's public organiser name after reload and publishing", () => {
+  const { mapApiEvent } = loadEventApi();
+  assert.equal(mapApiEvent(record({ organizer_name: "Kigali Arts Collective" })).organizer, "Kigali Arts Collective");
+  assert.equal(mapApiEvent(record({ organizer_name: "New organiser name" }), "Old cached name").organizer, "New organiser name");
+  assert.equal(mapApiEvent(record(), "Chosen organiser").organizer, "Chosen organiser");
+});

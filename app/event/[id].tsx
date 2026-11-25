@@ -23,6 +23,7 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 
 import { DetailSurface } from "@/components/DetailSurface";
 import { getEventImage } from "@/constants/eventImages";
+import { useEventClock } from "@/hooks/useEventClock";
 import { getEventTiming } from "@/constants/eventPresentation";
 import { getAccountType, useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
@@ -73,7 +74,8 @@ export default function EventDetailScreen() {
   }, [event, focused, foreground, trackEvent, source, showShareModal, showOptionsModal]);
   const isSaved = user?.savedEvents.includes(id ?? "") ?? false;
   const palette = { accent: colors.primary };
-  const timing = useMemo(() => (event ? getEventTiming(event) : null), [event]);
+  const now = useEventClock();
+  const timing = event ? getEventTiming(event, now) : null;
 
   // Saving organisers is a customer feature; publishers have no list to save into.
   const savedOrganisers = useSavedOrganisers({ active: getAccountType(user) === "customer" });
@@ -195,9 +197,9 @@ export default function EventDetailScreen() {
   }, [event, trackEvent]);
 
   // Paid entry: tickets are bought on the organiser's external ticket link.
-  const ticketUrl = event ? ticketLink(event) : undefined;
+  const ticketUrl = event && timing?.kind !== "ended" ? ticketLink(event) : undefined;
   const openTickets = useCallback(async () => {
-    if (!event || !ticketUrl) return;
+    if (!event || !ticketUrl || getEventTiming(event).kind === "ended") return;
     try {
       await Linking.openURL(ticketUrl);
       trackEvent(event, "website_click", "details");
@@ -205,7 +207,7 @@ export default function EventDetailScreen() {
   }, [event, ticketUrl, trackEvent]);
 
   const openWebsite = useCallback(async () => {
-    if (!event?.organizerWebsite) return;
+    if (!event?.organizerWebsite || (event.isPaid && getEventTiming(event).kind === "ended")) return;
     try {
       await Linking.openURL(event.organizerWebsite);
       trackEvent(event, "website_click", "details");
@@ -439,7 +441,7 @@ export default function EventDetailScreen() {
               <Text style={styles.cardInfoEyebrow}>ADMISSION & TICKETS</Text>
               <Text style={styles.cardInfoMainText} testID="admission-label">{admissionText}</Text>
               <Text style={styles.cardInfoSubText}>
-                {event.isPaid
+                {timing.kind === "ended" ? "This event has ended. Admission is closed." : event.isPaid
                   ? ticketPriced
                     ? "Ticket price · Buy on the organiser's ticket page"
                     : "Price shown on the organiser's ticket page"
@@ -510,7 +512,7 @@ export default function EventDetailScreen() {
                 </Pressable>
               ) : null}
 
-              {event.organizerWebsite && (
+              {event.organizerWebsite && (!event.isPaid || timing.kind !== "ended") && (
                 <Pressable
                   style={[styles.organizerBtn, styles.organizerBtnOutline]}
                   onPress={openWebsite}

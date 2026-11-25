@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ImageBackground,
@@ -13,6 +13,8 @@ import {
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
+import { useEventClock } from "@/hooks/useEventClock";
+import { getEventTiming } from "@/constants/eventPresentation";
 import { useBookings } from "@/context/BookingsContext";
 import { useEvents } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
@@ -43,8 +45,12 @@ export default function BookingScreen() {
 
   const total = (event?.price ?? 0) * quantity;
 
-  // Ended events drop out of the public list, but their bookings still open here.
-  if (!event) {
+  const now = useEventClock();
+  const ended = event && getEventTiming(event, now).kind === "ended";
+  if (ended && !existingBooking) {
+    return <Redirect href={{ pathname: "/event/[id]", params: { id: event.id } }} />;
+  }
+  if (!event || ended) {
     return (
       <View style={[styles.root, { backgroundColor: colors.background }]}>
         <GlassSurface

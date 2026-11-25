@@ -104,3 +104,16 @@ test("approved access remains in setup until an organisation exists", () => {
   assert.equal(getOrganiserStep({ organisation: { id: "org" }, organiserApplication: { status: "REJECTED" } }), "intro");
   assert.equal(getOrganiserStep({ organisation: { id: "org" }, organiserApplication: { status: "APPROVED" } }), "ready");
 });
+
+test("paid organisers resume profile setup instead of starting another application or payment", () => {
+  const { getOrganiserDestination } = load("hooks/useOrganiserAccess.ts", {
+    "expo-router": {}, react: {}, "@/context/AuthContext": {},
+  });
+  const paid = { organiserSubscription: { status: "active" } };
+  assert.equal(getOrganiserDestination(paid, true), "/organiser/setup");
+  assert.equal(getOrganiserDestination({ ...paid, organiserApplication: { status: "APPROVED" } }, true), "/organiser/setup");
+  assert.equal(getOrganiserDestination({ ...paid, organisation: { id: "org" } }, true), "/business/dashboard");
+  assert.equal(getOrganiserDestination({ ...paid, organiserApplication: { status: "IN_REVIEW" } }, true), null);
+  assert.equal(getOrganiserDestination({ organiserApplication: { status: "PENDING_PAYMENT", manualPaymentId: "payment" } }, true), "/organiser/payments");
+  assert.equal(getOrganiserDestination(null, true), "/organiser/application");
+});

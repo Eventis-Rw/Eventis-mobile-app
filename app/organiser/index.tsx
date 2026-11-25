@@ -9,7 +9,7 @@ import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
 import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
-import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
+import { getOrganiserDestination, useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { USE_ORGANISER_API } from "@/services/organiserService";
 
@@ -54,19 +54,10 @@ export default function BecomeOrganiserScreen() {
     router.push((postsLeft > 0 ? "/business/create-event" : "/organiser/subscribe") as any);
 
   const continueFlow = () => {
-    if (USE_ORGANISER_API && !user?.isDemo && step !== "ready") {
-      if (application?.status === "IN_REVIEW") return;
-      if (application?.status === "PENDING_PAYMENT") router.push((application.manualPaymentId ? "/organiser/payments" : "/organiser/subscribe") as any);
-      else router.push("/organiser/application" as any);
-      return;
-    }
-    if (step === "ready") {
-      router.replace("/business/dashboard" as any);
-    } else if (step === "setup") {
-      router.push({ pathname: "/organiser/setup" as any, params: from ? { from } : {} });
-    } else {
-      router.push({ pathname: "/organiser/subscribe" as any, params: from ? { from } : {} });
-    }
+    const destination = getOrganiserDestination(user, USE_ORGANISER_API);
+    if (!destination) return;
+    if (step === "ready") router.replace(destination as any);
+    else router.push({ pathname: destination as any, params: from ? { from } : {} });
   };
 
   const ctaLabel = application?.status === "IN_REVIEW" ? "Application in review"

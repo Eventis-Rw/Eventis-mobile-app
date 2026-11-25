@@ -75,3 +75,8 @@ export const lovePalette = {
 };
 
 export default colors;
+
+export const notificationPalette = {
+  light: { surface: "#FFFFFF", border: "#E0E5EC", input: "#F1F4F8", unread: "#EDF5FF" },
+  dark: { surface: "#192230", border: "#334152", input: "#253243", unread: "#203348" },
+};
