@@ -5,8 +5,13 @@
   },
   "build": {
     "development": {
+      "extends": "preview",
+      "environment": "development",
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_LIVEKIT_URL": "wss://eventis-057os9wu.livekit.cloud"
+      },
       "android": {
         "buildType": "apk"
       }

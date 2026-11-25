@@ -162,3 +162,28 @@ test("expired organiser subscriptions do not reopen setup", () => {
     "active",
   );
 });
+
+test("an organisation's selected logo survives saving, reloading and removal", async () => {
+  const publicUrl = "https://media.example.test/bucket/logo.jpg";
+  let row = { id: "org", name: "Eventis" };
+  let uploads = 0;
+  const service = load("services/organiserService.ts", {
+    postForm: async (url, form) => {
+      assert.equal(url, "/api/v1/uploads");
+      assert.equal(form.get("purpose"), "ORG_LOGO");
+      uploads++;
+      return { key: "bucket/logo.jpg", url: publicUrl };
+    },
+    post: async (_, body) => (row = { ...row, ...body }),
+    patch: async (_, body) => (row = { ...row, ...body }),
+    get: async () => ({ items: [row], activeOrganisationId: row.id }),
+  });
+  const created = await service.createOrganisation({ name: "Eventis", logoUri: "file:///crop.jpg" });
+  assert.equal(created.logoUrl, publicUrl);
+  await service.updateOrganisation(created, { name: "New name", logoUri: publicUrl });
+  const [restored] = (await service.fetchMyOrganisations()).organisations;
+  assert.equal(restored.logoUrl, publicUrl);
+  assert.equal(uploads, 1);
+  const cleared = await service.updateOrganisation(restored, { name: "New name", logoUri: undefined });
+  assert.equal(cleared.logoUrl, undefined);
+});

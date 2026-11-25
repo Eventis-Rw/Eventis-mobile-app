@@ -78,6 +78,7 @@ test("a session switch during the account request cannot refresh the new account
 test("subscription refresh detects an approval even when account roles stay the same", async () => {
   let status = "PENDING";
   const organiser = load("services/organiserService.ts", {
+    "@/utils/formDataFile": {},
     "@/utils/apiClient": {
       api: { get: async () => ({ items: [{ id: "sub", planId: "plan", status, startsAt: null, expiresAt: null, postsRemaining: 3 }] }) },
       ApiError: class ApiError extends Error {},

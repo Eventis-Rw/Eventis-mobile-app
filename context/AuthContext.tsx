@@ -9,6 +9,8 @@ import React, {
 } from "react";
 import { AppState } from "react-native";
 
+import { unregisterDevicePush } from "@/services/devicePush";
+import { appendLocalFile } from "@/utils/formDataFile";
 import { DEMO_AUTH, type LoginInput, type SignupInput } from "@/constants/auth";
 import { getAppleCredential, getGoogleCredential } from "@/services/socialAuth";
 import { fetchAccountWithCurrentRoles } from "@/services/accountRoleSync";
@@ -130,7 +132,7 @@ function mapApiUser(remote: ApiUser, cached?: User): User {
       "Eventis Explorer",
     email: remote.email !== undefined ? remote.email ?? "" : previous?.email ?? "",
     phone: remote.phone || undefined,
-    avatarUrl: remote.avatarUrl ?? previous?.avatarUrl,
+    avatarUrl: remote.avatarUrl === undefined ? previous?.avatarUrl : remote.avatarUrl ?? undefined,
     isPhoneVerified: remote.isPhoneVerified ?? Boolean(remote.phone),
     isBusinessAccount: hasPublisherRole || previous?.isBusinessAccount === true,
     serverRoles: remote.roles ?? previous?.serverRoles,
@@ -408,6 +410,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await getToken();
       const refreshToken = await getRefreshToken();
       if (user && !user.isDemo && token && !token.startsWith("demo_token_") && refreshToken) {
+        await unregisterDevicePush();
         await api.post<void>("/api/v1/auth/logout", { refreshToken });
       }
     } catch (error) {
@@ -614,12 +617,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Demo and offline phone sessions have no server account, so they save on
       // the device. Real sessions surface API errors instead of faking success.
       const token = await getToken();
-      if (user.isDemo || !token || token.startsWith("demo_token_")) {
+      if (user.isDemo || token?.startsWith("demo_token_") || (!token && user.id.startsWith("usr_"))) {
         await persistUser({ ...user, ...data });
         return;
       }
-      // INTEGRATION POINT: a new photo is a local file URI; upload it through the
-      // presigned upload endpoint and send the returned URL once that exists.
+      if (!token) throw new Error("Sign in again to save your profile.");
       const fields: Record<string, string> = {};
       if (data.username !== undefined) fields.displayName = data.username;
       if ("email" in data) fields.email = data.email ?? "null";
@@ -635,22 +637,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!/^(file|content|blob):/i.test(avatarUri)) {
           throw new Error("Choose a profile photo from this device to upload it.");
         }
-        const image = await fetch(avatarUri);
-        if (!image.ok) throw new Error("We couldn't read the selected profile photo.");
-        form.append("avatar_image", await image.blob(), "avatar.jpg");
+        await appendLocalFile(form, "avatar_image", avatarUri, "avatar.jpg", "image/jpeg");
+      } else if ("avatarUrl" in data && !avatarUri && user.avatarUrl) {
+        form.append("removeAvatar", "true");
       }
 
-      if (Object.keys(fields).length === 0 && !form.has("avatar_image")) {
+      if (Object.keys(fields).length === 0 && !form.has("avatar_image") && !form.has("removeAvatar")) {
         await persistUser({ ...user, ...data });
         return;
       }
 
-      try {
-        const resp = await api.patchForm<ApiUser>("/api/v1/users/me", form);
-        await persistUser({ ...mapApiUser(resp, user), ...data });
-      } catch {
-        await persistUser({ ...user, ...data });
-      }
+      const resp = await api.patchForm<ApiUser>("/api/v1/users/me", form);
+      const current = userRef.current;
+      if (current?.id !== user.id) return;
+      await persistUser({ ...mapApiUser(resp, current), ...data, avatarUrl: resp.avatarUrl ?? undefined });
     },
     [user, persistUser]
   );
@@ -768,11 +768,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (input: OrganisationInput, demoShouldFail?: boolean) => {
       if (!user?.isBusinessAccount) throw new Error("Only organisers can edit an organisation.");
       const organisation = await saveOrganisation(user.organisation, input, demoShouldFail);
-      const organisations = getOrganisations(user).map((candidate) =>
+      const current = userRef.current;
+      if (current?.id !== user.id) return;
+      const organisations = getOrganisations(current).map((candidate) =>
         candidate.id === organisation.id ? organisation : candidate
       );
       await persistUser({
-        ...user,
+        ...current,
         organisations,
         activeOrganisationId: organisation.id,
         organisation,

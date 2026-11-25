@@ -38,6 +38,7 @@ import { MyLoveProfileProvider } from "@/context/MyLoveProfileContext";
 import { NotificationsProvider } from "@/context/NotificationsContext";
 import { NotificationPopupHost } from "@/components/NotificationPopup";
 import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
+import { useDevicePush } from "@/hooks/useDevicePush";
 import { useColors } from "@/hooks/useColors";
 
 SplashScreen.preventAutoHideAsync();
@@ -60,7 +61,8 @@ function ThemedStatusBar() {
 }
 
 function RootLayoutNav() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
+  useDevicePush(isAuthenticated && !user?.isDemo ? user?.id : undefined);
   const segments = useSegments();
   const router = useRouter();
   const colors = useColors();

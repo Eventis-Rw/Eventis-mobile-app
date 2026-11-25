@@ -1,11 +1,11 @@
 import NetInfo from "@react-native-community/netinfo";
 import * as Notifications from "expo-notifications";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Platform, Pressable, Text, View } from "react-native";
+import { AppState, Platform } from "react-native";
+import { CallOverlay } from "@/components/CallOverlay";
 import { io, type Socket } from "socket.io-client";
 import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
-import { registerForCallPushToken } from "@/services/callPushNotifications";
 import { mediaUnavailableReason, prepareLiveMedia, stopLiveMedia } from "@/services/liveMedia";
 import { API_BASE, api, getToken } from "@/utils/apiClient";
 
@@ -18,8 +18,8 @@ export type ChatCall = {
   status: CallStatus;
   startedAt: string;
 };
-type ActiveCall = ChatCall & { direction: "incoming" | "outgoing"; peerName: string; error?: string; connectionState?: "connecting" | "connected" | "failed" };
-type CallContextValue = {
+type ActiveCall = ChatCall & { direction: "incoming" | "outgoing"; peerName: string; connectedAt?: number; error?: string; connectionState?: "connecting" | "connected" | "failed" };
+export type CallContextValue = {
   call: ActiveCall | null;
   localStream: any;
   remoteStream: any;
@@ -67,11 +67,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       });
     }
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Call signaling timed out.")), 8000);
+      const timeout = setTimeout(() => reject(new Error("The call took too long to connect. Try again.")), 8000);
       socket.emit("chat:call:signal", { callId, signal }, (result: any) => {
         clearTimeout(timeout);
         if (result?.ok) resolve();
-        else reject(new Error(result?.error || "Could not connect the call."));
+        else reject(new Error("Could not connect the call. Try again."));
       });
     });
   }, []);
@@ -107,18 +107,21 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     await prepareLiveMedia();
     const mediaDevices = (globalThis as any).navigator?.mediaDevices;
     if (!mediaDevices?.getUserMedia) throw new Error("This device does not support in-app calls. Install the Eventis app and allow microphone access.");
-    const stream = await mediaDevices.getUserMedia({ audio: true, video: active.type === "VIDEO" });
+    const stream = await mediaDevices.getUserMedia({ audio: true, video: active.type === "VIDEO" }).catch(() => {
+      throw new Error(active.type === "VIDEO"
+        ? "Check that Eventis can use your microphone and camera, then try again."
+        : "Check that Eventis can use your microphone, then try again.");
+    });
     localRef.current = stream;
     setLocalStream(stream);
     const Peer = (globalThis as any).RTCPeerConnection;
-    if (!Peer) throw new Error("WebRTC is unavailable in this app build. Install the latest Eventis development build.");
+    if (!Peer) throw new Error("Update Eventis to make calls on this device.");
     const relay = await api.get<{ iceServers?: any[] }>("/api/v1/chat/calls/ice-servers").catch(() => ({ iceServers: DEFAULT_ICE }));
     const peer = new Peer({ iceServers: relay.iceServers?.length ? relay.iceServers : DEFAULT_ICE });
     peerRef.current = peer;
     const MediaStreamClass = (globalThis as any).MediaStream;
     const remote = MediaStreamClass ? new MediaStreamClass() : null;
     remoteRef.current = remote;
-    if (remote) setRemoteStream(remote);
     for (const track of stream.getTracks()) peer.addTrack(track, stream);
     peer.ontrack = (event: any) => {
       const incoming = event.streams?.[0];
@@ -127,7 +130,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         setRemoteStream(incoming);
       } else if (remoteRef.current) {
         remoteRef.current.addTrack(event.track);
-        setRemoteStream({ ...remoteRef.current });
+        setRemoteStream(remoteRef.current);
       }
     };
     peer.onicecandidate = (event: any) => {
@@ -135,10 +138,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     };
     peer.onconnectionstatechange = () => {
       if (peer.connectionState === "connected") {
-        updateCall(callRef.current ? { ...callRef.current, connectionState: "connected", error: undefined } : null);
+        updateCall(callRef.current ? { ...callRef.current, connectionState: "connected", connectedAt: callRef.current.connectedAt ?? Date.now(), error: undefined } : null);
       }
       if (["failed", "disconnected"].includes(peer.connectionState)) {
-        updateCall(callRef.current ? { ...callRef.current, connectionState: "failed", error: "Connection lost. Check your network or TURN relay settings." } : null);
+        updateCall(callRef.current ? { ...callRef.current, connectionState: "failed", error: "Connection lost. Check your internet connection." } : null);
       }
     };
     if (makeOffer) {
@@ -182,7 +185,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     if (!user || user.isDemo) throw new Error("Sign in to make an Eventis call.");
     if (callRef.current) throw new Error("Finish your current call first.");
     const unavailable = mediaUnavailableReason();
-    if (unavailable) throw new Error(unavailable);
+    if (unavailable) throw new Error("Calling is unavailable in this version of Eventis. Install the latest app to call.");
     const net = await NetInfo.fetch();
     if (net.isConnected === false || net.isInternetReachable === false) {
       throw new Error("No internet connection. Check your network and try again.");
@@ -251,7 +254,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       socket.on("chat:call:signal", (payload: { callId: string; service?: string; signal: Record<string, any> }) => {
         if (payload.service && payload.service !== "EVENTIS") return;
         if (callRef.current?.id !== payload.callId) return;
-        void handleSignal(payload.signal).catch((error) => updateCall(callRef.current ? { ...callRef.current, error: error instanceof Error ? error.message : "Call connection failed." } : null));
+        void handleSignal(payload.signal).catch(() => updateCall(callRef.current ? { ...callRef.current, error: "Couldn’t connect the call. Please try again." } : null));
       });
       socket.on("chat:call:updated", (updated: ChatCall & { service?: string }) => {
         if (updated.service && updated.service !== "EVENTIS") return;
@@ -269,11 +272,6 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       socketRef.current = null;
     };
   }, [chat.getContact, chat.getConversation, cleanup, handleSignal, transition, updateCall, user?.id, user?.isDemo]);
-
-  useEffect(() => {
-    if (Platform.OS === "web" || !user || user.isDemo) return;
-    void registerForCallPushToken();
-  }, [user?.id, user?.isDemo]);
 
   const presentIncomingCallFromPush = useCallback(async (callId: string) => {
     if (!user || user.isDemo || callRef.current) return;
@@ -324,51 +322,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     endCall: () => finish(call?.direction === "outgoing" && call.status === "RINGING" ? "CANCELLED" : "ENDED"),
     toggleMute, toggleCamera,
   }), [acceptCall, call, cameraEnabled, finish, localStream, muted, remoteStream, startCall, toggleCamera, toggleMute]);
-  return <CallContext.Provider value={value}>{children}<CallOverlay /></CallContext.Provider>;
+  return <CallContext.Provider value={value}>{children}<CallOverlay {...value} /></CallContext.Provider>;
 }
 
 export function useCall() {
   const value = useContext(CallContext);
   if (!value) throw new Error("useCall must be used within CallProvider");
   return value;
-}
-
-function CallOverlay() {
-  const { call, localStream, remoteStream, muted, cameraEnabled, acceptCall, rejectCall, endCall, toggleMute, toggleCamera } = useCall();
-  const colors = useMemo(() => ({ background: "#080B16", surface: "#141A2A", accent: "#16A9F5", text: "#FFFFFF", muted: "#A9B2C6", red: "#F15D70", green: "#24C68A" }), []);
-  if (!call) return null;
-  const ringing = call.status === "RINGING";
-  return (
-    <View style={{ position: "absolute", inset: 0, zIndex: 999, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", padding: 28 }}>
-      {call.type === "VIDEO" && remoteStream ? <CallMediaView stream={remoteStream} style={{ position: "absolute", inset: 0 }} /> : null}
-      <Text style={{ color: colors.text, fontSize: 26, fontWeight: "700", marginBottom: 8 }}>{call.peerName}</Text>
-      <Text style={{ color: colors.muted, fontSize: 16, marginBottom: 18 }}>{call.error || (ringing ? call.direction === "incoming" ? `Incoming ${call.type.toLowerCase()} call` : "Calling…" : call.connectionState === "connected" ? "Connected" : "Connecting…")}</Text>
-      {call.type === "VIDEO" && localStream ? <View style={{ position: "absolute", top: 58, right: 20, width: 104, height: 156, overflow: "hidden", borderRadius: 16, backgroundColor: colors.surface }}><CallMediaView stream={localStream} local style={{ flex: 1 }} /></View> : null}
-      {call.type === "VIDEO" && !remoteStream ? <Text style={{ color: colors.muted, marginBottom: 28 }}>Waiting for video…</Text> : null}
-      <View style={{ flexDirection: "row", gap: 20, marginTop: 24 }}>
-        {ringing && call.direction === "incoming" ? <CallAction label="Decline" icon="call" color={colors.red} onPress={() => void rejectCall()} /> : null}
-        {ringing && call.direction === "incoming" ? <CallAction label="Answer" icon="call" color={colors.green} onPress={() => void acceptCall()} /> : null}
-        {!ringing ? <CallAction label={muted ? "Unmute" : "Mute"} icon={muted ? "mic-off" : "mic"} color={colors.surface} onPress={toggleMute} /> : null}
-        {!ringing && call.type === "VIDEO" ? <CallAction label={cameraEnabled ? "Camera off" : "Camera on"} icon={cameraEnabled ? "videocam" : "videocam-off"} color={colors.surface} onPress={() => void toggleCamera()} /> : null}
-        {call.direction === "outgoing" || !ringing ? <CallAction label={ringing ? "Cancel" : "End"} icon="call" color={colors.red} onPress={() => void endCall()} /> : null}
-      </View>
-    </View>
-  );
-}
-
-function CallAction({ label, icon, color, onPress }: { label: string; icon: string; color: string; onPress: () => void }) {
-  const { Ionicons } = require("@expo/vector-icons") as typeof import("@expo/vector-icons");
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={{ alignItems: "center", gap: 9 }}><View style={{ width: 62, height: 62, borderRadius: 31, backgroundColor: color, alignItems: "center", justifyContent: "center" }}><Ionicons name={icon as any} size={25} color="#FFFFFF" /></View><Text style={{ color: "#FFFFFF", fontSize: 13 }}>{label}</Text></Pressable>;
-}
-
-function CallMediaView({ stream, local = false, style }: { stream: any; local?: boolean; style?: any }) {
-  if (Platform.OS === "web") return <WebCallVideo stream={stream} local={local} style={style} />;
-  const { RTCView } = require("@livekit/react-native-webrtc") as typeof import("@livekit/react-native-webrtc");
-  return <RTCView streamURL={stream?.toURL?.()} mirror={local} objectFit="cover" style={style} />;
-}
-
-function WebCallVideo({ stream, local, style }: { stream: any; local: boolean; style?: any }) {
-  const ref = useRef<any>(null);
-  useEffect(() => { if (ref.current) { ref.current.srcObject = stream; void ref.current.play?.().catch(() => {}); } }, [stream]);
-  return React.createElement("video", { ref, autoPlay: true, playsInline: true, muted: local, style: { width: "100%", height: "100%", objectFit: "cover", ...style } });
 }

@@ -1,9 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
+import { chooseProfilePhoto, ProfilePhotoCrop } from "@/components/profile/ProfilePhotoCrop";
 import React, { useState } from "react";
 import {
   Image,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -90,19 +89,13 @@ export function OrganisationFields({
 }) {
   const colors = useOrganiserColors();
   const palette = useOrganiserPalette();
+  const [cropPhoto, setCropPhoto] = useState<Awaited<ReturnType<typeof chooseProfilePhoto>>>();
   const [logoError, setLogoError] = useState<string | undefined>();
 
   const pickLogo = async () => {
     setLogoError(undefined);
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        // Android's crop screen hides its confirm button under the status bar (edge-to-edge).
-        allowsEditing: Platform.OS === "ios",
-        aspect: [1, 1],
-        quality: 0.5,
-      });
-      if (!result.canceled) onLogoChange(result.assets[0].uri);
+      setCropPhoto(await chooseProfilePhoto());
     } catch {
       setLogoError("We couldn't open your photos. Check photo permissions and try again.");
     }
@@ -117,6 +110,7 @@ export function OrganisationFields({
 
   return (
     <View style={[styles.section, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+      {cropPhoto && <ProfilePhotoCrop photo={cropPhoto} onCancel={() => setCropPhoto(undefined)} onSave={uri => { onLogoChange(uri); setCropPhoto(undefined); }} />}
       {showLogo && <View style={styles.logoRow}>
         <Pressable
           onPress={pickLogo}
