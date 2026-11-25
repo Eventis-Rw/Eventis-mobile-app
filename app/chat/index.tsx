@@ -311,6 +311,7 @@ export default function ChatScreen() {
                 <ChatListRow
                   contact={contact}
                   subtitle={item.lastMessage || "Start a conversation"}
+                  lastMessageStatus={item.lastMessageStatus}
                   time={item.lastMessageAt}
                   unreadCount={item.unreadCount}
                   muted={item.muted}

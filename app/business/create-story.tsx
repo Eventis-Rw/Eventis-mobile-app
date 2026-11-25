@@ -109,7 +109,7 @@ export default function CreateStoryScreen() {
   const router = useRouter();
   const insets = useAppSafeAreaInsets();
   const { user } = useAuth();
-  const { refresh, openStories } = useStories();
+  const { addPublishedStory, openStories } = useStories();
   const { width, height } = useWindowDimensions();
   const textInputRef = useRef<ComponentRef<typeof TextInput>>(null);
   const nextId = useRef(0);
@@ -280,6 +280,7 @@ export default function CreateStoryScreen() {
         const mediaType: StatusMediaType = draft.videoUri ? "video" : draft.image ? "image" : "text";
         const layeredText = overlays.map((layer) => layer.text.trim()).join("\n");
         inputs.push({
+          organisationId: user.organisation?.id,
           mediaType,
           media: await resolveDraftMedia(draft, mediaType),
           caption: (draft.caption.trim() || layeredText).slice(0, 1000) || undefined,
@@ -289,10 +290,13 @@ export default function CreateStoryScreen() {
         });
       }
       for (const input of inputs) {
-        await publishStatus(input);
+        const story = await publishStatus(input);
+        const organisation = user.organisation;
+        addPublishedStory(organisation && !story.organisationId
+          ? { ...story, organisationId: organisation.id, organizerName: organisation.name, organizerAvatar: organisation.logoUrl ?? "" }
+          : story);
         publishedCount += 1;
       }
-      await refresh();
       setPublished(true);
     } catch (problem) {
       const message = describeStatusError(problem, "Your story could not be published. Your design is still here — please try again.");
@@ -348,7 +352,7 @@ export default function CreateStoryScreen() {
         <Ionicons name="checkmark-circle-outline" size={56} color={palette.accent} />
         <Text style={[styles.doneHeading, { color: palette.text }]}>Your story is ready to view</Text>
         <Text style={[styles.doneText, { color: palette.muted }]}>Published to your status feed for 24 hours. Your audience can see it at the top of their feed.</Text>
-        <Pressable onPress={() => { if (user) openStories(user.id, true); }} accessibilityRole="button" style={[styles.primaryButton, { backgroundColor: palette.blue }]}><Text style={styles.primaryText}>View your stories</Text><Ionicons name="arrow-forward" size={20} color="#FFFFFF" /></Pressable>
+        <Pressable onPress={() => { if (user) openStories(user.organisation?.id ?? user.id, true); }} accessibilityRole="button" style={[styles.primaryButton, { backgroundColor: palette.blue }]}><Text style={styles.primaryText}>View your stories</Text><Ionicons name="arrow-forward" size={20} color="#FFFFFF" /></Pressable>
         <Pressable onPress={() => router.replace("/business/dashboard")} accessibilityRole="button"><Text style={[styles.linkText, { color: palette.accent }]}>Back to dashboard</Text></Pressable>
       </View>
     </View>

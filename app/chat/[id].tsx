@@ -5,7 +5,6 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
-  useAudioRecorderState,
 } from "expo-audio";
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
@@ -84,11 +83,11 @@ type ComposerMedia = {
 };
 
 function MessageBubble({
-  message,
+  message: summary,
   previous,
   onActions,
   onImage,
-  onRetryAttachment,
+  loadAttachment,
   highlighted,
   onReply,
   replyEnabled,
@@ -96,15 +95,30 @@ function MessageBubble({
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
-  onActions: () => void;
+  onActions: (message: ChatMessage) => void;
   onImage: (uri: string) => void;
-  onRetryAttachment: () => void;
+  loadAttachment: (id: string) => Promise<Partial<ChatMessage>>;
   highlighted: boolean;
-  onReply: () => void;
+  onReply: (message: ChatMessage) => void;
   replyEnabled: boolean;
   contactName: string;
 }) {
   const colors = useChatColors();
+  const [attempt, setAttempt] = useState(0);
+  const [media, setMedia] = useState<{ id: string; fields: Partial<ChatMessage> }>();
+  useEffect(() => {
+    if (!summary.attachmentDeferred) return;
+    let active = true;
+    void loadAttachment(summary.id).then(fields => {
+      if (active) setMedia({ id: summary.id, fields });
+    }).catch(() => {
+      if (active) setMedia({ id: summary.id, fields: { attachmentError: "Attachment could not be downloaded. Tap to retry." } });
+    });
+    return () => { active = false; };
+  }, [summary.id, summary.attachmentDeferred, loadAttachment, attempt]);
+  const resolved = media?.id === summary.id ? media.fields : undefined;
+  const message = resolved ? { ...summary, ...resolved } : summary;
+  const showActions = () => onActions(message);
   const swipe = useRef<SwipeableMethods>(null);
   const own = message.direction === "outgoing";
   const sameDay =
@@ -140,7 +154,7 @@ function MessageBubble({
         renderLeftActions={() => <View style={styles.swipeReply} />}
         onSwipeableOpen={() => {
           swipe.current?.close();
-          onReply();
+          onReply(message);
         }}
       >
         <View
@@ -153,23 +167,23 @@ function MessageBubble({
           ]}
         >
           <Pressable
-            onLongPress={onActions}
+            onLongPress={showActions}
             onPress={
               message.imageUri
                 ? () => onImage(message.imageUri!)
                 : Platform.OS === "web"
-                  ? onActions
+                  ? showActions
                   : undefined
             }
             delayLongPress={300}
             accessibilityRole="button"
             accessibilityLabel={`${own ? "You" : contactName}: ${chatMessagePreview(message)}`}
             accessibilityHint="Long press for message actions"
-            onAccessibilityTap={onActions}
+            onAccessibilityTap={showActions}
             accessibilityActions={[
               { name: "activate", label: "Message actions" },
             ]}
-            onAccessibilityAction={onActions}
+            onAccessibilityAction={showActions}
             style={[
               styles.bubble,
               {
@@ -226,8 +240,11 @@ function MessageBubble({
                 durationMs={message.audioDurationMs}
               />
             ) : null}
+            {summary.attachmentDeferred && !resolved ? <Text style={[styles.smallText, { color: colors.mutedForeground }]}>
+              {chatMessagePreview({ ...summary, text: "" })} · Loading…
+            </Text> : null}
             {message.attachmentError ? (
-              <Pressable onPress={onRetryAttachment} accessibilityRole="button" accessibilityLabel="Retry downloading attachment">
+              <Pressable onPress={() => { setMedia(undefined); setAttempt(value => value + 1); }} accessibilityRole="button" accessibilityLabel="Retry downloading attachment">
                 <Text accessibilityLiveRegion="polite" style={[styles.smallText, { color: colors.destructive }]}>
                   {message.attachmentError}
                 </Text>
@@ -306,7 +323,6 @@ export default function ConversationScreen() {
     directory: "document",
     isMeteringEnabled: true,
   });
-  const recorderState = useAudioRecorderState(audioRecorder, 100);
   const conversation = chat.getConversation(id ?? "");
   const contact = conversation
     ? chat.getContact(conversation.contactId)
@@ -328,6 +344,12 @@ export default function ConversationScreen() {
   });
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [recordingActive, setRecordingActive] = useState(false);
+  const [recorderState, setRecorderState] = useState(() => audioRecorder.getStatus());
+  useEffect(() => {
+    if (!recordingActive) return;
+    const timer = setInterval(() => setRecorderState(audioRecorder.getStatus()), 100);
+    return () => clearInterval(timer);
+  }, [audioRecorder, recordingActive]);
   const recordingSessionActive = useRef(false);
   const [draftReady, setDraftReady] = useState(false);
   const [reply, setReply] = useState<ChatMessage | null>(null);
@@ -424,7 +446,7 @@ export default function ConversationScreen() {
       let focused = true;
       setActiveConversation(id);
       setLoadingHistory(true);
-      if (id && conversation?.id) {
+      if (id) {
         void loadMessages(id).then(() => {
           if (focused) {
             setLoadingHistory(false);
@@ -436,7 +458,6 @@ export default function ConversationScreen() {
       return () => { focused = false; setActiveConversation(null); };
     }, [
       id,
-      conversation?.id,
       loadMessages,
       markConversationRead,
       setActiveConversation,
@@ -713,7 +734,7 @@ export default function ConversationScreen() {
 
   async function finishVoiceRecording(shouldSend: boolean) {
     if (!recordingActive) return;
-    const durationMs = recorderState.durationMillis;
+    const durationMs = audioRecorder.getStatus().durationMillis;
     setBusy(shouldSend);
     setError(null);
     try {
@@ -866,19 +887,16 @@ export default function ConversationScreen() {
       ]
     : [];
 
-  if (
-    chat.isLoading ||
-    (conversation && loadingHistory && !error)
-  )
+  if (chat.isLoading && (!contact || !conversation))
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} />
-        <Text style={[styles.smallText, { color: colors.mutedForeground }]}>
-          Opening conversation…
-        </Text>
-        <Pressable onPress={back} accessibilityRole="button">
-          <Text style={{ color: colors.primary }}>Back</Text>
-        </Pressable>
+      <View style={[styles.root, { backgroundColor: colors.wallpaper }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 4, backgroundColor: colors.glass, borderBottomColor: colors.border }]}>
+          <Pressable onPress={back} accessibilityRole="button" accessibilityLabel="Back to conversations" style={styles.iconButton}>
+            <Ionicons name="chevron-back" size={26} color={colors.foreground} />
+          </Pressable>
+          <Text style={[styles.title, { color: colors.foreground }]}>Conversation</Text>
+        </View>
+        <ActivityIndicator accessibilityLabel="Loading conversation" color={colors.primary} style={{ marginTop: 16 }} />
       </View>
     );
   if (!contact || !conversation)
@@ -1115,6 +1133,9 @@ export default function ConversationScreen() {
               ref={list}
               style={{ flex: 1 }}
               inverted
+              initialNumToRender={12}
+              maxToRenderPerBatch={8}
+              windowSize={5}
               data={messages}
               keyExtractor={(message) => message.id}
               renderItem={({ item, index }) => (
@@ -1124,16 +1145,16 @@ export default function ConversationScreen() {
                   previous={messages[index + 1]}
                   highlighted={item.id === highlightedId}
                   replyEnabled={!contact.blocked && item.status !== "pending"}
-                  onReply={() => {
-                    setReply(item);
+                  onReply={message => {
+                    setReply(message);
                     setEditing(null);
                     input.current?.focus();
                   }}
-                  onActions={() => {
-                    if (item.status !== "pending") setSelected(item);
+                  onActions={message => {
+                    if (message.status !== "pending") setSelected(message);
                   }}
                   onImage={setImagePreview}
-                  onRetryAttachment={() => void run(() => loadMessages(id))}
+                  loadAttachment={chat.loadAttachment}
                 />
               )}
               contentContainerStyle={[
@@ -1168,7 +1189,7 @@ export default function ConversationScreen() {
                   jumpRetry.current = setTimeout(jumpToTarget, 250);
                 }
               }}
-              ListEmptyComponent={
+              ListEmptyComponent={loadingHistory && !error ? <ActivityIndicator accessibilityLabel="Loading messages" color={colors.primary} /> :
                 <View style={styles.center}>
                   <Ionicons
                     name="chatbubbles-outline"

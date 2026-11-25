@@ -28,7 +28,7 @@ export function StoryViewer({ session, collections, ownId, onViewed, onClose, on
   const available = new Set(items.keys());
   const resolved = resolveStoryIndex(session.ids, available, index);
   const story = resolved < 0 ? undefined : items.get(session.ids[resolved]);
-  const group = collections.find((item) => item.ownerId === story?.ownerId);
+  const group = collections.find((item) => item.id === (story?.organisationId ?? story?.ownerId));
   const next = useCallback(() => {
     const nextIndex = resolveStoryIndex(session.ids, new Set(items.keys()), resolved + 1);
     if (nextIndex < 0) onClose(); else setIndex(nextIndex);
