@@ -320,7 +320,7 @@ export async function updatePublisherEvent(
 
 function toPublisherEvent(
   record: Awaited<ReturnType<typeof getApiEvent>>,
-  organizer = "Event organiser",
+  organizer?: string,
 ): PublisherEvent {
   return {
     ...mapApiEvent(record, organizer),

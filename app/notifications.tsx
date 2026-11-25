@@ -13,7 +13,8 @@ import {
   View,
 } from "react-native";
 
-import { GlassSurface } from "@/components/GlassSurface";
+import { notificationPalette } from "@/constants/colors";
+import { useTheme } from "@/context/ThemeContext";
 import { useNotificationsOptional } from "@/context/NotificationsContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
@@ -73,7 +74,9 @@ function iconFor(cat: "events" | "activity" | "organizers", type?: string): { na
 }
 
 export default function NotificationsScreen() {
-  const colors = useColors();
+  const { scheme } = useTheme();
+  const palette = notificationPalette[scheme];
+  const colors = { ...useColors(), card: palette.surface, border: palette.border };
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const ctx = useNotificationsOptional();
@@ -147,12 +150,12 @@ export default function NotificationsScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <GlassSurface
+      <View
         style={[
           styles.header,
           {
             paddingTop: insets.top + 8,
-            backgroundColor: colors.background,
+            backgroundColor: palette.surface,
             borderColor: colors.border,
           },
         ]}
@@ -221,7 +224,7 @@ export default function NotificationsScreen() {
             );
           })}
         </View>
-      </GlassSurface>
+      </View>
 
       <FlatList
         data={filteredNotifications}
@@ -238,8 +241,8 @@ export default function NotificationsScreen() {
             style={[
               styles.notifCard,
               {
-                backgroundColor: item.isRead ? colors.card : `${colors.primary}0D`,
-                borderColor: item.isRead ? colors.border : `${colors.primary}40`,
+                backgroundColor: item.isRead ? colors.card : palette.unread,
+                borderColor: colors.border,
               },
             ]}
           >

@@ -1,8 +1,7 @@
-import { usePreventRemove } from "expo-router/react-navigation";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { chooseProfilePhoto, ProfilePhotoCrop } from "@/components/profile/ProfilePhotoCrop";
-import { useNavigation, useRouter } from "expo-router";
+import { useNavigation, usePreventRemove, useRouter } from "expo-router";
 import React, { type ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,

@@ -32,6 +32,7 @@ export interface ApiEvent {
   rating_avg: number;
   review_count: number;
   poster_id: string;
+  organizer_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -147,7 +148,7 @@ async function appendCoverImage(form: FormData, input: EventWriteInput) {
   }
 }
 
-export function mapApiEvent(record: ApiEvent, organizer = "Event organiser"): Event {
+export function mapApiEvent(record: ApiEvent, organizer?: string): Event {
   const category = CATEGORIES.find(
     (candidate): candidate is Exclude<EventCategory, "All"> =>
       candidate !== "All" &&
@@ -166,9 +167,10 @@ export function mapApiEvent(record: ApiEvent, organizer = "Event organiser"): Ev
     date: record.start_date.slice(0, 10),
     time: record.time,
     endTime: record.end_time ?? "",
+    endDate: record.end_date?.slice(0, 10),
     price: record.price_minor === null ? 0 : Number(record.price_minor),
     currency: record.currency,
-    organizer,
+    organizer: record.organizer_name?.trim() || organizer || "Event organiser",
     organizerWebsite: record.booking_url ?? undefined,
     attendees: 0,
     capacity: record.capacity ?? 0,

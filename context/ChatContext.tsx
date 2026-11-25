@@ -93,7 +93,7 @@ interface ChatContextValue {
   simulateIncoming: (conversationId: string) => Promise<void>;
   typingConversationId: string | null;
   notification: { conversationId: string; text: string; senderId?: string } | null;
-  dismissNotification: () => void;
+  dismissNotification: (expected?: NonNullable<ChatContextValue["notification"]>) => void;
   setActiveConversation: (id: string | null) => void;
   inviteContact: (contactId: string) => Promise<void>;
   updateContactName: (contactId: string, name: string) => Promise<void>;
@@ -155,7 +155,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const setActiveConversation = useCallback((id: string | null) => {
     activeConversation.current = id;
   }, []);
-  const dismissNotification = useCallback(() => setNotification(null), []);
+  const dismissNotification = useCallback((expected?: NonNullable<ChatContextValue["notification"]>) => {
+    setNotification(current => !expected || current === expected ? null : current);
+  }, []);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -532,6 +534,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           client.auth = { token: next };
           client.connect();
         });
+      });
+      client.on("chat:avatar:updated", () => {
+        if (!cancelled) void refresh();
       });
       client.on("chat:message:new", onNewMessage);
       for (const event of REALTIME_SYNC_EVENTS) client.on(event, sync);

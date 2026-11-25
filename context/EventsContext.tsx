@@ -48,29 +48,37 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const loadedOnce = useRef(false);
-  const refreshInFlight = useRef(false);
+  const [settledUserId, setSettledUserId] = useState<string | null>(null);
+  const userId = user?.id;
+  const activeUserId = useRef(userId);
+  activeUserId.current = userId;
+  const refreshInFlight = useRef<string | null>(null);
 
   const refreshEvents = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setEvents([]);
+      setError(null);
+      setSettledUserId(null);
       setIsLoading(false);
       return;
     }
-    if (refreshInFlight.current) return;
-    refreshInFlight.current = true;
-    if (!loadedOnce.current) setIsLoading(true);
+    if (refreshInFlight.current === userId) return;
+    refreshInFlight.current = userId;
+    setIsLoading(true);
     setError(null);
     try {
-      setEvents(await fetchEvents());
-      loadedOnce.current = true;
+      const next = await fetchEvents();
+      if (activeUserId.current === userId) setEvents(next);
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : "Couldn't load events");
+      if (activeUserId.current === userId) setError(e instanceof Error && e.message ? e.message : "Couldn't load events");
     } finally {
-      refreshInFlight.current = false;
-      setIsLoading(false);
+      if (refreshInFlight.current === userId) refreshInFlight.current = null;
+      if (activeUserId.current === userId) {
+        setSettledUserId(userId);
+        setIsLoading(false);
+      }
     }
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     refreshEvents();
@@ -116,7 +124,7 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
         setSearchQuery,
         getEventById,
         categories,
-        isLoading,
+        isLoading: isLoading || Boolean(userId && settledUserId !== userId),
         error,
         refreshEvents,
       }}

@@ -14,7 +14,8 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
 import { eventsByOrganiser } from "@/utils/customerProfile";
-import { localToday } from "@/utils/dates";
+import { getEventTiming } from "@/constants/eventPresentation";
+import { useEventClock } from "@/hooks/useEventClock";
 
 /**
  * Public page for an event organiser: who they are and what they host.
@@ -39,10 +40,10 @@ export default function OrganiserProfileScreen() {
   const savedEntry = saved.organisers.find((o) => o.id === organiserId);
   const name = hosted[0]?.organizer ?? savedEntry?.name ?? nameParam ?? "Organiser";
 
-  const today = localToday();
-  const upcoming = hosted.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-  const past = hosted.filter((e) => e.date < today).sort((a, b) => b.date.localeCompare(a.date));
-  const website = hosted.find((e) => e.organizerWebsite)?.organizerWebsite;
+  const now = useEventClock();
+  const upcoming = hosted.filter((e) => getEventTiming(e, now).kind !== "ended").sort((a, b) => a.date.localeCompare(b.date));
+  const past = hosted.filter((e) => getEventTiming(e, now).kind === "ended").sort((a, b) => b.date.localeCompare(a.date));
+  const website = upcoming.find((e) => e.organizerWebsite)?.organizerWebsite;
   const location = mostCommon(hosted.map((e) => e.city).filter(Boolean)) ?? savedEntry?.location;
   const categories = Array.from(new Set(hosted.map((e) => e.category)));
 
@@ -176,7 +177,7 @@ export default function OrganiserProfileScreen() {
             {past.length ? (
               <ProfileSection title="Past events">
                 <View style={styles.list}>
-                  {past.slice(0, 5).map((event) => (
+                  {past.map((event) => (
                     <EventCard key={event.id} event={event} variant="compact" inset={0} />
                   ))}
                 </View>

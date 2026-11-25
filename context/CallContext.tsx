@@ -1,7 +1,6 @@
-import NetInfo from "@react-native-community/netinfo";
 import * as Notifications from "expo-notifications";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, NativeModules, Platform } from "react-native";
 import { CallOverlay } from "@/components/CallOverlay";
 import { io, type Socket } from "socket.io-client";
 import { useAuth } from "@/context/AuthContext";
@@ -186,9 +185,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     if (callRef.current) throw new Error("Finish your current call first.");
     const unavailable = mediaUnavailableReason();
     if (unavailable) throw new Error("Calling is unavailable in this version of Eventis. Install the latest app to call.");
-    const net = await NetInfo.fetch();
-    if (net.isConnected === false || net.isInternetReachable === false) {
-      throw new Error("No internet connection. Check your network and try again.");
+    if (Platform.OS === "web" || NativeModules.RNCNetInfo) {
+      const { default: NetInfo } = await import("@react-native-community/netinfo");
+      const net = await NetInfo.fetch();
+      if (net.isConnected === false || net.isInternetReachable === false) {
+        throw new Error("No internet connection. Check your network and try again.");
+      }
     }
     try {
       const created = await api.post<ChatCall>("/api/v1/chat/calls", { conversationId, type });
