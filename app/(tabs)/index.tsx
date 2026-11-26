@@ -418,20 +418,17 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {application && application.status !== "PENDING_PAYMENT" && application.status !== "APPROVED" ? (
+            {application && application.status === "REJECTED" ? (
               <View style={{ margin: 20, padding: 16, borderRadius: 12, backgroundColor: colors.card, gap: 8 }}>
                 <Text style={{ color: colors.foreground, fontWeight: "700" }}>
                   {`Organizer Application Status: ${application.status.replace("_", " ")}`}
                 </Text>
                 <Text style={{ color: colors.foreground }}>
-                  {application.status === "IN_REVIEW" ? "Your payment was successful, and your organizer application has been submitted successfully. Our administration team is currently reviewing your application. You will receive a notification once a decision has been made."
-                    : `Reason: ${application.rejectionReason}. You can reapply with a new verified payment.`}
+                  {`Reason: ${application.rejectionReason}. You can reapply with a new verified payment.`}
                 </Text>
-                {application.status !== "IN_REVIEW" ? (
-                  <Pressable onPress={() => openOrganiserFlow()} accessibilityRole="button">
-                    <Text style={{ color: colors.primary, fontWeight: "700" }}>Apply again</Text>
-                  </Pressable>
-                ) : null}
+                <Pressable onPress={() => openOrganiserFlow()} accessibilityRole="button">
+                  <Text style={{ color: colors.primary, fontWeight: "700" }}>Apply again</Text>
+                </Pressable>
               </View>
             ) : null}
             <StoriesBar user={user} onOpenBecomeOrganizer={() => setShowOrganizerModal(true)} />
