@@ -58,7 +58,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
   const [saveCount, setSaveCount] = useState(event.savesCount ?? 0);
   const saving = useRef(false);
   const postSurface =
-    scheme === "dark" ? "rgba(16, 22, 44, 0.72)" : "rgba(255, 255, 255, 0.78)";
+    scheme === "dark" ? "rgba(18, 18, 18, 0.90)" : "rgba(255, 255, 255, 0.78)";
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [

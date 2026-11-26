@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   ticketBadgePill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(10, 15, 26, 0.92)",
+    backgroundColor: "rgba(0, 0, 0, 0.92)",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,

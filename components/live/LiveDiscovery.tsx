@@ -227,10 +227,10 @@ function FeaturedLiveHero({ card }: { card: LiveStreamCardData }) {
       />
       <LinearGradient
         colors={[
-          "rgba(10, 8, 20, 0.45)",
-          "rgba(10, 8, 20, 0.15)",
-          "rgba(10, 8, 20, 0.92)",
-          "#0A0814",
+          "rgba(0, 0, 0, 0.45)",
+          "rgba(0, 0, 0, 0.15)",
+          "rgba(0, 0, 0, 0.92)",
+          "#000000",
         ]}
         locations={[0, 0.35, 0.78, 1]}
         style={StyleSheet.absoluteFill}
@@ -352,10 +352,10 @@ function LiveGridCard({ card }: { card: LiveStreamCardData }) {
       />
       <LinearGradient
         colors={[
-          "rgba(10, 8, 20, 0.4)",
-          "rgba(10, 8, 20, 0.1)",
-          "rgba(10, 8, 20, 0.88)",
-          "#0D0C18",
+          "rgba(0, 0, 0, 0.4)",
+          "rgba(0, 0, 0, 0.1)",
+          "rgba(0, 0, 0, 0.88)",
+          "#000000",
         ]}
         locations={[0, 0.3, 0.75, 1]}
         style={StyleSheet.absoluteFill}
@@ -526,7 +526,7 @@ export function LiveDiscovery({
   const gridCards = liveStreams.slice(1);
 
   return (
-    <View style={[styles.root, { backgroundColor: isDark ? "#0B0A14" : "#F8FAFC" }]}>
+    <View style={[styles.root, { backgroundColor: isDark ? "#000000" : "#F8FAFC" }]}>
       {focused ? <StatusBar style={isDark ? "light" : "dark"} /> : null}
 
       {/* Atmospheric ambient background */}
@@ -534,7 +534,7 @@ export function LiveDiscovery({
         pointerEvents="none"
         colors={
           isDark
-            ? ["#160E2E", "#0B0A14", "#0D0C18", "#1A0A16"]
+            ? ["#0A0A0A", "#000000", "#000000", "#0A0A0A"]
             : ["#F1F5F9", "#EDE9FE", "#FFF1F2", "#F8FAFC"]
         }
         locations={[0, 0.28, 0.72, 1]}

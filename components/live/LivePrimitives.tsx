@@ -4,7 +4,7 @@ import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "rea
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import type { LivePerson } from "@/services/liveState";
 
-export const liveColors = { bg: "#060A17", panel: "#0F172A", raised: "rgba(255,255,255,0.08)", line: "rgba(255,255,255,0.14)", text: "#F4F7FF", muted: "#A7B0C9", blue: "#38BDF8", red: "#EF4444", redButton: "#EF4444", redSoft: "#FF9AA5", redSurface: "#3B1D27", danger: "#FF7A87" };
+export const liveColors = { bg: "#000000", panel: "#121212", raised: "rgba(255,255,255,0.08)", line: "rgba(255,255,255,0.12)", text: "#FFFFFF", muted: "#A1A1AA", blue: "#38BDF8", red: "#EF4444", redButton: "#EF4444", redSoft: "#FF9AA5", redSurface: "#27171C", danger: "#FF7A87" };
 export function LiveAvatar({ person, size = 44 }: { person: LivePerson; size?: number }) {
   const [failed, setFailed] = useState(false);
   return <View style={{ width: size, height: size, borderRadius: size / 2, overflow: "hidden", backgroundColor: liveColors.raised, alignItems: "center", justifyContent: "center" }}>

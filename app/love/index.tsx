@@ -71,7 +71,7 @@ export default function LoveIndex() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#070814" }}>
+    <View style={{ flex: 1, backgroundColor: "#000000" }}>
       <FindLoveSplash onDone={handleSplashDone} />
     </View>
   );

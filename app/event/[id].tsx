@@ -1098,7 +1098,7 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(10, 15, 30, 0.65)",
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.16)",
     overflow: "hidden",

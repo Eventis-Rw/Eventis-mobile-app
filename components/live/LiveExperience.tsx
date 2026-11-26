@@ -104,7 +104,7 @@ export default function LiveScreen() {
             style={[
               modalStyles.sheet,
               {
-                backgroundColor: isDark ? "#161625" : "#FFFFFF",
+                backgroundColor: isDark ? "#121212" : "#FFFFFF",
                 borderColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.08)",
               },
             ]}
@@ -176,7 +176,7 @@ const modalStyles = StyleSheet.create({
     flex: 1,
   },
   sheet: {
-    backgroundColor: "#161625",
+    backgroundColor: "#121212",
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     borderWidth: 1,

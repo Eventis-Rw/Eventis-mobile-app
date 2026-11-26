@@ -142,13 +142,13 @@ export default function OTPScreen() {
   const displayContact = email || phone || user?.email || user?.phone || "your account email";
 
   return (
-    <View style={[styles.root, { backgroundColor: isDark ? "#070814" : colors.background }]}>
+    <View style={[styles.root, { backgroundColor: isDark ? "#000000" : colors.background }]}>
       {/* Background Gradient */}
       <LinearGradient
         pointerEvents="none"
         colors={
           isDark
-            ? ["#0F1B3D", "#070814", "#070814"]
+            ? ["#121212", "#000000", "#000000"]
             : ["#E0EDFF", "#F4F7FC", colors.background]
         }
         style={StyleSheet.absoluteFill}
@@ -162,8 +162,8 @@ export default function OTPScreen() {
           style={({ pressed }) => [
             styles.backBtn,
             {
-              backgroundColor: isDark ? "#111827" : colors.card,
-              borderColor: isDark ? "#1F293D" : colors.border,
+              backgroundColor: isDark ? "#121212" : colors.card,
+              borderColor: isDark ? "#27272A" : colors.border,
               opacity: pressed ? 0.75 : 1,
             },
           ]}
@@ -194,7 +194,7 @@ export default function OTPScreen() {
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
             We sent a 6-digit verification code to
           </Text>
-          <View style={[styles.contactPill, { backgroundColor: isDark ? "#111827" : colors.input, borderColor: isDark ? "#1F293D" : colors.border }]}>
+          <View style={[styles.contactPill, { backgroundColor: isDark ? "#121212" : colors.input, borderColor: isDark ? "#27272A" : colors.border }]}>
             <Ionicons name="mail-outline" size={14} color="#00A3FF" />
             <Text style={[styles.contactText, { color: colors.foreground }]}>{displayContact}</Text>
           </View>

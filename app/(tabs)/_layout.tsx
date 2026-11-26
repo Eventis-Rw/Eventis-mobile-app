@@ -149,7 +149,7 @@ function TabIcon({
             label ? { top: -1, right: 14 } : null,
             {
               backgroundColor: "#38BDF8",
-              borderColor: isDark ? "#0A0F1E" : "#FFFFFF",
+              borderColor: isDark ? "#000000" : "#FFFFFF",
             },
           ]}
         >
@@ -318,7 +318,7 @@ function TabLayout() {
             backgroundColor: isIOS
               ? "transparent"
               : isDark
-              ? "rgba(10, 15, 30, 0.94)"
+              ? "rgba(0, 0, 0, 0.96)"
               : "rgba(255, 255, 255, 0.94)",
             borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: isDark

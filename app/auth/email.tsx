@@ -112,7 +112,7 @@ export default function EmailAuthScreen() {
         pointerEvents="none"
         colors={
           scheme === "dark"
-            ? ["#1A2458", "#070814", colors.background]
+            ? ["#121212", "#000000", colors.background]
             : ["#D9E6FF", "#E8EEF8", colors.background]
         }
         style={StyleSheet.absoluteFill}
