@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 
-import { DetailSurface } from "@/components/DetailSurface";
+import { EventInteractions } from "@/components/EventInteractions";
 import { getEventImage } from "@/constants/eventImages";
 import { useEventClock } from "@/hooks/useEventClock";
 import { formatEventLocation, getEventTiming } from "@/constants/eventPresentation";
@@ -51,7 +51,7 @@ export default function EventDetailScreen() {
   const router = useRouter();
 
   const { user, toggleSaveEvent } = useAuth();
-  const { getEventById, isLoading } = useEvents();
+  const { getEventById, isLoading, events } = useEvents();
   const { conversations, getContact, sendMessage } = useChat();
 
   const [showShareModal, setShowShareModal] = useState(false);
@@ -67,6 +67,16 @@ export default function EventDetailScreen() {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
   const event = getEventById(id ?? "");
+
+  // Featured & related events (prioritize same category or popular, excluding current event)
+  const featuredEvents = useMemo(() => {
+    if (!event) return [];
+    const others = events.filter((e) => e.id !== event.id);
+    const sameCategory = others.filter((e) => e.category === event.category);
+    const otherCategories = others.filter((e) => e.category !== event.category);
+    // 2 per row x up to 3 rows (4 to 6 events)
+    return [...sameCategory, ...otherCategories].slice(0, 6);
+  }, [events, event]);
   useEffect(() => {
     if (!event || !focused || !foreground || showShareModal || showOptionsModal) return;
     const timer = setTimeout(() => trackEvent(event, "detail_view", source), 1000);
@@ -306,18 +316,6 @@ export default function EventDetailScreen() {
 
             <View style={styles.heroTopActions}>
               <FrostedIconButton
-                icon={isSaved ? "bookmark" : "bookmark-outline"}
-                label={isSaved ? "Saved" : "Save"}
-                onPress={handleSave}
-                iconColor={isSaved ? "#38BDF8" : "#FFFFFF"}
-                active={isSaved}
-              />
-              <FrostedIconButton
-                icon="paper-plane-outline"
-                label="Share"
-                onPress={handleOpenShare}
-              />
-              <FrostedIconButton
                 icon="ellipsis-horizontal"
                 label="Options"
                 onPress={() => setShowOptionsModal(true)}
@@ -388,87 +386,115 @@ export default function EventDetailScreen() {
           entering={Platform.OS !== "web" ? FadeInDown.delay(140).springify() : undefined}
           style={styles.contentContainer}
         >
-          {/* SECTION: AT A GLANCE (3 MODERN TILES) */}
-          <View style={styles.sectionHeadingRow}>
-            <View style={styles.sectionAccentLine} />
-            <Text style={styles.sectionHeadingTitle}>At a glance</Text>
+          {/* INTERACTIVE SOCIAL BAR: Like, Comment, Share, Save */}
+          <View style={[styles.socialBar, { borderBottomColor: colors.border }]}>
+            <View style={styles.socialBarLeft}>
+              <EventInteractions event={event} viewer={user} />
+              <Pressable
+                style={({ pressed }) => [styles.socialActionBtn, pressed && { opacity: 0.7 }]}
+                onPress={handleOpenShare}
+                accessibilityRole="button"
+                accessibilityLabel="Share event"
+              >
+                <Ionicons name="paper-plane-outline" size={20} color={colors.foreground} />
+                <Text style={[styles.socialActionText, { color: colors.foreground }]}>Share</Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [styles.socialActionBtn, pressed && { opacity: 0.7 }]}
+              onPress={handleSave}
+              accessibilityRole="button"
+              accessibilityLabel={isSaved ? "Saved post" : "Save post"}
+            >
+              <Ionicons
+                name={isSaved ? "bookmark" : "bookmark-outline"}
+                size={20}
+                color={isSaved ? colors.primary : colors.foreground}
+              />
+              <Text style={[styles.socialActionText, { color: isSaved ? colors.primary : colors.foreground }]}>
+                {isSaved ? "Saved" : "Save"}
+              </Text>
+            </Pressable>
           </View>
 
-          {/* Tile 1: Date & Time Card */}
-          <DetailSurface style={styles.glassInfoCard}>
-            <View style={styles.cardIconBox}>
-              <Ionicons name="calendar-outline" size={22} color={colors.primary} />
-            </View>
-            <View style={styles.cardInfoCol}>
-              <Text style={styles.cardInfoEyebrow}>DATE & SCHEDULE</Text>
-              <Text style={styles.cardInfoMainText}>{formatFullDate(event.date)}</Text>
-              <Text style={styles.cardInfoSubText}>
-                {event.time} {event.endTime ? `– ${event.endTime}` : "onwards"} · {timing.label}
-              </Text>
-            </View>
-          </DetailSurface>
+          {/* SECTION: AT A GLANCE */}
+          <Text style={styles.sectionHeadingTitle}>At a glance</Text>
 
-          {/* Tile 2: Venue & Location Card */}
-          <Pressable
-            onPress={openMaps}
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${event.location} in maps`}
-          >
-            <DetailSurface style={styles.glassInfoCard}>
-              <View style={styles.cardIconBox}>
-                <Ionicons name="location-outline" size={22} color={colors.primary} />
+          <View style={styles.specList}>
+            {/* Spec 1: Date & Time */}
+            <View style={styles.specRow}>
+              <View style={[styles.specIconBox, { backgroundColor: `${colors.primary}16` }]}>
+                <Ionicons name="calendar-outline" size={20} color={colors.primary} />
               </View>
-              <View style={styles.cardInfoCol}>
-                <Text style={styles.cardInfoEyebrow}>VENUE & LOCATION</Text>
-                <Text style={styles.cardInfoMainText} numberOfLines={1}>{event.location}</Text>
-                {formatEventLocation(event) !== event.location && <Text style={styles.cardInfoSubText}>{event.city}</Text>}
+              <View style={styles.specInfoCol}>
+                <Text style={styles.specEyebrow}>DATE & SCHEDULE</Text>
+                <Text style={styles.specMainText}>{formatFullDate(event.date)}</Text>
+                <Text style={styles.specSubText}>
+                  {event.time} {event.endTime ? `– ${event.endTime}` : "onwards"} · {timing.label}
+                </Text>
               </View>
-              <View style={styles.cardActionPill}>
-                <Text style={styles.cardActionPillText}>Maps</Text>
+            </View>
+
+            {/* Spec 2: Venue & Location */}
+            <Pressable
+              onPress={openMaps}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${event.location} in maps`}
+              style={styles.specRow}
+            >
+              <View style={[styles.specIconBox, { backgroundColor: `${colors.primary}16` }]}>
+                <Ionicons name="location-outline" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.specInfoCol}>
+                <Text style={styles.specEyebrow}>VENUE & LOCATION</Text>
+                <Text style={styles.specMainText} numberOfLines={1}>{event.location}</Text>
+                {formatEventLocation(event) !== event.location && <Text style={styles.specSubText}>{event.city}</Text>}
+              </View>
+              <View style={[styles.specActionPill, { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}20` }]}>
+                <Text style={[styles.specActionPillText, { color: colors.primary }]}>Maps</Text>
                 <Ionicons name="open-outline" size={13} color={colors.primary} />
               </View>
-            </DetailSurface>
-          </Pressable>
+            </Pressable>
 
-          {/* Tile 3: Admission & Pricing Card */}
-          <DetailSurface style={styles.glassInfoCard}>
-            <View style={styles.cardIconBox}>
-              <Ionicons name="ticket-outline" size={22} color={colors.primary} />
+            {/* Spec 3: Admission & Tickets */}
+            <View style={[styles.specRow, styles.specRowLast]}>
+              <View style={[styles.specIconBox, { backgroundColor: `${colors.primary}16` }]}>
+                <Ionicons name="ticket-outline" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.specInfoCol}>
+                <Text style={styles.specEyebrow}>ADMISSION & TICKETS</Text>
+                <Text style={styles.specMainText} testID="admission-label">{admissionText}</Text>
+                <Text style={styles.specSubText}>
+                  {timing.kind === "ended" ? "This event has ended. Admission is closed." : event.isPaid
+                    ? ticketPriced
+                      ? "Ticket price · Buy on the organiser's ticket page"
+                      : "Price shown on the organiser's ticket page"
+                    : "No reservation needed · Free community access"}
+                </Text>
+                {ticketUrl ? (
+                  <Pressable
+                    onPress={openTickets}
+                    accessibilityRole="link"
+                    accessibilityLabel="Get tickets"
+                    accessibilityHint="Opens the organiser's ticket page"
+                    testID="get-tickets"
+                    style={({ pressed }) => [styles.getTicketsBtn, { opacity: pressed ? 0.85 : 1 }]}
+                  >
+                    <Ionicons name="ticket" size={16} color={colors.primaryForeground} />
+                    <Text style={styles.getTicketsText}>Get Tickets</Text>
+                    <Ionicons name="open-outline" size={14} color={colors.primaryForeground} />
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
-            <View style={styles.cardInfoCol}>
-              <Text style={styles.cardInfoEyebrow}>ADMISSION & TICKETS</Text>
-              <Text style={styles.cardInfoMainText} testID="admission-label">{admissionText}</Text>
-              <Text style={styles.cardInfoSubText}>
-                {timing.kind === "ended" ? "This event has ended. Admission is closed." : event.isPaid
-                  ? ticketPriced
-                    ? "Ticket price · Buy on the organiser's ticket page"
-                    : "Price shown on the organiser's ticket page"
-                  : "No reservation needed · Free community access"}
-              </Text>
-              {ticketUrl ? (
-                <Pressable
-                  onPress={openTickets}
-                  accessibilityRole="link"
-                  accessibilityLabel="Get tickets"
-                  accessibilityHint="Opens the organiser's ticket page"
-                  testID="get-tickets"
-                  style={({ pressed }) => [styles.getTicketsBtn, { opacity: pressed ? 0.85 : 1 }]}
-                >
-                  <Ionicons name="ticket" size={16} color={colors.primaryForeground} />
-                  <Text style={styles.getTicketsText}>Get Tickets</Text>
-                  <Ionicons name="open-outline" size={14} color={colors.primaryForeground} />
-                </Pressable>
-              ) : null}
-            </View>
-          </DetailSurface>
-
-          {/* SECTION: HOSTED BY ORGANIZER */}
-          <View style={[styles.sectionHeadingRow, { marginTop: 26 }]}>
-            <View style={styles.sectionAccentLine} />
-            <Text style={styles.sectionHeadingTitle}>Hosted by</Text>
           </View>
 
-          <DetailSurface style={styles.organizerCard}>
+          {/* SECTION: HOSTED BY ORGANIZER */}
+          <View style={styles.sectionDivider} />
+          <Text style={styles.sectionHeadingTitle}>Hosted by</Text>
+
+          <View style={styles.organizerBlock}>
             <Pressable
               style={({ pressed }) => [styles.organizerHeaderRow, { opacity: pressed ? 0.75 : 1 }]}
               onPress={openOrganiser}
@@ -486,7 +512,6 @@ export default function EventDetailScreen() {
                     {event.organizer}
                   </Text>
                 </View>
-                {/* Events don't carry the organiser's verification status yet, so no badge is claimed. */}
                 <Text style={styles.organizerRole}>Event organiser · View profile</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
@@ -504,7 +529,7 @@ export default function EventDetailScreen() {
                   accessibilityLabel={isOrganiserSaved ? "Remove organiser from saved" : "Save organiser"}
                 >
                   <Ionicons name={isOrganiserSaved ? "bookmark" : "bookmark-outline"} size={16} color={colors.primary} />
-                  <Text style={[styles.organizerBtnText, { color: "#38BDF8" }]}>
+                  <Text style={[styles.organizerBtnText, { color: colors.primary }]}>
                     {isOrganiserSaved ? "Saved" : "Save"}
                   </Text>
                 </Pressable>
@@ -518,7 +543,7 @@ export default function EventDetailScreen() {
                   accessibilityLabel="Visit organizer website"
                 >
                   <Ionicons name="globe-outline" size={16} color={colors.primary} />
-                  <Text style={[styles.organizerBtnText, { color: "#38BDF8" }]}>Website</Text>
+                  <Text style={[styles.organizerBtnText, { color: colors.primary }]}>Website</Text>
                 </Pressable>
               )}
             </View>
@@ -527,15 +552,13 @@ export default function EventDetailScreen() {
                 {saveOrganiserError}
               </Text>
             ) : null}
-          </DetailSurface>
-
-          {/* SECTION: ABOUT THIS EVENT */}
-          <View style={[styles.sectionHeadingRow, { marginTop: 26 }]}>
-            <View style={styles.sectionAccentLine} />
-            <Text style={styles.sectionHeadingTitle}>About this event</Text>
           </View>
 
-          <DetailSurface style={styles.storyCard}>
+          {/* SECTION: ABOUT THIS EVENT */}
+          <View style={styles.sectionDivider} />
+          <Text style={styles.sectionHeadingTitle}>About this event</Text>
+
+          <View style={styles.aboutBlock}>
             <Text
               style={styles.storyText}
               numberOfLines={descriptionExpanded ? undefined : 4}
@@ -571,17 +594,15 @@ export default function EventDetailScreen() {
                 ))}
               </View>
             ) : null}
-          </DetailSurface>
+          </View>
 
           {/* SECTION: GOOD TO KNOW / BEFORE YOU GO */}
           {instructions.length > 0 && (
             <>
-              <View style={[styles.sectionHeadingRow, { marginTop: 26 }]}>
-                <View style={styles.sectionAccentLine} />
-                <Text style={styles.sectionHeadingTitle}>Before you go</Text>
-              </View>
+              <View style={styles.sectionDivider} />
+              <Text style={styles.sectionHeadingTitle}>Before you go</Text>
 
-              <DetailSurface style={styles.guidelinesCard}>
+              <View style={styles.guidelinesBlock}>
                 {instructions.map((item, idx) => (
                   <View
                     key={item}
@@ -596,7 +617,66 @@ export default function EventDetailScreen() {
                     <Text style={styles.guidelineText}>{item}</Text>
                   </View>
                 ))}
-              </DetailSurface>
+              </View>
+            </>
+          )}
+          {/* SECTION: FEATURED & RELATED EVENTS (2 per row, 2-3 rows) */}
+          {featuredEvents.length > 0 && (
+            <>
+              <View style={styles.sectionDivider} />
+              <View style={styles.featuredHeaderRow}>
+                <Text style={styles.sectionHeadingTitle}>Featured events</Text>
+                <Text style={[styles.featuredSubTitle, { color: colors.mutedForeground }]}>
+                  More events you may like
+                </Text>
+              </View>
+
+              <View style={styles.featuredGrid}>
+                {featuredEvents.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    style={styles.featuredGridCard}
+                    onPress={() => router.push({ pathname: "/event/[id]", params: { id: item.id, source: "event_detail" } })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View ${item.title}`}
+                  >
+                    {/* Event Cover Photo */}
+                    <View style={styles.featuredImageWrap}>
+                      <ImageBackground
+                        source={getEventImage(item.image)}
+                        style={styles.featuredGridImage}
+                        imageStyle={styles.featuredGridImageInner}
+                        resizeMode="cover"
+                      >
+                        <View style={styles.featuredTagPill}>
+                          <Text style={styles.featuredTagText}>
+                            {item.isPaid && item.price ? `${item.currency || "RWF"} ${item.price.toLocaleString()}` : "Free"}
+                          </Text>
+                        </View>
+                      </ImageBackground>
+                    </View>
+
+                    {/* Event Info */}
+                    <View style={styles.featuredCardBody}>
+                      <View style={styles.featuredDateRow}>
+                        <Ionicons name="calendar-outline" size={11} color={colors.primary} />
+                        <Text style={[styles.featuredDateText, { color: colors.primary }]}>
+                          {formatDate(item.date)} · {item.time}
+                        </Text>
+                      </View>
+                      <Text style={[styles.featuredCardTitle, { color: colors.foreground }]} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                      <View style={styles.featuredLocationRow}>
+                        <Ionicons name="location-outline" size={11} color={colors.mutedForeground} />
+                        <Text style={[styles.featuredLocationText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                          {item.city || item.location}
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
             </>
           )}
         </Animated.View>
@@ -795,19 +875,25 @@ export default function EventDetailScreen() {
           onPress={() => setShowOptionsModal(false)}
         >
           <Pressable
-            style={[styles.optionsCard, webBlurStyle]}
+            style={[
+              styles.optionsCard,
+              {
+                backgroundColor: scheme === "dark" ? "#121827" : "#FFFFFF",
+                borderColor: colors.border,
+              },
+              webBlurStyle,
+            ]}
             onPress={(e) => e.stopPropagation()}
           >
             {Platform.OS !== "web" ? (
               <BlurView
-
                 tint={scheme === "dark" ? "dark" : "light"}
                 style={StyleSheet.absoluteFill}
                 pointerEvents="none"
               />
             ) : null}
 
-            <View style={styles.modalHandle} />
+            <View style={[styles.modalHandle, { backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.18)" }]} />
 
             {reportState === "reported" ? (
               <View style={styles.reportFeedbackBox}>
@@ -831,9 +917,17 @@ export default function EventDetailScreen() {
                 </View>
 
                 {/* Group 1: Moderation */}
-                <View style={[styles.optionsGroup, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}>
+                <View
+                  style={[
+                    styles.optionsGroup,
+                    {
+                      backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.06)" : colors.secondary,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
                   <Pressable
-                    style={[styles.optionsItem, { borderBottomColor: "rgba(255,255,255,0.08)" }]}
+                    style={[styles.optionsItem, { borderBottomColor: colors.border }]}
                     onPress={handleReport}
                     accessibilityRole="button"
                   >
@@ -860,34 +954,16 @@ export default function EventDetailScreen() {
                   </Pressable>
                 </View>
 
-                {/* Group 2: Engagement */}
-                <View style={[styles.optionsGroup, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}>
-                  <Pressable
-                    style={[styles.optionsItem, { borderBottomColor: "rgba(255,255,255,0.08)" }]}
-                    onPress={() => {
-                      handleSave();
-                      setShowOptionsModal(false);
-                    }}
-                    accessibilityRole="button"
-                  >
-                    <View style={styles.optionsItemLeft}>
-                      <Ionicons
-                        name={isSaved ? "bookmark" : "bookmark-outline"}
-                        size={20}
-                        color={isSaved ? colors.primary : colors.foreground}
-                      />
-                      <Text
-                        style={[
-                          styles.optionsItemText,
-                          { color: isSaved ? colors.primary : colors.foreground },
-                        ]}
-                      >
-                        {isSaved ? "Saved" : "Save"}
-                      </Text>
-                    </View>
-                    {isSaved && <Ionicons name="checkmark" size={16} color={colors.primary} />}
-                  </Pressable>
-
+                {/* Group 2: Tools */}
+                <View
+                  style={[
+                    styles.optionsGroup,
+                    {
+                      backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.06)" : colors.secondary,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
                   <Pressable
                     style={[styles.optionsItem, { borderBottomWidth: 0 }]}
                     onPress={async () => {
@@ -898,17 +974,17 @@ export default function EventDetailScreen() {
                   >
                     <View style={styles.optionsItemLeft}>
                       <Ionicons
-                        name={copyFeedback ? "checkmark" : "link-outline"}
+                        name={copyFeedback ? "checkmark-circle" : "link-outline"}
                         size={20}
-                        color={copyFeedback ? "#10B981" : colors.foreground}
+                        color={copyFeedback ? colors.primary : colors.foreground}
                       />
                       <Text
                         style={[
                           styles.optionsItemText,
-                          { color: copyFeedback ? "#10B981" : colors.foreground },
+                          { color: copyFeedback ? colors.primary : colors.foreground },
                         ]}
                       >
-                        {copyFeedback ? "Link Copied!" : "Copy link"}
+                        {copyFeedback ? "Link copied!" : "Copy link"}
                       </Text>
                     </View>
                   </Pressable>
@@ -916,7 +992,13 @@ export default function EventDetailScreen() {
 
                 {/* Cancel Button */}
                 <Pressable
-                  style={[styles.optionsCancelBtn, { backgroundColor: "rgba(255,255,255,0.09)", borderColor: "rgba(255,255,255,0.14)" }]}
+                  style={[
+                    styles.optionsCancelBtn,
+                    {
+                      backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.08)" : colors.secondary,
+                      borderColor: colors.border,
+                    },
+                  ]}
                   onPress={() => setShowOptionsModal(false)}
                   accessibilityRole="button"
                 >
@@ -1128,87 +1210,107 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     paddingHorizontal: 16,
     marginTop: 20,
   },
-  sectionHeadingRow: {
+  socialBar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
+    justifyContent: "space-between",
+    paddingBottom: 14,
+    marginBottom: 18,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  sectionAccentLine: {
-    width: 3,
-    height: 15,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
+  socialBarLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  socialActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderRadius: 16,
+  },
+  socialActionText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  sectionDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginVertical: 24,
   },
   sectionHeadingTitle: {
     color: colors.foreground,
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: "Inter_700Bold",
     letterSpacing: -0.3,
+    marginBottom: 14,
   },
 
-  // AT A GLANCE TILES
-  glassInfoCard: {
-    borderRadius: 20,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginBottom: 10,
-    backgroundColor: colors.card,
-    borderColor: colors.border,
+  // AT A GLANCE SPECS LIST (Clean, unified on single page)
+  specList: {
+    backgroundColor: "transparent",
   },
-  cardIconBox: {
-    width: 30,
-    height: 36,
-    borderRadius: 15,
+  specRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  specRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 4,
+  },
+  specIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 2,
   },
-  cardInfoCol: {
+  specInfoCol: {
     flex: 1,
   },
-  cardInfoEyebrow: {
+  specEyebrow: {
     color: colors.mutedForeground,
-    fontSize: 9,
+    fontSize: 10,
     fontFamily: "Inter_700Bold",
     letterSpacing: 0.8,
   },
-  cardInfoMainText: {
+  specMainText: {
     color: colors.foreground,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
     marginTop: 2,
   },
-  cardInfoSubText: {
+  specSubText: {
     color: colors.mutedForeground,
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: "Inter_400Regular",
-    marginTop: 2,
+    marginTop: 3,
+    lineHeight: 18,
   },
-  cardActionPill: {
+  specActionPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: `${colors.primary}14`,
     borderWidth: 1,
-    borderColor: `${colors.primary}14`,
+    marginTop: 2,
   },
-  cardActionPillText: {
-    color: colors.primary,
+  specActionPillText: {
     fontSize: 11,
     fontFamily: "Inter_700Bold",
   },
 
-  // ORGANIZER CARD
-  organizerCard: {
-    borderRadius: 22,
-    padding: 16,
-    backgroundColor: colors.card,
-    borderColor: colors.border,
+  // HOSTED BY (Integrated single-surface layout)
+  organizerBlock: {
     gap: 14,
   },
   organizerHeaderRow: {
@@ -1219,7 +1321,7 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
   organizerAvatar: {
     width: 48,
     height: 48,
-    borderRadius: 18,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -1244,11 +1346,11 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
   },
   organizerRole: {
     color: colors.mutedForeground,
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
-  organizerError: { color: "#FCA5A5", fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 10 },
+  organizerError: { color: "#FCA5A5", fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 8 },
   organizerActionsRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1261,14 +1363,12 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     justifyContent: "center",
     gap: 6,
     paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
   },
   organizerBtnOutline: {
-    backgroundColor: `${colors.primary}14`,
-    borderColor: `${colors.primary}14`,
+    backgroundColor: `${colors.primary}12`,
+    borderColor: `${colors.primary}24`,
   },
   getTicketsBtn: {
     marginTop: 10,
@@ -1278,7 +1378,7 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: colors.primary,
   },
   getTicketsText: {
@@ -1292,12 +1392,9 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     fontFamily: "Inter_600SemiBold",
   },
 
-  // STORY CARD
-  storyCard: {
-    borderRadius: 22,
-    padding: 16,
-    backgroundColor: colors.card,
-    borderColor: colors.border,
+  // ABOUT THIS EVENT (Clean typographic single surface)
+  aboutBlock: {
+    gap: 8,
   },
   storyText: {
     color: colors.mutedForeground,
@@ -1321,47 +1418,37 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 16,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    marginTop: 14,
   },
   tagPill: {
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: `${colors.primary}14`,
     borderWidth: 1,
-    borderColor: `${colors.primary}14`,
   },
   tagPillText: {
-    color: colors.primary,
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
 
-  // GUIDELINES CARD
-  guidelinesCard: {
-    borderRadius: 22,
-    padding: 16,
-    backgroundColor: colors.card,
-    borderColor: colors.border,
+  // GUIDELINES (Clean checklist)
+  guidelinesBlock: {
+    gap: 4,
   },
   guidelineRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   guidelineRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.06)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   guidelineCheckCircle: {
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: `${colors.primary}14`,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 2,
@@ -1374,6 +1461,82 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     flex: 1,
   },
 
+  // FEATURED EVENTS (3 per row grid)
+  featuredHeaderRow: {
+    marginBottom: 12,
+  },
+  featuredSubTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    marginTop: -8,
+  },
+  featuredGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 16,
+  },
+  featuredGridCard: {
+    width: "31%",
+    gap: 6,
+  },
+  featuredImageWrap: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+  },
+  featuredGridImage: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+    padding: 6,
+  },
+  featuredGridImageInner: {
+    borderRadius: 12,
+  },
+  featuredTagPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    backgroundColor: "rgba(6, 9, 19, 0.8)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.16)",
+  },
+  featuredTagText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontFamily: "Inter_700Bold",
+  },
+  featuredCardBody: {
+    gap: 2,
+  },
+  featuredDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  featuredDateText: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+  },
+  featuredCardTitle: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    lineHeight: 16,
+  },
+  featuredLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  featuredLocationText: {
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+  },
+
   // MODAL OVERLAYS & SHEETS
   modalBackdrop: {
     flex: 1,
@@ -1384,7 +1547,7 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    backgroundColor: colors.border,
     alignSelf: "center",
     marginBottom: 16,
   },
@@ -1408,8 +1571,8 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     paddingTop: 12,
     paddingBottom: 32,
     maxHeight: "82%",
-    backgroundColor: "rgba(10, 16, 36, 0.82)",
-    borderColor: "rgba(255, 255, 255, 0.16)",
+    backgroundColor: colors.card,
+    borderColor: colors.border,
     overflow: "hidden",
   },
   modalSearchRow: {
@@ -1546,8 +1709,8 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 34,
-    backgroundColor: "rgba(10, 16, 36, 0.82)",
-    borderColor: "rgba(255, 255, 255, 0.16)",
+    backgroundColor: colors.card,
+    borderColor: colors.border,
     overflow: "hidden",
   },
   optionsHeader: {

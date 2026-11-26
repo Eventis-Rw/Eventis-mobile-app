@@ -585,7 +585,7 @@ export function LiveRoomView({
                   label={host ? "Host controls" : "Live options"}
                   onPress={() => setPanel("settings")}
                 />
-                {room.giftsEnabled && !host && !guest ? (
+                {room.giftsEnabled !== false && !host ? (
                   <LiveOverlayAction
                     name="gift-outline"
                     label="Send a gift"

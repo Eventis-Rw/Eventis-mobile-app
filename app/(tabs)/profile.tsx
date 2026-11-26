@@ -295,6 +295,8 @@ export default function ProfileScreen() {
             location={profile.location}
             verificationStatus={capabilities.businessVerification}
             onEditProfile={openEditProfile}
+            onOpenOrganiser={openOrganiserFlow}
+            isPublisher={capabilities.isPublisher}
           />
         </View>
 

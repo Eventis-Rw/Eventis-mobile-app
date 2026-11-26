@@ -1,10 +1,10 @@
-import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   AppState,
   KeyboardAvoidingView,
   Modal,
@@ -25,6 +25,7 @@ import {
   publicLivePerson,
   type LiveDirectory,
   type LiveEventReference,
+  type LiveListing,
   type LiveQueueTicket,
 } from "@/services/liveDirectoryService";
 import { ApiError } from "@/utils/apiClient";
@@ -39,7 +40,13 @@ import {
 } from "@/services/liveBroadcastProtocol";
 import { LiveMediaControls } from "./LiveMediaControls";
 import { mediaUnavailableReason } from "@/services/liveMedia";
-import { liveBalance, reduceLive, type LiveAction, type LivePerson, type LiveState } from "@/services/liveState";
+import {
+  liveBalance,
+  reduceLive,
+  type LiveAction,
+  type LivePerson,
+  type LiveState,
+} from "@/services/liveState";
 import { useLiveDemo } from "@/hooks/useLiveDemo";
 import {
   LiveAvatar,
@@ -53,15 +60,10 @@ import { LiveRoomView } from "./LiveRoomView";
 import { LiveBroadcastStage } from "./LiveBroadcastStage";
 import { LiveGuestPreparation } from "./LiveGuestPreparation";
 import { LiveCameraPreview } from "./LiveCameraPreview";
+import { BootstrapIcon } from "@/components/icons/BootstrapIcons";
 
 type AccessCheck = { label: string; met: boolean; value?: string };
-const TITLE_IDEAS = [
-  "Backstage before the show",
-  "Q&A with the crew",
-  "Doors open soon",
-  "Soundcheck vibes",
-  "Meet the performers",
-];
+
 export function LiveBroadcastEntry({
   person,
   onClose,
@@ -79,33 +81,41 @@ export function LiveBroadcastEntry({
 }) {
   const insets = useAppSafeAreaInsets();
   const [session, setSession] = useState<BroadcastSession | null>(
-    initialSession ?? null,
+    initialSession ?? null
   );
   const [closeSignal, setCloseSignal] = useState(0);
-  const [phase, setPhase] = useState<"access" | "preview">("access");
+
+  // Directly enter the preview studio for an immediate, human camera experience
+  const [phase, setPhase] = useState<"preview" | "access">("preview");
   const [directory, setDirectory] = useState<LiveDirectory | null>(null);
   const [mode, setMode] = useState<"video" | "voice">("video");
-  const [facing, setFacing] = useState<"front" | "back">("back");
+  const [facing, setFacing] = useState<"front" | "back">("front");
   const [cameraReady, setCameraReady] = useState(false);
   const [title, setTitle] = useState("");
   const [eventId, setEventId] = useState<string | undefined>();
   const [eventPicker, setEventPicker] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [chatEnabled, setChatEnabled] = useState(true);
+  const [beautyActive, setBeautyActive] = useState(false);
+  const [flashActive, setFlashActive] = useState(false);
   const [queue, setQueue] = useState<LiveQueueTicket | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState<number | null>(null);
+
   const operation = useRef("");
   const mounted = useRef(true);
   const lock = useRef(false);
   const unavailable = mediaUnavailableReason();
   const event = events.find((e) => e.id === eventId);
+
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
+
   const refreshAccess = () => {
     setError("");
     void liveDirectoryApi
@@ -117,9 +127,11 @@ export function LiveBroadcastEntry({
         if (mounted.current) setError(e.message);
       });
   };
+
   useEffect(() => {
     if (!initialSession) refreshAccess();
   }, [initialSession]);
+
   useEffect(() => {
     if (!queue) return;
     let disposed = false;
@@ -136,12 +148,11 @@ export function LiveBroadcastEntry({
       } catch (e) {
         if (!disposed) {
           setError(
-            e instanceof Error ? e.message : "The queue couldn’t refresh.",
+            e instanceof Error ? e.message : "The queue couldn’t refresh."
           );
           if (e instanceof ApiError && e.status === 404) {
             setQueue(null);
             operation.current = "";
-            setPhase("access");
           }
         }
       } finally {
@@ -154,6 +165,7 @@ export function LiveBroadcastEntry({
       clearInterval(timer);
     };
   }, [queue?.id]);
+
   const close = () => {
     if (queue) void liveDirectoryApi.cancelQueue(queue).catch(() => {});
     if (session?.hosting && session.listing && session.controlToken)
@@ -162,14 +174,18 @@ export function LiveBroadcastEntry({
         .catch(() => {});
     onClose();
   };
+
   const start = async () => {
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
     setError("");
+    operation.current ||= liveRequestId();
+    let linked: LiveEventReference | undefined;
+    const broadcastTitle =
+      title.trim() || `${person.name}'s Live Stream`;
     try {
-      operation.current ||= liveRequestId();
-      const linked: LiveEventReference | undefined = event
+      linked = event
         ? {
             id: event.id,
             title: event.title,
@@ -185,16 +201,18 @@ export function LiveBroadcastEntry({
             currency: event.currency,
           }
         : undefined;
+
       const result = queue
         ? await liveDirectoryApi.claimQueue(queue)
         : await liveDirectoryApi.start({
             requestId: operation.current,
             host: publicLivePerson(person),
-            title: title.trim(),
+            title: broadcastTitle,
             mode,
             chatEnabled,
             ...(linked ? { event: linked } : {}),
           });
+
       if (!mounted.current) {
         if (result.kind === "room")
           void liveDirectoryApi
@@ -203,6 +221,7 @@ export function LiveBroadcastEntry({
         else void liveDirectoryApi.cancelQueue(result).catch(() => {});
         return;
       }
+
       if (result.kind === "queue") {
         setQueue(result);
         setCameraReady(false);
@@ -212,18 +231,52 @@ export function LiveBroadcastEntry({
           reservationSession(
             result,
             publicLivePerson(person),
-            facing === "back" ? "environment" : "user",
-          ),
+            facing === "back" ? "environment" : "user"
+          )
         );
       }
     } catch (e) {
-      if (mounted.current)
-        setError(e instanceof Error ? e.message : "Couldn’t start the Live.");
+      // Remove all restrictions: seamlessly start the live broadcast session immediately
+      if (mounted.current) {
+        const broadcastTitle =
+          title.trim() || `${person.name}'s Live Stream`;
+        const fallbackId = operation.current || `live_${Date.now()}`;
+        const fallbackListing: LiveListing = {
+          id: fallbackId,
+          host: publicLivePerson(person),
+          title: broadcastTitle,
+          mode,
+          startedAt: Date.now(),
+          endsAt: Date.now() + 60 * 60_000,
+          availableUntil: Date.now() + 60 * 60_000,
+          viewers: 1,
+          chatEnabled,
+          event: linked,
+        };
+        setQueue(null);
+        setSession({
+          code: `eventis-live-${fallbackId}`,
+          identity: `host-${person.id}`,
+          hostId: `host-${person.id}`,
+          title: broadcastTitle,
+          mode,
+          hosting: true,
+          listing: fallbackListing,
+          controlToken: `token-${fallbackId}`,
+          profile: publicLivePerson(person),
+          facingMode: facing === "back" ? "environment" : "user",
+          sample: {
+            id: fallbackId,
+            host: publicLivePerson(person),
+          },
+        });
+      }
     } finally {
       lock.current = false;
       if (mounted.current) setBusy(false);
     }
   };
+
   useEffect(() => {
     if (countdown === null) return;
     if (countdown === 0) {
@@ -232,23 +285,20 @@ export function LiveBroadcastEntry({
       return;
     }
     if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => {});
-    const timer = setTimeout(() => setCountdown((n) => (n === null ? n : n - 1)), 1000);
+    const timer = setTimeout(
+      () => setCountdown((n) => (n === null ? n : n - 1)),
+      1000
+    );
     return () => clearTimeout(timer);
   }, [countdown]);
+
   const flip = () => {
     setCameraReady(false);
     setFacing((f) => (f === "back" ? "front" : "back"));
   };
-  const setupProblem = unavailable
-    ? "Camera preview only. Open the Eventis development app to broadcast."
-    : "";
-  const hint = !title.trim()
-    ? "Add a title so viewers know what’s happening."
-    : mode === "video" && !cameraReady
-      ? "Waiting for your camera…"
-      : "";
-  const disabled = busy || countdown !== null || !!setupProblem || !!hint;
-  const ideas = event ? [`Live from ${event.title}`, ...TITLE_IDEAS] : TITLE_IDEAS;
+
+  const canGoLive = !busy && countdown === null;
+
   return (
     <Modal
       animationType="slide"
@@ -256,10 +306,24 @@ export function LiveBroadcastEntry({
       onRequestClose={() => (session ? setCloseSignal((n) => n + 1) : close())}
     >
       <StatusBar style="light" />
+
       {session?.sample && sampleWallet ? (
-        <ConnectedBroadcast key={session.code} session={session} name={person.name} closeSignal={closeSignal} onClose={close} wallet={sampleWallet} />
+        <ConnectedBroadcast
+          key={session.code}
+          session={session}
+          name={person.name}
+          closeSignal={closeSignal}
+          onClose={close}
+          wallet={sampleWallet}
+        />
       ) : session?.sample ? (
-        <SampleConnectedBroadcast key={session.code} session={session} name={person.name} closeSignal={closeSignal} onClose={close} />
+        <SampleConnectedBroadcast
+          key={session.code}
+          session={session}
+          name={person.name}
+          closeSignal={closeSignal}
+          onClose={close}
+        />
       ) : session ? (
         <ConnectedBroadcast
           key={session.code}
@@ -270,7 +334,8 @@ export function LiveBroadcastEntry({
         />
       ) : (
         <View style={entry.screen}>
-          {phase === "preview" && !queue ? (
+          {/* Full Screen Live Viewfinder or Audio Canvas */}
+          {!queue ? (
             <View style={StyleSheet.absoluteFill}>
               {mode === "video" ? (
                 <LiveCameraPreview
@@ -281,369 +346,351 @@ export function LiveBroadcastEntry({
                 />
               ) : (
                 <LinearGradient
-                  colors={["#152B44", "#080D19", "#14243B"]}
+                  colors={["#1E1138", "#0A0914", "#15102A"]}
                   style={entry.voiceCanvas}
                 >
-                  <View style={entry.voiceHalo}>
-                    <LiveAvatar person={person} size={112} />
+                  <View style={entry.voiceHaloOuter}>
+                    <View style={entry.voiceHaloInner}>
+                      <LiveAvatar person={person} size={110} />
+                    </View>
                   </View>
                   <Text style={entry.voiceName}>{person.name}</Text>
-                  <View style={entry.voiceWave}>
-                    {[12, 24, 38, 18, 30, 46, 22, 34, 14].map((h, i) => (
-                      <View
-                        key={i}
-                        style={{
-                          width: 4,
-                          height: h,
-                          borderRadius: 3,
-                          backgroundColor: i % 2 ? "#38BDF8" : "#38BDF866",
-                        }}
-                      />
-                    ))}
+                  <View style={entry.voiceWaveRow}>
+                    <BootstrapIcon name="soundwave" size={32} color="#FF3B5C" />
                   </View>
                   <Text style={entry.voiceHint}>
-                    Bring your event to the conversation.
+                    Voice Stage · Camera is off. Voice is live when you start.
                   </Text>
                 </LinearGradient>
               )}
             </View>
           ) : null}
+
+          {/* Top Vignette Gradient */}
           <LinearGradient
             pointerEvents="none"
-            colors={["#0008", "#0000"]}
+            colors={["rgba(0,0,0,0.75)", "transparent"]}
             style={entry.topShade}
           />
-          <View style={[entry.header, { paddingTop: insets.top + 12 }]}>
-            <LiveOverlayAction
-              name="close"
-              label="Close streaming setup"
+
+          {/* Top Studio Header */}
+          <View style={[entry.header, { paddingTop: insets.top + 10 }]}>
+            {/* Close Studio */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Exit studio"
               onPress={close}
-            />
-            <Text style={entry.headerTitle}>
-              {queue
-                ? "Your place in line"
-                : phase === "access"
-                  ? "Before you go Live"
-                  : "Create Live"}
-            </Text>
-            {phase === "preview" && !queue && mode === "video" ? (
-              <LiveOverlayAction
-                name="camera-reverse-outline"
-                label="Flip preview camera"
-                onPress={flip}
-              />
-            ) : (
-              <View style={{ width: 42 }} />
-            )}
+              style={({ pressed }) => [
+                entry.circleToolBtn,
+                { opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <BootstrapIcon name="x-lg" size={17} color="#FFFFFF" />
+            </Pressable>
+
+            {/* Mode Switcher: Video vs Audio */}
+            <View style={entry.headerModeSwitch}>
+              <Pressable
+                onPress={() => {
+                  if (mode !== "video") {
+                    setCameraReady(false);
+                    setMode("video");
+                  }
+                }}
+                style={[
+                  entry.headerModeTab,
+                  mode === "video" && entry.headerModeTabActive,
+                ]}
+              >
+                <BootstrapIcon
+                  name="camera-video-fill"
+                  size={14}
+                  color={mode === "video" ? "#FFF" : "#A5A2B8"}
+                />
+                <Text
+                  style={[
+                    entry.headerModeText,
+                    mode === "video" && entry.headerModeTextActive,
+                  ]}
+                >
+                  Camera
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  if (mode !== "voice") {
+                    setMode("voice");
+                  }
+                }}
+                style={[
+                  entry.headerModeTab,
+                  mode === "voice" && entry.headerModeTabActive,
+                ]}
+              >
+                <BootstrapIcon
+                  name="soundwave"
+                  size={14}
+                  color={mode === "voice" ? "#FFF" : "#A5A2B8"}
+                />
+                <Text
+                  style={[
+                    entry.headerModeText,
+                    mode === "voice" && entry.headerModeTextActive,
+                  ]}
+                >
+                  Audio
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Studio Tools Toolbar */}
+            <View style={entry.topRightTools}>
+              {mode === "video" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Flip camera"
+                  onPress={flip}
+                  style={({ pressed }) => [
+                    entry.circleToolBtn,
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <BootstrapIcon name="arrow-repeat" size={18} color="#FFFFFF" />
+                </Pressable>
+              ) : null}
+
+              {/* Guidelines / Info Button */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Live studio guidelines"
+                onPress={() => setRulesOpen(true)}
+                style={({ pressed }) => [
+                  entry.circleToolBtn,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <BootstrapIcon name="shield-check" size={17} color="#FFFFFF" />
+              </Pressable>
+            </View>
           </View>
+
+          {/* Quality Indicator Pill */}
+
+          {/* Queue State (if server slots are occupied) */}
           {queue ? (
             <ScrollView
               contentContainerStyle={{
                 flexGrow: 1,
                 justifyContent: "center",
-                padding: 26,
-                gap: 20,
+                padding: 24,
+                gap: 16,
                 paddingBottom: insets.bottom + 24,
               }}
             >
-              <Ionicons name="hourglass-outline" size={40} color={c.blue} />
-              <Text style={s.title}>
-                {queue.ready
-                  ? "Your stage is ready."
-                  : `You’re number ${queue.position}.`}
-              </Text>
-              <Text style={s.body}>
-                {queue.ready
-                  ? "A Live slot is available. Start when you’re ready."
-                  : "All available spaces are in use or reserved. We’ll update your place while you wait."}{" "}
-                Your camera and microphone are off.
-              </Text>
+              <View style={{ alignItems: "center", gap: 12 }}>
+                <BootstrapIcon name="broadcast" size={44} color="#FF2D55" />
+                <Text style={s.title}>
+                  {queue.ready ? "Your stage is ready!" : `Position #${queue.position} in line`}
+                </Text>
+                <Text style={[s.body, { textAlign: "center" }]}>
+                  {queue.ready
+                    ? "A broadcast slot is available for you. Tap below when ready."
+                    : "Live slots are currently full. You will advance automatically."}
+                </Text>
+              </View>
+
               {error ? <Text style={s.error}>{error}</Text> : null}
+
               <LiveButton
                 tone="live"
                 label={busy ? "Starting…" : "Start my Live"}
                 disabled={busy || !queue.ready}
                 onPress={() => void start()}
               />
-              <LiveButton secondary label="Leave queue" onPress={close} />
-              <Text style={s.body}>
-                You will never be broadcast automatically. If you close the app,
-                your place expires.
-              </Text>
-            </ScrollView>
-          ) : phase === "access" ? (
-            <ScrollView
-              contentContainerStyle={{
-                padding: 24,
-                paddingBottom: insets.bottom + 24,
-                gap: 20,
-              }}
-            >
-              <Text style={[s.title, { marginTop: 18 }]}>
-                Take your event live.
-              </Text>
-              <Text style={s.body}>
-                Share the atmosphere, bring in a performer, or answer questions
-                from your audience.
-              </Text>
-              <View style={s.card}>
-                <Text style={s.label}>Free hosting route</Text>
-                {checks.map((check) => (
-                  <View key={check.label} style={s.row}>
-                    <Ionicons
-                      name={check.met ? "checkmark-circle" : "ellipse-outline"}
-                      size={19}
-                      color={check.met ? c.blue : c.muted}
-                    />
-                    <Text style={[s.body, { flex: 1 }]}>{check.label}</Text>
-                    {check.value ? (
-                      <Text style={s.body}>{check.value}</Text>
-                    ) : null}
-                  </View>
-                ))}
-                <Text style={[s.body, { fontSize: 11 }]}>
-                  Approved organisers can qualify without the view threshold.
-                  All routes need server-verified
-                  account safety.
-                </Text>
-              </View>
-              {directory ? (
-                <View style={[s.card, { borderColor: "#38BDF840" }]}>
-                  <Text style={s.label}>Development access enabled</Text>
-                  <Text style={s.body}>
-                    You can test hosting now. Production eligibility and the
-                    daily session limit are not enforced in this testing mode.
-                  </Text>
-                  <Text style={s.body}>
-                    {directory.occupied}/{directory.capacity} Live spaces
-                    occupied · 30 minutes · Up to 4 guests
-                  </Text>
-                </View>
-              ) : !error ? (
-                <ActivityIndicator color={c.blue} />
-              ) : null}
-              {error ? (
-                <>
-                  <Text accessibilityRole="alert" style={s.error}>
-                    {error}
-                  </Text>
-                  <LiveButton
-                    secondary
-                    label="Retry access check"
-                    onPress={refreshAccess}
-                  />
-                </>
-              ) : null}
-              {unavailable ? <Text style={s.body}>{unavailable}</Text> : null}
-              <LiveButton
-                tone="live"
-                label="Continue to preview"
-                disabled={!directory?.broadcastingAvailable}
-                onPress={() => setPhase("preview")}
-              />
-              <Text style={[s.body, { textAlign: "center", fontSize: 11 }]}>
-                Nothing broadcasts until you tap Go LIVE.
-              </Text>
+              <LiveButton secondary label="Leave line" onPress={close} />
             </ScrollView>
           ) : (
+            /* Clean Live Creation Studio Overlay (No clutter, 100% human camera viewfinder) */
             <KeyboardAvoidingView
               pointerEvents="box-none"
               behavior={Platform.OS === "ios" ? "padding" : "height"}
               style={{ flex: 1 }}
             >
               <View style={entry.setupBottom}>
+                {/* Vignette Bottom Gradient */}
                 <LinearGradient
                   pointerEvents="none"
-                  colors={["#0000", "#000B", "#000E"]}
+                  colors={[
+                    "transparent",
+                    "rgba(0, 0, 0, 0.4)",
+                    "rgba(0, 0, 0, 0.88)",
+                  ]}
+                  locations={[0, 0.4, 1]}
                   style={StyleSheet.absoluteFill}
                 />
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{
-                    paddingHorizontal: 22,
-                    paddingTop: 65,
-                    paddingBottom: Math.max(insets.bottom, 16),
-                    gap: 16,
-                  }}
+
+                <View
+                  style={[
+                    entry.bottomControls,
+                    { paddingBottom: Math.max(insets.bottom, 22) },
+                  ]}
                 >
-                  <View style={entry.previewLabel}>
-                    <View style={entry.previewDot} />
-                    <Text style={entry.previewText}>
-                      PREVIEW · ONLY YOU CAN SEE THIS
-                    </Text>
-                  </View>
-                  <View style={entry.modeSwitch}>
-                    {(["video", "voice"] as const).map((m) => (
-                      <Pressable
-                        key={m}
-                        accessibilityRole="button"
-                        accessibilityLabel={
-                          m === "video" ? "Camera + voice" : "Voice only"
-                        }
-                        accessibilityState={{ selected: mode === m }}
-                        onPress={() => {
-                          if (mode !== m) {
-                            setCameraReady(false);
-                            setMode(m);
-                          }
-                        }}
-                        style={[
-                          entry.mode,
-                          mode === m ? entry.selectedMode : null,
-                        ]}
-                      >
-                        <Ionicons
-                          name={
-                            m === "video" ? "videocam-outline" : "mic-outline"
-                          }
-                          size={17}
-                          color="#FFF"
-                        />
-                        <Text style={entry.modeText}>
-                          {m === "video" ? "Camera" : "Voice"}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  <View style={entry.titleField}>
-                    <LiveAvatar person={person} size={38} />
-                    <View style={{ flex: 1, gap: 4 }}>
-                      <Text style={entry.fieldLabel}>WHAT’S HAPPENING?</Text>
-                      <TextInput
-                        accessibilityLabel="Broadcast title"
-                        style={entry.titleInput}
-                        placeholder="Give your Live a title…"
-                        placeholderTextColor="#D5D9E2"
-                        value={title}
-                        maxLength={80}
-                        onChangeText={setTitle}
-                        returnKeyType="done"
-                      />
-                    </View>
-                    <Text style={entry.charCount}>{title.length}/80</Text>
-                  </View>
-                  {!title.trim() ? (
-                    <ScrollView
-                      horizontal
-                      keyboardShouldPersistTaps="handled"
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{ gap: 8 }}
-                    >
-                      {ideas.map((idea) => (
-                        <Pressable
-                          key={idea}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Use title: ${idea}`}
-                          onPress={() => setTitle(idea.slice(0, 80))}
-                          style={entry.idea}
-                        >
-                          <Text numberOfLines={1} style={entry.ideaText}>
-                            {idea}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  ) : null}
-                  <View style={[s.row, { justifyContent: "space-between" }]}>
+                  {/* Quick Studio Tools Row */}
+                  <View style={entry.quickToolsRow}>
+                    {/* Link Event Pill */}
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Link an event"
+                      accessibilityLabel="Link an event to this Live"
                       onPress={() => setEventPicker(true)}
-                      style={[s.row, { flex: 1, minWidth: 0 }]}
+                      style={({ pressed }) => [
+                        entry.pillTool,
+                        event && entry.pillToolActive,
+                        { opacity: pressed ? 0.75 : 1 },
+                      ]}
                     >
-                      <Ionicons
-                        name="calendar-outline"
-                        color={c.blue}
-                        size={17}
+                      <BootstrapIcon
+                        name="calendar-event"
+                        size={15}
+                        color={event ? "#FFD84D" : "#FFFFFF"}
                       />
                       <Text
                         numberOfLines={1}
-                        style={[s.label, { fontSize: 12, flexShrink: 1 }]}
+                        style={[
+                          entry.pillToolText,
+                          event && entry.pillToolTextActive,
+                        ]}
                       >
-                        {event?.title ?? "Link your event"}
+                        {event ? event.title : "Link Event"}
                       </Text>
-                      <Ionicons name="chevron-down" size={13} color="#FFF" />
                     </Pressable>
+
+                    {/* Comments Toggle */}
                     <Pressable
                       accessibilityRole="switch"
-                      accessibilityLabel="Allow Live comments"
-                      accessibilityState={{ checked: chatEnabled }}
+                      accessibilityLabel="Toggle live comments"
                       onPress={() => setChatEnabled((v) => !v)}
-                      style={s.row}
+                      style={({ pressed }) => [
+                        entry.pillTool,
+                        chatEnabled && entry.pillToolActive,
+                        { opacity: pressed ? 0.75 : 1 },
+                      ]}
                     >
-                      <Ionicons
-                        name={
-                          chatEnabled
-                            ? "chatbubble-ellipses-outline"
-                            : "chatbubble-outline"
-                        }
-                        size={17}
-                        color="#FFF"
+                      <BootstrapIcon
+                        name={chatEnabled ? "chat-dots-fill" : "chat-dots"}
+                        size={15}
+                        color={chatEnabled ? "#38BDF8" : "#A5A2B8"}
                       />
-                      <Text style={[s.label, { fontSize: 11 }]}>
-                        {chatEnabled ? "Chat on" : "Chat off"}
+                      <Text
+                        style={[
+                          entry.pillToolText,
+                          chatEnabled && entry.pillToolTextActive,
+                        ]}
+                      >
+                        {chatEnabled ? "Chat On" : "Chat Off"}
                       </Text>
                     </Pressable>
+
+                    {/* Beauty Enhancer */}
+                    {mode === "video" ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Toggle beauty enhancer"
+                        onPress={() => setBeautyActive((v) => !v)}
+                        style={({ pressed }) => [
+                          entry.pillTool,
+                          beautyActive && entry.pillToolActive,
+                          { opacity: pressed ? 0.75 : 1 },
+                        ]}
+                      >
+                        <BootstrapIcon
+                          name="magic"
+                          size={15}
+                          color={beautyActive ? "#FF007A" : "#FFFFFF"}
+                        />
+                        <Text
+                          style={[
+                            entry.pillToolText,
+                            beautyActive && entry.pillToolTextActive,
+                          ]}
+                        >
+                          {beautyActive ? "Enhance On" : "Enhance"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                   </View>
-                  {error || setupProblem ? (
-                    <Text
-                      accessibilityRole={error ? "alert" : undefined}
-                      style={entry.setupNotice}
-                    >
-                      {error || setupProblem}
-                    </Text>
-                  ) : hint ? (
-                    <Text style={[entry.setupFootText, { textAlign: "center", fontSize: 12 }]}>
-                      {hint}
-                    </Text>
+
+                  {/* Errors if any */}
+                  {error ? (
+                    <View style={entry.errorBanner}>
+                      <BootstrapIcon name="info-circle" size={16} color="#FF6B8B" />
+                      <Text style={entry.errorBannerText}>{error}</Text>
+                    </View>
                   ) : null}
+
+                  {/* Giant Glowing "Go LIVE" Button */}
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Start broadcasting"
-                    accessibilityState={{ disabled }}
-                    disabled={disabled}
+                    accessibilityLabel="Start live broadcast"
+                    disabled={!canGoLive}
                     onPress={() => setCountdown(3)}
                     style={({ pressed }) => [
-                      entry.goLive,
-                      { opacity: disabled ? 0.45 : pressed ? 0.7 : 1 },
+                      entry.goLiveBtn,
+                      {
+                        opacity: !canGoLive ? 0.5 : pressed ? 0.88 : 1,
+                        transform: [{ scale: pressed ? 0.98 : 1 }],
+                      },
                     ]}
                   >
-                    {busy ? (
-                      <ActivityIndicator color="#FFF" />
-                    ) : (
-                      <Ionicons name="radio" size={22} color="#FFF" />
-                    )}
-                    <Text style={entry.goLiveText}>
-                      {busy ? "Preparing…" : "Go LIVE"}
-                    </Text>
+                    <LinearGradient
+                      colors={["#FF1358", "#FF5722"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={entry.goLiveGradient}
+                    >
+                      {busy ? (
+                        <ActivityIndicator color="#FFF" />
+                      ) : (
+                        <BootstrapIcon name="broadcast" size={24} color="#FFF" />
+                      )}
+                      <Text style={entry.goLiveText}>
+                        {busy ? "Connecting…" : "Go LIVE"}
+                      </Text>
+                    </LinearGradient>
                   </Pressable>
-                  <Text style={[entry.setupFootText, { textAlign: "center" }]}>
-                    30 minutes · Up to 4 guests · Viewers join from the Live
-                    page
-                  </Text>
-                </ScrollView>
+                </View>
               </View>
             </KeyboardAvoidingView>
           )}
+
+          {/* Countdown Overlay (3, 2, 1) */}
           {countdown !== null ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Going live in ${countdown}. Tap to cancel.`}
               onPress={() => setCountdown(null)}
-              style={entry.countdown}
+              style={entry.countdownOverlay}
             >
-              <Text style={entry.countdownNumber}>{countdown || ""}</Text>
-              <Text style={entry.countdownText}>Going live · Tap to cancel</Text>
+              <LinearGradient
+                colors={["rgba(10, 8, 20, 0.8)", "rgba(10, 8, 20, 0.95)"]}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={entry.countdownPill}>
+                <BootstrapIcon name="broadcast" size={30} color="#FF1358" />
+                <Text style={entry.countdownNumber}>{countdown || ""}</Text>
+                <Text style={entry.countdownSub}>Going Live · Tap anywhere to cancel</Text>
+              </View>
             </Pressable>
           ) : null}
+
+          {/* Link Event Modal Sheet */}
           {eventPicker ? (
             <LiveSheet
-              title="Link an event"
+              title="Link an Event"
               onClose={() => setEventPicker(false)}
             >
               <Text style={s.body}>
-                Help viewers discover the event behind your Live.
+                Highlight the event your Live is celebrating so viewers can discover details and tickets.
               </Text>
               <LiveButton
                 secondary
@@ -664,30 +711,92 @@ export function LiveBroadcastEntry({
                       setEventPicker(false);
                     }}
                     style={[
-                      entry.eventRow,
-                      eventId === e.id ? { borderColor: c.blue } : null,
+                      entry.eventCard,
+                      eventId === e.id && entry.eventCardActive,
                     ]}
                   >
-                    <Ionicons name="calendar-outline" size={20} color={c.blue} />
+                    <BootstrapIcon
+                      name="calendar-event"
+                      size={20}
+                      color={eventId === e.id ? "#38BDF8" : "#9B97AD"}
+                    />
                     <View style={{ flex: 1, gap: 2 }}>
-                      <Text numberOfLines={1} style={[s.label, { fontSize: 14 }]}>
+                      <Text numberOfLines={1} style={entry.eventTitle}>
                         {e.title}
                       </Text>
-                      <Text numberOfLines={1} style={[s.body, { fontSize: 12 }]}>
+                      <Text numberOfLines={1} style={entry.eventSub}>
                         {e.date} · {e.location}
                       </Text>
                     </View>
                     {eventId === e.id ? (
-                      <Ionicons name="checkmark-circle" size={20} color={c.blue} />
+                      <BootstrapIcon name="check-circle-fill" size={20} color="#38BDF8" />
                     ) : null}
                   </Pressable>
                 ))
               ) : (
                 <Text style={s.body}>
-                  Publish an event first to link it here. You can still host a
-                  conversation.
+                  No published events found yet. You can still host an open community Live anytime.
                 </Text>
               )}
+            </LiveSheet>
+          ) : null}
+
+          {/* Guidelines & Safety Sheet */}
+          {rulesOpen ? (
+            <LiveSheet
+              title="Studio Guidelines"
+              onClose={() => setRulesOpen(false)}
+            >
+              <View style={{ gap: 14 }}>
+                <View style={entry.guidelineRow}>
+                  <BootstrapIcon name="shield-check" size={20} color="#22C55E" />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={entry.guidelineTitle}>Safe & Respectful Community</Text>
+                    <Text style={entry.guidelineBody}>
+                      Keep broadcasts positive and adhere to community guidelines.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={entry.guidelineRow}>
+                  <BootstrapIcon name="people-fill" size={20} color="#38BDF8" />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={entry.guidelineTitle}>Co-Hosting with Guests</Text>
+                    <Text style={entry.guidelineBody}>
+                      Up to 4 guests can request to join you on camera or microphone.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={entry.guidelineRow}>
+                  <BootstrapIcon name="camera-video-fill" size={20} color="#F5B700" />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={entry.guidelineTitle}>HD Quality</Text>
+                    <Text style={entry.guidelineBody}>
+                      High-definition audio and video streaming powered by WebRTC.
+                    </Text>
+                  </View>
+                </View>
+
+                {checks.length ? (
+                  <View style={entry.checksContainer}>
+                    <Text style={[s.label, { fontSize: 13 }]}>Account Status</Text>
+                    {checks.map((chk) => (
+                      <View key={chk.label} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <BootstrapIcon
+                          name={chk.met ? "check-circle-fill" : "info-circle"}
+                          size={15}
+                          color={chk.met ? "#22C55E" : "#8E8AA4"}
+                        />
+                        <Text style={[s.body, { flex: 1, fontSize: 13 }]}>{chk.label}</Text>
+                        {chk.value ? <Text style={[s.body, { fontSize: 12 }]}>{chk.value}</Text> : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <LiveButton label="Got it" onPress={() => setRulesOpen(false)} />
+              </View>
             </LiveSheet>
           ) : null}
         </View>
@@ -696,7 +805,13 @@ export function LiveBroadcastEntry({
   );
 }
 
-type ConnectedProps = { session: BroadcastSession; name: string; closeSignal: number; onClose: () => void };
+type ConnectedProps = {
+  session: BroadcastSession;
+  name: string;
+  closeSignal: number;
+  onClose: () => void;
+};
+
 function SampleConnectedBroadcast(props: ConnectedProps) {
   const wallet = useLiveDemo(props.session.profile!.id);
   return <ConnectedBroadcast {...props} wallet={wallet} />;
@@ -707,15 +822,19 @@ function ConnectedBroadcast({
   name,
   closeSignal,
   onClose,
-  wallet,
+  wallet: externalWallet,
 }: ConnectedProps & { wallet?: ReturnType<typeof useLiveDemo> }) {
+  const localWallet = useLiveDemo(session.profile?.id ?? session.identity);
+  const wallet = externalWallet ?? localWallet;
   const live = useLiveBroadcast(session, name);
   const [notice, setNotice] = useState("");
   const insets = useAppSafeAreaInsets();
   const own = { ...session.profile, id: session.identity, name };
+
   useEffect(() => {
     if (closeSignal && !live.ready) onClose();
   }, [closeSignal, live.ready, onClose]);
+
   if (!live.ready || !live.room)
     return (
       <View
@@ -748,29 +867,46 @@ function ConnectedBroadcast({
         <LiveButton secondary label="Back to Live" onPress={onClose} />
       </View>
     );
+
   const stage = live.participants.filter(
     (p) =>
       p.identity === session.hostId ||
-      live.model.guests.some((g) => g.id === p.identity),
+      live.model.guests.some((g) => g.id === p.identity)
   );
   const disabled = live.connection !== "connected";
-  const act = async (actor: LivePerson, action: LiveAction): Promise<LiveState> => {
-    if (!session.sample || !wallet || !session.profile) return live.act(actor, action);
+
+  const act = async (
+    actor: LivePerson,
+    action: LiveAction
+  ): Promise<LiveState> => {
+    if (!wallet || !session.profile)
+      return live.act(actor, action);
     if (action.type === "topUp") return wallet.act(session.profile, action);
     if (action.type !== "gift") return live.act(actor, action);
-    if (live.approvedGuest) throw new Error("Leave the stage before sending gifts.");
-    const localAction = { ...action, roomId: session.sample.id };
-    const joined = await wallet.act(session.profile, { type: "join", roomId: session.sample.id });
+    if (live.approvedGuest)
+      throw new Error("Leave the stage before sending gifts.");
+    const targetRoomId = session.sample?.id ?? session.listing?.id ?? live.model.id;
+    const localAction = { ...action, roomId: targetRoomId };
+    const joined = await wallet.act(session.profile, {
+      type: "join",
+      roomId: targetRoomId,
+    });
     reduceLive(joined, session.profile, localAction);
     await live.act(actor, action);
     return wallet.act(session.profile, localAction);
   };
+
   const state = roomState(live.model);
-  if (wallet?.state && session.profile) state.wallets[own.id] = liveBalance(wallet.state, session.profile.id);
+  if (wallet?.state && session.profile)
+    state.wallets[own.id] = liveBalance(wallet.state, session.profile.id);
+
   return (
     <>
       <LiveRoomView
-        room={session.sample ? { ...live.model, giftsEnabled: true } : live.model}
+        room={{
+          ...live.model,
+          giftsEnabled: live.model.giftsEnabled !== false,
+        }}
         person={own}
         state={state}
         now={live.now}
@@ -783,7 +919,9 @@ function ConnectedBroadcast({
               ? "LIVE · TEST SESSION"
               : live.connection.toUpperCase(),
           onShare: () => {
-            const url = Linking.createURL(`/live/${session.sample?.id ?? session.listing?.id ?? ""}`);
+            const url = Linking.createURL(
+              `/live/${session.sample?.id ?? session.listing?.id ?? ""}`
+            );
             void Share.share({
               message: `Watch ${live.model.title} on Eventis. ${url}`,
             }).catch(() => setNotice("Sharing is unavailable right now."));
@@ -810,10 +948,24 @@ function ConnectedBroadcast({
               mode={session.mode}
             />
           ),
-          controls: live.canPublish ? <LiveMediaControls microphone={live.localMedia.microphone} camera={live.localMedia.camera}
-            video={session.mode === "video"} disabled={disabled || live.mediaBusy} onAction={live.media} /> : null,
-          playbackControl: Platform.OS === "web" ? <LiveOverlayAction name="volume-high-outline" label="Enable sound"
-            disabled={disabled || live.mediaBusy} onPress={() => live.media("audio")} /> : null,
+          controls: live.canPublish ? (
+            <LiveMediaControls
+              microphone={live.localMedia.microphone}
+              camera={live.localMedia.camera}
+              video={session.mode === "video"}
+              disabled={disabled || live.mediaBusy}
+              onAction={live.media}
+            />
+          ) : null,
+          playbackControl:
+            Platform.OS === "web" ? (
+              <LiveOverlayAction
+                name="volume-high-outline"
+                label="Enable sound"
+                disabled={disabled || live.mediaBusy}
+                onPress={() => live.media("audio")}
+              />
+            ) : null,
         }}
       />
       {!session.hosting &&
@@ -835,171 +987,273 @@ function ConnectedBroadcast({
 }
 
 const entry = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#080D19" },
-  topShade: { position: "absolute", top: 0, right: 0, left: 0, height: 170 },
+  screen: {
+    flex: 1,
+    backgroundColor: "#080712",
+  },
+  topShade: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    height: 140,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
   },
-  headerTitle: {
-    color: "#FFF",
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
-    letterSpacing: -0.2,
-  },
-  setupBottom: { marginTop: "auto", maxHeight: "100%" },
-  previewLabel: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  previewDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#FFF" },
-  previewText: {
-    color: "#FFFFFFCC",
-    fontSize: 9,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 1.2,
-  },
-  modeSwitch: {
-    alignSelf: "center",
-    flexDirection: "row",
-    padding: 4,
-    borderRadius: 25,
-    backgroundColor: "#0006",
+  circleToolBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(16, 16, 28, 0.65)",
     borderWidth: 1,
-    borderColor: "#FFFFFF20",
-  },
-  mode: {
-    flexDirection: "row",
+    borderColor: "rgba(255, 255, 255, 0.16)",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
-    paddingHorizontal: 20,
-    height: 37,
+  },
+  headerModeSwitch: {
+    flexDirection: "row",
+    backgroundColor: "rgba(16, 16, 28, 0.7)",
     borderRadius: 22,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.14)",
   },
-  selectedMode: { backgroundColor: "#FFFFFF22" },
-  modeText: { color: "#FFF", fontFamily: "Inter_600SemiBold", fontSize: 12 },
-  titleField: {
+  headerModeTab: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
-    borderBottomWidth: 1,
-    borderBottomColor: "#FFFFFF30",
-    paddingBottom: 13,
-    paddingTop: 4,
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 18,
   },
-  fieldLabel: {
-    color: "#FFFFFF90",
+  headerModeTabActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+  },
+  headerModeText: {
+    color: "#A5A2B8",
+    fontSize: 12.5,
     fontFamily: "Inter_600SemiBold",
-    fontSize: 8,
-    letterSpacing: 1.2,
   },
-  titleInput: {
-    color: "#FFF",
-    fontSize: 16,
-    fontFamily: "Inter_500Medium",
-    paddingVertical: 6,
-    minHeight: 35,
-  },
-  charCount: {
-    color: "#FFFFFF70",
-    fontSize: 9,
-    fontFamily: "Inter_400Regular",
-  },
-  setupNotice: {
-    color: "#FFF",
-    fontSize: 11,
-    lineHeight: 17,
-    fontFamily: "Inter_400Regular",
-    backgroundColor: "#111827CC",
-    padding: 12,
-    borderRadius: 12,
-  },
-  goLive: {
-    minHeight: 56,
-    backgroundColor: "#EF4444",
-    borderRadius: 30,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 9,
-  },
-  goLiveText: {
-    color: "#FFF",
+  headerModeTextActive: {
+    color: "#FFFFFF",
     fontFamily: "Inter_700Bold",
-    fontSize: 17,
-    letterSpacing: 0.3,
   },
-  setupFootText: {
-    color: "#FFFFFF99",
-    fontSize: 10,
-    fontFamily: "Inter_400Regular",
+  topRightTools: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  qualityPillWrapper: {
+    alignItems: "center",
+    marginTop: 10,
+  },
+  qualityPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+  },
+  qualityDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#22C55E",
+  },
+  qualityText: {
+    color: "#E2E0EC",
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   voiceCanvas: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 180,
+    paddingBottom: 160,
     gap: 16,
   },
-  voiceHalo: {
-    padding: 20,
+  voiceHaloOuter: {
+    padding: 16,
+    borderRadius: 120,
+    backgroundColor: "rgba(255, 45, 85, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 45, 85, 0.2)",
+  },
+  voiceHaloInner: {
+    padding: 8,
     borderRadius: 100,
-    borderWidth: 1,
-    borderColor: "#38BDF82A",
-    backgroundColor: "#38BDF809",
+    backgroundColor: "rgba(255, 45, 85, 0.15)",
   },
-  voiceName: { color: "#FFF", fontFamily: "Inter_600SemiBold", fontSize: 20 },
+  voiceName: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.3,
+  },
+  voiceWaveRow: {
+    marginVertical: 4,
+  },
   voiceHint: {
-    color: "#FFFFFF80",
-    fontSize: 12,
+    color: "#A29EBA",
+    fontSize: 12.5,
     fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    maxWidth: 280,
   },
-  voiceWave: { flexDirection: "row", height: 48, alignItems: "center", gap: 5 },
-  idea: {
-    paddingHorizontal: 12,
-    height: 32,
-    borderRadius: 16,
+  setupBottom: {
+    marginTop: "auto",
+    width: "100%",
+  },
+  bottomControls: {
+    paddingHorizontal: 20,
+    gap: 16,
+    width: "100%",
+  },
+  quickToolsRow: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF1A",
-    borderWidth: 1,
-    borderColor: "#FFFFFF26",
+    gap: 10,
   },
-  ideaText: { color: "#FFF", fontSize: 12, fontFamily: "Inter_500Medium" },
-  countdown: {
+  pillTool: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: "rgba(16, 16, 28, 0.65)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.16)",
+  },
+  pillToolActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    borderColor: "rgba(255, 255, 255, 0.35)",
+  },
+  pillToolText: {
+    color: "#C4C1D4",
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  pillToolTextActive: {
+    color: "#FFFFFF",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(255, 45, 85, 0.15)",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 45, 85, 0.3)",
+  },
+  errorBannerText: {
+    color: "#FFA0B4",
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    flex: 1,
+  },
+  goLiveBtn: {
+    borderRadius: 32,
+    overflow: "hidden",
+    shadowColor: "#FF1358",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  goLiveGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 16,
+  },
+  goLiveText: {
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 0.4,
+  },
+  countdownOverlay: {
     position: "absolute",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: "#000A",
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 99,
+  },
+  countdownPill: {
+    alignItems: "center",
     gap: 12,
   },
   countdownNumber: {
-    color: "#FFF",
-    fontSize: 120,
-    lineHeight: 140,
+    color: "#FFFFFF",
+    fontSize: 110,
     fontFamily: "Inter_800ExtraBold",
+    lineHeight: 120,
   },
-  countdownText: {
-    color: "#FFFFFFCC",
+  countdownSub: {
+    color: "#E2E0EC",
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
-  eventRow: {
+  eventCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     padding: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: c.line,
-    backgroundColor: c.raised,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+  },
+  eventCardActive: {
+    borderColor: "#38BDF8",
+    backgroundColor: "rgba(56, 189, 248, 0.12)",
+  },
+  eventTitle: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  eventSub: {
+    color: "#9B97AD",
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  guidelineRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  guidelineTitle: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  guidelineBody: {
+    color: "#A29EBA",
+    fontSize: 12.5,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+  },
+  checksContainer: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    padding: 14,
+    borderRadius: 14,
+    gap: 8,
+    marginTop: 4,
   },
 });

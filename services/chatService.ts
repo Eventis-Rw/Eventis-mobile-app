@@ -17,6 +17,8 @@ export interface ChatContact {
   deviceContactId?: string;
   /** Present after the server creates an invitation that can be shared. */
   inviteUrl?: string;
+  isGroup?: boolean;
+  memberCount?: number;
 }
 
 export interface ChatContactUpdate {
@@ -35,6 +37,11 @@ export interface ChatConversation {
   lastMessageAt: string;
   unreadCount: number;
   muted?: boolean;
+  isGroup?: boolean;
+  title?: string;
+  memberCount?: number;
+  memberIds?: string[];
+  inviteCode?: string;
 }
 
 export interface ChatMessage {
@@ -58,6 +65,18 @@ export interface ChatMessage {
   attachmentDeferred?: boolean;
   attachmentWidth?: number;
   attachmentHeight?: number;
+  callInfo?: {
+    type: "VOICE" | "VIDEO";
+    status: "MISSED" | "ENDED" | "REJECTED";
+    durationSec?: number;
+  };
+  storyReply?: {
+    storyId?: string;
+    mediaUrl?: string;
+    mediaType?: "image" | "video" | "text";
+    ownerName?: string;
+    reaction?: string;
+  };
 }
 
 export interface SendMessageOptions {
@@ -72,11 +91,36 @@ export interface SendMessageOptions {
   attachmentMimeType?: string;
   attachmentWidth?: number;
   attachmentHeight?: number;
+  callInfo?: ChatMessage["callInfo"];
+  storyReply?: ChatMessage["storyReply"];
 }
 
 export function chatMessagePreview(
-  message: Pick<ChatMessage, "text" | "imageUri" | "audioUri" | "videoUri" | "attachmentMimeType">,
+  message: Pick<
+    ChatMessage,
+    | "text"
+    | "imageUri"
+    | "audioUri"
+    | "videoUri"
+    | "attachmentMimeType"
+    | "callInfo"
+    | "storyReply"
+  >,
 ) {
+  if (message.callInfo?.status === "MISSED") {
+    return message.callInfo.type === "VIDEO"
+      ? "Missed video call"
+      : "Missed voice call";
+  }
+  if (message.callInfo) {
+    return message.callInfo.type === "VIDEO" ? "Video call" : "Voice call";
+  }
+  if (message.storyReply) {
+    if (message.storyReply.reaction) {
+      return `Reacted ${message.storyReply.reaction} to story`;
+    }
+    return `Replied to story: ${message.text || "Photo"}`;
+  }
   if (message.text) return message.text;
   if (message.audioUri) return "Voice message";
   if (message.videoUri) return "Video";
@@ -151,6 +195,15 @@ export interface ChatService {
   ): Promise<ChatContact[]>;
   searchUsers(query: string, page?: number): Promise<ChatUserSearchPage>;
   acceptInvitation(token: string): Promise<ChatConversation>;
+  createGroup(title: string, memberContactIds: string[]): Promise<ChatConversation>;
+  addMembersToGroup(conversationId: string, contactIds: string[]): Promise<ChatConversation>;
+  joinGroup(inviteCodeOrId: string): Promise<ChatConversation>;
+  logCall(
+    conversationId: string,
+    type: "VOICE" | "VIDEO",
+    status: "MISSED" | "ENDED" | "REJECTED",
+    durationSec?: number,
+  ): Promise<ChatMessage>;
 }
 
 interface StoredChatState extends ChatSnapshot {
@@ -442,6 +495,127 @@ export class MockChatService implements ChatService {
     return { ...conversation };
   }
 
+  async createGroup(title: string, memberContactIds: string[]): Promise<ChatConversation> {
+    const state = await this.getState();
+    const groupName = title.trim() || "Eventis Group";
+    const groupId = localId(`group-${Date.now()}`);
+    const code = `EVENTIS-${groupName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4) || "KGL"}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const groupContact: ChatContact = {
+      id: `group:${groupId}`,
+      name: groupName,
+      phone: "",
+      avatarUrl: "https://images.unsplash.com/photo-1543269865-cbf427effbad?w=150",
+      headline: `${memberContactIds.length + 1} members`,
+      isEventisUser: true,
+      isOnline: true,
+      isGroup: true,
+      memberCount: memberContactIds.length + 1,
+    };
+    const conversation: ChatConversation = {
+      id: groupId,
+      contactId: groupContact.id,
+      lastMessage: `Group created with ${memberContactIds.length + 1} members`,
+      lastMessageAt: new Date().toISOString(),
+      unreadCount: 0,
+      isGroup: true,
+      title: groupName,
+      memberCount: memberContactIds.length + 1,
+      memberIds: memberContactIds,
+      inviteCode: code,
+    };
+    const initialMessage: ChatMessage = {
+      id: localId("msg"),
+      conversationId: groupId,
+      text: `🎉 Welcome to ${groupName}! Group invite code: ${code}`,
+      sentAt: new Date().toISOString(),
+      direction: "outgoing",
+      status: "read",
+    };
+    const nextState = {
+      ...state,
+      contacts: [groupContact, ...state.contacts],
+      conversations: [conversation, ...state.conversations],
+      messages: [initialMessage, ...state.messages],
+    };
+    await this.persist(nextState);
+    return { ...conversation };
+  }
+
+  async addMembersToGroup(conversationId: string, contactIds: string[]): Promise<ChatConversation> {
+    const state = await this.getState();
+    const conversation = state.conversations.find((item) => item.id === conversationId);
+    if (!conversation) throw new Error("Conversation not found.");
+    const existingIds = new Set(conversation.memberIds ?? []);
+    contactIds.forEach((id) => existingIds.add(id));
+    const updatedMemberIds = Array.from(existingIds);
+    const newCount = updatedMemberIds.length + 1;
+    const updatedConversation: ChatConversation = {
+      ...conversation,
+      memberIds: updatedMemberIds,
+      memberCount: newCount,
+      lastMessage: `Added ${contactIds.length} members`,
+      lastMessageAt: new Date().toISOString(),
+    };
+    const updatedContacts = state.contacts.map((c) =>
+      c.id === conversation.contactId
+        ? { ...c, headline: `${newCount} members`, memberCount: newCount }
+        : c,
+    );
+    const systemMsg: ChatMessage = {
+      id: localId("msg"),
+      conversationId,
+      text: `Added ${contactIds.length} new members to the group. Total: ${newCount} members.`,
+      sentAt: new Date().toISOString(),
+      direction: "outgoing",
+      status: "read",
+    };
+    const nextState = {
+      ...state,
+      contacts: updatedContacts,
+      conversations: state.conversations.map((item) =>
+        item.id === conversationId ? updatedConversation : item,
+      ),
+      messages: [systemMsg, ...state.messages],
+    };
+    await this.persist(nextState);
+    return { ...updatedConversation };
+  }
+
+  async joinGroup(inviteCodeOrId: string): Promise<ChatConversation> {
+    const state = await this.getState();
+    const query = inviteCodeOrId.trim();
+    const queryLower = query.toLowerCase();
+
+    // 1. Look for existing conversation by ID, title, or invite code
+    const existing = state.conversations.find(
+      (item) =>
+        item.isGroup &&
+        (item.id === query ||
+          (item.title && item.title.toLowerCase().includes(queryLower)) ||
+          (item.inviteCode && item.inviteCode.toUpperCase() === query.toUpperCase())),
+    );
+    if (existing) {
+      return { ...existing };
+    }
+
+    // 2. Discoverable public groups catalog (e.g. Chelsea, Arsenal, Fiesta, etc.)
+    const catalog = [
+      { name: "Chelsea FC Rwanda Fans", members: ["contact-aline", "contact-kevin"] },
+      { name: "Chelsea Blues Worldwide", members: ["contact-kevin", "contact-eric"] },
+      { name: "Arsenal Supporters Kigali", members: ["contact-aline", "contact-eric"] },
+      { name: "Eventis Fiesta 2026", members: ["contact-aline", "contact-kevin"] },
+      { name: "BK Arena Fans Club", members: ["contact-kevin", "contact-eric"] },
+      { name: "Kigali Nightlife VIP", members: ["contact-aline", "contact-kevin"] },
+      { name: "Kigali Tech & Developers", members: ["contact-aline", "contact-eric"] },
+    ];
+
+    const match = catalog.find((g) => g.name.toLowerCase().includes(queryLower));
+    const title = match?.name || (query.charAt(0).toUpperCase() + query.slice(1));
+    const members = match?.members || ["contact-aline", "contact-kevin"];
+
+    return this.createGroup(title, members);
+  }
+
   async sendMessage(
     conversationId: string,
     text: string,
@@ -489,6 +663,25 @@ export class MockChatService implements ChatService {
       conversations,
     });
     return { ...message };
+  }
+
+  async logCall(
+    conversationId: string,
+    type: "VOICE" | "VIDEO",
+    status: "MISSED" | "ENDED" | "REJECTED",
+    durationSec?: number,
+  ): Promise<ChatMessage> {
+    const text =
+      status === "MISSED"
+        ? type === "VIDEO"
+          ? "Missed video call"
+          : "Missed voice call"
+        : type === "VIDEO"
+          ? "Video call"
+          : "Voice call";
+    return this.sendMessage(conversationId, text, {
+      callInfo: { type, status, durationSec },
+    });
   }
 
   private updatePreview(

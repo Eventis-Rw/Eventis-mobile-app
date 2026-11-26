@@ -1,7 +1,8 @@
-import { Ionicons } from "@expo/vector-icons";
 import type { Participant } from "livekit-client";
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { BootstrapIcon } from "@/components/icons/BootstrapIcons";
+import { Ionicons } from "@expo/vector-icons";
 import type { LiveVoice } from "@/hooks/useLiveBroadcast";
 import type { LivePerson } from "@/services/liveState";
 import { liveStageMembers, type LiveStageMember, type LiveStageActions } from "@/services/liveStage";
@@ -35,9 +36,9 @@ function StageTile({ member, revision, compact, shared, demo, actions }: {
         accessibilityLabel={canManage ? own ? "Your stage controls" : `Manage ${person.name}` : person.name}
         onPress={() => actions.onMember(person)} hitSlop={8} style={styles.namePill}>
         <Text numberOfLines={1} style={styles.name}>{person.name}{own ? " · You" : ""}</Text>
-        {canManage ? <Ionicons name="chevron-down" size={10} color="#FFF" /> : null}
+        {canManage ? <BootstrapIcon name="chevron-down" size={11} color="#FFF" /> : null}
       </Pressable>
-      <View pointerEvents="none">{speaking ? <LiveSpeakingBars speaking /> : <Ionicons name={microphone ? "mic" : "mic-off"} size={12} color={microphone ? "#FFF" : "#D8DBE4"} />}</View>
+      <View pointerEvents="none">{speaking ? <LiveSpeakingBars speaking /> : <BootstrapIcon name={microphone ? "mic-fill" : "mic-mute"} size={13} color={microphone ? "#FFF" : "#D8DBE4"} />}</View>
     </View> : null}
   </View>;
 }
@@ -54,7 +55,7 @@ function AudioSeat({ member, actions, demo }: { member?: LiveStageMember; action
     {member ? <>
       <View style={styles.audioAvatar}>
         <LiveSpeakingAvatar size="small" minimal speaking={speaking}><LiveAvatar person={member.person} size={60} /></LiveSpeakingAvatar>
-        {!demo && !member.microphone ? <View style={styles.audioMuted}><Ionicons name="mic-off" size={11} color="#FFF" /></View> : null}
+        {!demo && !member.microphone ? <View style={styles.audioMuted}><BootstrapIcon name="mic-mute" size={11} color="#FFF" /></View> : null}
       </View>
       <Text numberOfLines={1} style={styles.audioName}>{member.person.name}{own ? " · You" : ""}</Text>
       <View style={styles.audioStatus}>

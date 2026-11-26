@@ -24,6 +24,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -92,6 +93,7 @@ function MessageBubble({
   onReply,
   replyEnabled,
   contactName,
+  onCallBack,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -102,6 +104,7 @@ function MessageBubble({
   onReply: (message: ChatMessage) => void;
   replyEnabled: boolean;
   contactName: string;
+  onCallBack?: (type: "VOICE" | "VIDEO") => void;
 }) {
   const colors = useChatColors();
   const [attempt, setAttempt] = useState(0);
@@ -203,6 +206,113 @@ function MessageBubble({
               >
                 ↪ Forwarded
               </Text>
+            ) : null}
+            {message.callInfo ? (
+              <View style={styles.callMessageContent}>
+                <View style={styles.callMessageRow}>
+                  <View
+                    style={[
+                      styles.callMessageIconWrap,
+                      {
+                        backgroundColor:
+                          message.callInfo.status === "MISSED"
+                            ? "rgba(239, 68, 68, 0.15)"
+                            : colors.glass,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        message.callInfo.type === "VIDEO"
+                          ? "videocam"
+                          : "call"
+                      }
+                      size={20}
+                      color={
+                        message.callInfo.status === "MISSED"
+                          ? "#EF4444"
+                          : colors.primary
+                      }
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.callMessageTitle,
+                        {
+                          color:
+                            message.callInfo.status === "MISSED"
+                              ? "#EF4444"
+                              : colors.foreground,
+                        },
+                      ]}
+                    >
+                      {message.callInfo.status === "MISSED"
+                        ? message.callInfo.type === "VIDEO"
+                          ? "Missed video call"
+                          : "Missed voice call"
+                        : message.callInfo.type === "VIDEO"
+                          ? "Video call"
+                          : "Voice call"}
+                    </Text>
+                    <Text
+                      style={[styles.smallText, { color: colors.mutedForeground }]}
+                    >
+                      {message.callInfo.status === "MISSED"
+                        ? "Tap to call back"
+                        : message.callInfo.durationSec
+                          ? `${Math.floor(message.callInfo.durationSec / 60)}m ${message.callInfo.durationSec % 60}s`
+                          : "Completed"}
+                    </Text>
+                  </View>
+                </View>
+                {onCallBack && message.callInfo.status === "MISSED" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Call back ${message.callInfo.type === "VIDEO" ? "video" : "voice"}`}
+                    onPress={() => onCallBack(message.callInfo!.type)}
+                    style={[styles.callBackPill, { backgroundColor: colors.primary }]}
+                  >
+                    <Ionicons
+                      name={
+                        message.callInfo.type === "VIDEO"
+                          ? "videocam"
+                          : "call"
+                      }
+                      size={14}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.callBackPillText}>Call back</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+            {message.storyReply ? (
+              <View
+                style={[
+                  styles.storyReplyCard,
+                  {
+                    backgroundColor: colors.glass,
+                    borderLeftColor: colors.primary,
+                  },
+                ]}
+              >
+                <View style={styles.storyReplyHeader}>
+                  <Ionicons name="sparkles" size={13} color={colors.primary} />
+                  <Text
+                    style={[styles.storyReplyTag, { color: colors.primary }]}
+                  >
+                    {own ? "Replied to their story" : `${contactName}'s story`}
+                  </Text>
+                </View>
+                {message.storyReply.mediaUrl ? (
+                  <Image
+                    source={{ uri: message.storyReply.mediaUrl }}
+                    style={styles.storyReplyThumb}
+                    resizeMode="cover"
+                  />
+                ) : null}
+              </View>
             ) : null}
             {message.replyTo ? (
               <View
@@ -327,8 +437,63 @@ export default function ConversationScreen() {
   const contact = conversation
     ? chat.getContact(conversation.contactId)
     : undefined;
-  const contactDisplayName =
-    contact?.isInAddressBook === false ? contact.phone || contact.name : contact?.name;
+
+  const isGroupChat = Boolean(
+    conversation?.isGroup || contact?.isGroup || contact?.id.startsWith("group:"),
+  );
+
+  const contactDisplayName = isGroupChat
+    ? conversation?.title || contact?.name || "Group Chat"
+    : contact?.isInAddressBook === false
+      ? contact.phone || contact.name
+      : contact?.name;
+
+  const nonMemberContacts = useMemo(() => {
+    const currentMemberIds = new Set(conversation?.memberIds ?? []);
+    return chat.contacts.filter(
+      (c) =>
+        !c.blocked &&
+        !c.isGroup &&
+        !c.id.startsWith("group:") &&
+        !currentMemberIds.has(c.id),
+    );
+  }, [chat.contacts, conversation?.memberIds]);
+
+  const [addMembersOpen, setAddMembersOpen] = useState(false);
+  const [selectedNewMembers, setSelectedNewMembers] = useState<string[]>([]);
+  const [addMembersBusy, setAddMembersBusy] = useState(false);
+  const [addMembersError, setAddMembersError] = useState<string | null>(null);
+
+  const toggleNewMember = (contactId: string) => {
+    setSelectedNewMembers((prev) =>
+      prev.includes(contactId)
+        ? prev.filter((item) => item !== contactId)
+        : [...prev, contactId],
+    );
+  };
+
+  const handleAddMembersSubmit = async () => {
+    if (selectedNewMembers.length === 0) {
+      setAddMembersError("Select at least one contact to add.");
+      return;
+    }
+    setAddMembersBusy(true);
+    setAddMembersError(null);
+    try {
+      await chat.addMembersToGroup(id, selectedNewMembers);
+      setAddMembersOpen(false);
+      setSelectedNewMembers([]);
+      setNotice(
+        `Added ${selectedNewMembers.length} member${selectedNewMembers.length > 1 ? "s" : ""} to the group`,
+      );
+    } catch (err) {
+      setAddMembersError(
+        err instanceof Error ? err.message : "Could not add members.",
+      );
+    } finally {
+      setAddMembersBusy(false);
+    }
+  };
   const allMessages = chat.messagesByConversation[id] ?? [];
   const list = useRef<FlatList<ChatMessage>>(null);
   const menuButton = useRef<ComponentRef<typeof View>>(null);
@@ -953,10 +1118,14 @@ export default function ConversationScreen() {
                 <Image source={{ uri: contact.avatarUrl }} style={styles.avatar} />
               ) : (
                 <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Ionicons name="person" size={20} color={colors.mutedForeground} />
+                  <Ionicons
+                    name={isGroupChat ? "people" : "person"}
+                    size={20}
+                    color={colors.mutedForeground}
+                  />
                 </View>
               )}
-              {contact.isOnline !== undefined ? (
+              {!isGroupChat && contact.isOnline !== undefined ? (
                 <View
                   style={[
                     styles.presenceDot,
@@ -980,28 +1149,48 @@ export default function ConversationScreen() {
               <Text
                 style={[styles.smallText, { color: colors.mutedForeground }]}
               >
-                {contact.blocked
-                  ? chat.isDemoMode
-                    ? "Blocked on this device"
-                    : "Blocked"
-                  : chat.isDemoMode
-                    ? chat.typingConversationId === id
-                      ? "Typing… · demo"
-                      : contact.isOnline
-                        ? "Online · demo"
-                        : "Offline · demo"
-                    : contact.isOnline === undefined
-                      ? "On Eventis"
-                      : contact.isOnline
-                        ? "Online"
-                        : "Offline"}
+                {isGroupChat
+                  ? `${conversation.memberCount ?? contact.memberCount ?? 2} members${conversation.inviteCode ? ` · ${conversation.inviteCode}` : ""}`
+                  : contact.blocked
+                    ? chat.isDemoMode
+                      ? "Blocked on this device"
+                      : "Blocked"
+                    : chat.isDemoMode
+                      ? chat.typingConversationId === id
+                        ? "Typing… · demo"
+                        : contact.isOnline
+                          ? "Online · demo"
+                          : "Offline · demo"
+                      : contact.isOnline === undefined
+                        ? "On Eventis"
+                        : contact.isOnline
+                          ? "Online"
+                          : "Offline"}
               </Text>
             </View>
           </Pressable>
+          {isGroupChat ? (
+            <Pressable
+              onPress={() => {
+                setSelectedNewMembers([]);
+                setAddMembersError(null);
+                setAddMembersOpen(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Add members to group"
+              style={styles.iconButton}
+            >
+              <Ionicons
+                name="person-add-outline"
+                size={21}
+                color={colors.foreground}
+              />
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => startCall("VOICE")}
             accessibilityRole="button"
-            accessibilityLabel={`Voice call ${contactDisplayName} in Eventis`}
+            accessibilityLabel={`${isGroupChat ? "Group voice call" : "Voice call"} with ${contactDisplayName}`}
             style={styles.iconButton}
           >
             <Ionicons
@@ -1013,7 +1202,7 @@ export default function ConversationScreen() {
           <Pressable
             onPress={() => startCall("VIDEO")}
             accessibilityRole="button"
-            accessibilityLabel={`Video call ${contactDisplayName} in Eventis`}
+            accessibilityLabel={`${isGroupChat ? "Group video call" : "Video call"} with ${contactDisplayName}`}
             style={styles.iconButton}
           >
             <Ionicons name="videocam-outline" size={21} color={colors.foreground} />
@@ -1155,8 +1344,34 @@ export default function ConversationScreen() {
                   }}
                   onImage={setImagePreview}
                   loadAttachment={chat.loadAttachment}
+                  onCallBack={startCall}
                 />
               )}
+              ListFooterComponent={
+                <View style={styles.encryptionHeaderWrap}>
+                  <View
+                    style={[
+                      styles.encryptionCard,
+                      { backgroundColor: colors.secondary },
+                    ]}
+                  >
+                    <Ionicons
+                      name="lock-closed"
+                      size={12}
+                      color={colors.primary}
+                      style={{ marginTop: 1 }}
+                    />
+                    <Text
+                      style={[
+                        styles.encryptionCardText,
+                        { color: colors.mutedForeground },
+                      ]}
+                    >
+                      Messages and calls are end-to-end encrypted. No one outside of this chat, not even Eventis, can read or listen to them.
+                    </Text>
+                  </View>
+                </View>
+              }
               contentContainerStyle={[
                 styles.messages,
                 !messages.length ? { justifyContent: "center" } : null,
@@ -1605,15 +1820,50 @@ export default function ConversationScreen() {
         anchor={menuAnchor}
         align="right"
         actions={[
-          {
-            label: "Contact details",
-            icon: "person-outline",
-            onPress: () =>
-              router.push({
-                pathname: "/chat/contact/[id]",
-                params: { id: contact.id },
-              }),
-          },
+          ...(isGroupChat
+            ? [
+                {
+                  label: "Add members",
+                  icon: "person-add-outline" as const,
+                  onPress: () => {
+                    setSelectedNewMembers([]);
+                    setAddMembersError(null);
+                    setAddMembersOpen(true);
+                  },
+                },
+                ...(conversation.inviteCode
+                  ? [
+                      {
+                        label: `Copy invite code (${conversation.inviteCode})`,
+                        icon: "copy-outline" as const,
+                        onPress: async () => {
+                          await Clipboard.setStringAsync(conversation.inviteCode!);
+                          setNotice(`Invite code copied: ${conversation.inviteCode}`);
+                        },
+                      },
+                      {
+                        label: "Share invite code",
+                        icon: "share-social-outline" as const,
+                        onPress: async () => {
+                          await Share.share({
+                            message: `Join our group "${contactDisplayName}" on Eventis using invite code: ${conversation.inviteCode}`,
+                          });
+                        },
+                      },
+                    ]
+                  : []),
+              ]
+            : [
+                {
+                  label: "Contact details",
+                  icon: "person-outline" as const,
+                  onPress: () =>
+                    router.push({
+                      pathname: "/chat/contact/[id]",
+                      params: { id: contact.id },
+                    }),
+                },
+              ]),
           {
             label: "Search",
             icon: "search-outline",
@@ -1639,6 +1889,16 @@ export default function ConversationScreen() {
                   label: "Receive a demo reply",
                   icon: "flask-outline" as const,
                   onPress: () => void run(() => chat.simulateIncoming(id)),
+                },
+                {
+                  label: "Simulate missed voice call",
+                  icon: "call-outline" as const,
+                  onPress: () => void run(() => chat.logCall(id, "VOICE", "MISSED")),
+                },
+                {
+                  label: "Simulate missed video call",
+                  icon: "videocam-outline" as const,
+                  onPress: () => void run(() => chat.logCall(id, "VIDEO", "MISSED")),
                 },
               ]
             : []),
@@ -1711,6 +1971,130 @@ export default function ConversationScreen() {
             <Ionicons name="close" size={30} color="#FFFFFF" />
           </Pressable>
         </View>
+      </Modal>
+
+      {/* Add Members to Group Modal */}
+      <Modal
+        visible={addMembersOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setAddMembersOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalSheet, { backgroundColor: colors.card, maxHeight: "90%" }]}>
+            <View style={styles.sheetHandle} />
+            <Text style={[styles.sheetTitle, { color: colors.foreground }]}>
+              Add Members
+            </Text>
+            <Text style={[styles.modalSubDesc, { color: colors.mutedForeground }]}>
+              Select contacts to invite to {contactDisplayName}.
+            </Text>
+
+            <ScrollView
+              style={{ maxHeight: 260, marginVertical: 6 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {nonMemberContacts.length === 0 ? (
+                <Text style={[styles.emptyPrompt, { color: colors.mutedForeground }]}>
+                  All your contacts are already in this group.
+                </Text>
+              ) : (
+                nonMemberContacts.map((c) => {
+                  const isSelected = selectedNewMembers.includes(c.id);
+                  return (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => toggleNewMember(c.id)}
+                      style={[
+                        styles.contactRowSelect,
+                        { borderBottomColor: colors.border },
+                      ]}
+                    >
+                      <View style={styles.contactSelectAvatarBox}>
+                        {c.avatarUrl ? (
+                          <Image
+                            source={{ uri: c.avatarUrl }}
+                            style={styles.contactSelectAvatar}
+                          />
+                        ) : (
+                          <View
+                            style={[
+                              styles.contactSelectAvatar,
+                              { backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center" },
+                            ]}
+                          >
+                            <Ionicons name="person" size={16} color={colors.mutedForeground} />
+                          </View>
+                        )}
+                      </View>
+                      <Text
+                        style={[
+                          styles.contactSelectName,
+                          { color: colors.foreground, flex: 1 },
+                        ]}
+                      >
+                        {c.name}
+                      </Text>
+                      <View
+                        style={[
+                          styles.checkbox,
+                          {
+                            borderColor: isSelected ? colors.primary : colors.mutedForeground,
+                            backgroundColor: isSelected ? colors.primary : "transparent",
+                          },
+                        ]}
+                      >
+                        {isSelected ? (
+                          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            {addMembersError ? (
+              <Text style={[styles.modalErrorText, { color: colors.destructive }]}>
+                {addMembersError}
+              </Text>
+            ) : null}
+
+            <View style={styles.modalBtnRow}>
+              <Pressable
+                onPress={() => setAddMembersOpen(false)}
+                disabled={addMembersBusy}
+                style={[styles.modalActionBtn, { backgroundColor: colors.secondary }]}
+              >
+                <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleAddMembersSubmit}
+                disabled={addMembersBusy || nonMemberContacts.length === 0}
+                style={[
+                  styles.modalActionBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: nonMemberContacts.length === 0 ? 0.6 : 1,
+                  },
+                ]}
+              >
+                {addMembersBusy ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={{ color: "#FFFFFF", fontFamily: "Inter_600SemiBold" }}>
+                    Add ({selectedNewMembers.length})
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1954,4 +2338,168 @@ const styles = StyleSheet.create({
   blocked: { padding: 20, alignItems: "center" },
   fullImage: { width: "100%", height: "100%" },
   imageClose: { position: "absolute", right: 20, padding: 8 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 36 : 24,
+  },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(150,150,150,0.4)",
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    marginBottom: 6,
+  },
+  modalSubDesc: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    marginBottom: 12,
+  },
+  emptyPrompt: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    paddingVertical: 16,
+    textAlign: "center",
+  },
+  contactRowSelect: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  contactSelectAvatarBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  contactSelectAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  contactSelectName: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalErrorText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  modalBtnRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+  },
+  modalActionBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  callMessageContent: {
+    paddingVertical: 4,
+    gap: 8,
+    minWidth: 200,
+  },
+  callMessageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  callMessageIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  callMessageTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+  },
+  callBackPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 32,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    marginTop: 2,
+    alignSelf: "flex-start",
+  },
+  callBackPillText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  storyReplyCard: {
+    borderRadius: 10,
+    borderLeftWidth: 3,
+    padding: 8,
+    marginBottom: 6,
+    gap: 6,
+  },
+  storyReplyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  storyReplyTag: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.2,
+  },
+  storyReplyThumb: {
+    width: 70,
+    height: 100,
+    borderRadius: 8,
+  },
+  encryptionHeaderWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  encryptionCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    maxWidth: 380,
+  },
+  encryptionCardText: {
+    flex: 1,
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 16,
+    textAlign: "center",
+  },
 });

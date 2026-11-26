@@ -14,7 +14,6 @@ import {
   StyleSheet,
   Text,
   View,
-  type LayoutChangeEvent,
 } from "react-native";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
@@ -23,7 +22,6 @@ import { EventCard } from "@/components/EventCard";
 import { getEventTiming } from "@/constants/eventPresentation";
 import { useEventClock } from "@/hooks/useEventClock";
 import { useNotificationsOptional } from "@/context/NotificationsContext";
-import { GlassSurface } from "@/components/GlassSurface";
 import { EventCardSkeleton } from "@/components/SkeletonLoader";
 import { StoriesBar } from "@/components/StoriesBar";
 import { useAuth } from "@/context/AuthContext";
@@ -47,10 +45,61 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const { step: organiserStep, openOrganiserFlow } = useOrganiserAccess();
   const application = user?.organiserApplication;
-  const organiserLabel = application?.status === "IN_REVIEW" ? "Application in review"
-    : application?.status === "REJECTED" ? "Application rejected"
-    : application?.status === "PENDING_PAYMENT" ? "Application pending payment"
-    : organiserStep === "ready" ? "Dashboard" : organiserStep === "setup" ? "Set up organizer" : "Become an organizer";
+  const organizerConfig = useMemo(() => {
+    if (application?.status === "IN_REVIEW") {
+      return {
+        label: "In Review",
+        icon: "time-outline" as const,
+        bg: "rgba(255, 179, 0, 0.12)",
+        border: "rgba(255, 179, 0, 0.35)",
+        color: "#FFB300",
+      };
+    }
+    if (application?.status === "PENDING_PAYMENT") {
+      return {
+        label: "Pending",
+        icon: "card-outline" as const,
+        bg: "rgba(255, 179, 0, 0.12)",
+        border: "rgba(255, 179, 0, 0.35)",
+        color: "#FFB300",
+      };
+    }
+    if (application?.status === "REJECTED") {
+      return {
+        label: "Reapply",
+        icon: "alert-circle-outline" as const,
+        bg: "rgba(255, 45, 85, 0.12)",
+        border: "rgba(255, 45, 85, 0.35)",
+        color: colors.primary,
+      };
+    }
+    if (organiserStep === "ready") {
+      return {
+        label: "Dashboard",
+        icon: "grid-outline" as const,
+        bg: "rgba(0, 163, 255, 0.12)",
+        border: "rgba(0, 163, 255, 0.32)",
+        color: "#00A3FF",
+      };
+    }
+    return {
+      label: "Become organizer",
+      icon: "briefcase-outline" as const,
+      bg: "rgba(255, 45, 85, 0.12)",
+      border: "rgba(255, 45, 85, 0.32)",
+      color: colors.primary,
+    };
+  }, [application?.status, organiserStep, colors.primary]);
+
+  const handleOrganizerPress = useCallback(() => {
+    if (organiserStep === "intro" && !application) {
+      setShowOrganizerModal(true);
+    } else {
+      openOrganiserFlow();
+    }
+  }, [organiserStep, application, openOrganiserFlow]);
+
+  const flatListRef = useRef<FlatList<any>>(null);
   const notifications = useNotificationsOptional();
   const unreadNotifications = notifications?.unreadCount ?? 0;
   const { events, categories, isLoading, error, refreshEvents } = useEvents();
@@ -62,7 +111,6 @@ export default function HomeScreen() {
   const [cardCovered, setCardCovered] = useState(false);
   const feedAnalytics = useFeedAnalytics(selectedCategory === "All" ? "home" : "category", viewerOpen || showOrganizerModal || cardCovered);
   const location = useLocationPermission();
-  const [headerHeight, setHeaderHeight] = useState(0);
 
   // Keep visible events during refresh. Empty feeds show skeletons until the request settles.
   const showSkeletons = (!user || isLoading) && events.length === 0;
@@ -229,92 +277,8 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <GlassSurface
-        onLayout={(event: LayoutChangeEvent) => {
-          const height = event.nativeEvent.layout.height;
-          if (height > 0 && Math.abs(height - headerHeight) > 1) {
-            setHeaderHeight(height);
-          }
-        }}
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + 8,
-            borderWidth: 0,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: colors.border,
-            borderRadius: 0,
-          },
-        ]}
-      >
-        <View style={styles.headerRow}>
-          <View style={styles.brandRow}>
-            <Pressable
-              onPress={() => router.push("/(tabs)/profile" as any)}
-              style={[
-                styles.avatarBtn,
-                {
-                  backgroundColor: user?.avatarUrl ? colors.card : colors.primary,
-                  borderColor: colors.border,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Open profile"
-            >
-              {user?.avatarUrl ? (
-                <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />
-              ) : user?.username ? (
-                <Text style={styles.avatarText}>
-                  {user.username.charAt(0).toUpperCase()}
-                </Text>
-              ) : (
-                <Ionicons name="person" size={20} color="#FFFFFF" />
-              )}
-            </Pressable>
-            <Pressable
-              onPress={() =>
-                organiserStep === "intro" && !application ? setShowOrganizerModal(true) : openOrganiserFlow()
-              }
-              style={[
-                styles.becomeOrganizerHeaderBtn,
-                { backgroundColor: colors.primary, borderRadius: 999 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={organiserLabel}
-            >
-              <Ionicons name="briefcase-outline" size={13} color="#FFFFFF" />
-              <Text style={styles.becomeOrganizerHeaderBtnText}>
-                {organiserLabel}
-              </Text>
-            </Pressable>
-          </View>
-          <View style={styles.headerActions}>
-            <Pressable
-              onPress={openSearch}
-              style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel="Search events"
-            >
-              <Ionicons name="search-outline" size={20} color={colors.foreground} />
-            </Pressable>
-            <Pressable
-              onPress={() => router.push("/notifications" as any)}
-              style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-            >
-              <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
-              {unreadNotifications > 0 ? (
-                <View style={[styles.notifBadge, { backgroundColor: colors.primary, borderColor: colors.card }]}>
-                  <Text style={styles.notifBadgeText}>{unreadNotifications > 9 ? "9+" : unreadNotifications}</Text>
-                </View>
-              ) : null}
-            </Pressable>
-          </View>
-        </View>
-      </GlassSurface>
-
       <FlatList
+        ref={flatListRef}
         key={selectedCategory}
         data={visibleEvents}
         keyExtractor={(event) => event.id}
@@ -323,6 +287,80 @@ export default function HomeScreen() {
         )}
         ListHeaderComponent={
           <>
+            <View
+              style={[
+                styles.topHeader,
+                {
+                  paddingTop: insets.top + 8,
+                },
+              ]}
+            >
+              <View style={styles.headerRow}>
+                <View style={styles.leftActions}>
+                  <Pressable
+                    onPress={handleOrganizerPress}
+                    style={[
+                      styles.combinedProfilePill,
+                      {
+                        backgroundColor: organizerConfig.bg,
+                        borderColor: organizerConfig.border,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={organizerConfig.label}
+                  >
+                    {(user?.organisation?.logoUrl || user?.avatarUrl) ? (
+                      <Image source={{ uri: user?.organisation?.logoUrl || user?.avatarUrl }} style={styles.combinedAvatarImg} />
+                    ) : (user?.organisation?.name || user?.username) ? (
+                      <View style={[styles.combinedAvatarLetterWrap, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.combinedAvatarLetterText}>
+                          {(user?.organisation?.name || user?.username || "U").charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.combinedAvatarLetterWrap, { backgroundColor: colors.primary }]}>
+                        <Ionicons name="person" size={13} color="#FFFFFF" />
+                      </View>
+                    )}
+                    <Text style={[styles.combinedProfileText, { color: organizerConfig.color }]}>
+                      {organizerConfig.label}
+                    </Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={12}
+                      color={organizerConfig.color}
+                      style={{ opacity: 0.6 }}
+                    />
+                  </Pressable>
+                </View>
+
+                <View style={styles.headerActions}>
+                  <Pressable
+                    onPress={openSearch}
+                    style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Search events"
+                  >
+                    <Ionicons name="search-outline" size={19} color={colors.foreground} />
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => router.push("/notifications" as any)}
+                    style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Notifications"
+                  >
+                    <Ionicons name="notifications-outline" size={19} color={colors.foreground} />
+                    {unreadNotifications > 0 ? (
+                      <View style={[styles.notifBadge, { backgroundColor: colors.primary, borderColor: colors.background }]}>
+                        <Text style={styles.notifBadgeText}>{unreadNotifications > 9 ? "9+" : unreadNotifications}</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+
             {application && application.status !== "PENDING_PAYMENT" && application.status !== "APPROVED" ? (
               <View style={{ margin: 20, padding: 16, borderRadius: 12, backgroundColor: colors.card, gap: 8 }}>
                 <Text style={{ color: colors.foreground, fontWeight: "700" }}>
@@ -360,7 +398,6 @@ export default function HomeScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: headerHeight || insets.top + 64,
             paddingBottom: Platform.OS === "web" ? 84 + 20 : 100,
           },
         ]}
@@ -617,60 +654,51 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
-  header: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 20,
-    elevation: 8,
-    paddingHorizontal: PAGE_PADDING,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden",
+  topHeader: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 12,
   },
-  brandRow: {
-    flex: 1,
+  leftActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
-  becomeOrganizerHeaderBtn: {
+  combinedProfilePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    gap: 7,
+    height: 38,
+    paddingLeft: 4,
+    paddingRight: 11,
     borderRadius: 999,
+    borderWidth: 1,
   },
-  becomeOrganizerHeaderBtnText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#FFFFFF",
+  combinedAvatarImg: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
-  avatarBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  combinedAvatarLetterWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
-    borderWidth: 1.5,
   },
-  avatarImg: {
-    width: "100%",
-    height: "100%",
-  },
-  avatarText: {
-    fontSize: 18,
+  combinedAvatarLetterText: {
+    fontSize: 13,
     fontFamily: "Inter_700Bold",
     color: "#FFFFFF",
+  },
+  combinedProfileText: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
   },
   headerActions: {
     flexDirection: "row",
@@ -678,30 +706,30 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   notifBadge: {
     position: "absolute",
-    top: 2,
-    right: 2,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    top: -1,
+    right: -1,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 8.5,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
     borderWidth: 1.5,
   },
   notifBadgeText: {
     color: "#FFFFFF",
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: "Inter_700Bold",
-    lineHeight: 12,
+    lineHeight: 11,
   },
   scroll: {
     flex: 1,

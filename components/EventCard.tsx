@@ -110,8 +110,6 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [sendingAll, setSendingAll] = useState(false);
   const [shareError, setShareError] = useState("");
-  const [captionExpanded, setCaptionExpanded] = useState(false);
-  const captionCanExpand = event.description.trim().length > 110;
 
   const localActivity = records.filter((record) => record.entityType === "event" && record.entityId === event.id);
   const localViewCount = localActivity.filter((record) => record.type === "detail_view").length;
@@ -1169,12 +1167,15 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
             >
               {getEventTiming(event).kind === "ended" ? "Ended · " : ""}{formatDate(event.date)} · {event.time}
             </Text>
-            <Text
-              style={[styles.compactMeta, { color: colors.mutedForeground }]}
-              numberOfLines={1}
-            >
-              {formatEventLocation(event)}
-            </Text>
+            <View style={styles.compactMetaRow}>
+              <Ionicons name="location-sharp" size={11} color={colors.primary} />
+              <Text
+                style={[styles.compactMeta, { color: colors.mutedForeground }]}
+                numberOfLines={1}
+              >
+                {formatEventLocation(event)}
+              </Text>
+            </View>
             <View style={styles.compactFooter}>
               <View style={styles.ratingRow}>
                 <Ionicons name="bar-chart-outline" size={12} color={colors.primary} />
@@ -1236,9 +1237,12 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
                   </View>
                 )}
               </View>
-              <Text style={[styles.instaLocationText, { color: colors.mutedForeground }]} numberOfLines={1}>
-                {formatEventLocation(event)}
-              </Text>
+              <View style={styles.instaLocationRow}>
+                <Ionicons name="location-sharp" size={12} color={colors.primary} />
+                <Text style={[styles.instaLocationText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                  {formatEventLocation(event)}
+                </Text>
+              </View>
             </View>
           </View>
           <Pressable
@@ -1316,33 +1320,40 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
             {event.title}
           </Text>
           <View style={styles.instaMetaRow}>
-            <Ionicons name="calendar-outline" size={14} color={colors.primary} />
-            <Text style={[styles.instaMetaText, { color: colors.mutedForeground }]}>
-              {formatDate(event.date)} · {event.time}
-            </Text>
+            <View style={styles.instaMetaItem}>
+              <Ionicons name="calendar-outline" size={13} color={colors.primary} />
+              <Text style={[styles.instaMetaText, { color: colors.mutedForeground }]}>
+                {formatDate(event.date)} · {event.time}
+              </Text>
+            </View>
+            <View style={styles.instaMetaItem}>
+              <Ionicons name="location-outline" size={13} color={colors.primary} />
+              <Text style={[styles.instaMetaText, { color: colors.mutedForeground }]} numberOfLines={1}>
+                {formatEventLocation(event)}
+              </Text>
+            </View>
           </View>
-          <Text
-            style={[styles.instaCaption, { color: colors.mutedForeground }]}
-            numberOfLines={captionExpanded ? undefined : 2}
-          >
-            <Text style={[styles.instaCaptionOwner, { color: colors.foreground }]}>{event.organizer} </Text>
-            {event.description}
-          </Text>
-          {captionCanExpand ? (
+          <View style={styles.instaCaptionRow}>
+            <Text
+              style={[styles.instaCaption, { color: colors.mutedForeground, flex: 1 }]}
+              numberOfLines={1}
+            >
+              <Text style={[styles.instaCaptionOwner, { color: colors.foreground }]}>{event.organizer} </Text>
+              {event.description}
+            </Text>
             <Pressable
               onPress={(pressEvent) => {
                 pressEvent.stopPropagation();
-                setCaptionExpanded((expanded) => !expanded);
+                handlePress();
               }}
               accessibilityRole="button"
-              accessibilityLabel={`${captionExpanded ? "Collapse" : "Expand"} caption for ${event.title}`}
-              accessibilityState={{ expanded: captionExpanded }}
+              accessibilityLabel={`View more details for ${event.title}`}
               hitSlop={8}
               style={styles.captionToggle}
             >
-              <Text style={[styles.captionToggleText, { color: colors.mutedForeground }]}>{captionExpanded ? "less" : "more"}</Text>
+              <Text style={[styles.captionToggleText, { color: colors.primary }]}>view more</Text>
             </Pressable>
-          ) : null}
+          </View>
         </View>
       </AnimatedPressable>
       {shareModal}
@@ -1510,6 +1521,11 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
+  compactMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
   compactMeta: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
@@ -1576,9 +1592,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Inter_600SemiBold",
   },
+  instaLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
   instaLocationText: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
+    flexShrink: 1,
   },
   instaMoreBtn: {
     width: 32,
@@ -1649,11 +1671,23 @@ const styles = StyleSheet.create({
   instaMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  instaMetaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 1,
   },
   instaMetaText: {
     fontSize: 13,
     fontFamily: "Inter_500Medium",
+  },
+  instaCaptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   instaCaption: {
     fontSize: 14,

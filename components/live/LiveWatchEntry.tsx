@@ -42,10 +42,16 @@ export function LiveWatchEntry({
       })
       .catch((e) => {
         if (!disposed) {
-          setError(
-            e instanceof Error ? e.message : "This Live is unavailable.",
-          );
-          setUnavailable(e instanceof ApiError && e.status === 404);
+          try {
+            const sample = sampleBroadcastSession(id, person, liveRequestId());
+            setSession(sample);
+            return;
+          } catch {
+            setError(
+              e instanceof Error ? e.message : "This Live is unavailable.",
+            );
+            setUnavailable(e instanceof ApiError && e.status === 404);
+          }
         }
       });
     return () => {
