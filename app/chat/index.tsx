@@ -451,68 +451,6 @@ export default function ChatScreen() {
               paddingBottom: insets.bottom + 92,
               flexGrow: 1,
             }}
-            ListHeaderComponent={
-              activeContacts.length > 0 && !unreadOnly ? (
-                <View style={styles.activeTray}>
-                  <Text style={[styles.activeTrayHeading, { color: colors.mutedForeground }]}>
-                    Active now
-                  </Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.activeTrayScroll}
-                  >
-                    {activeContacts.map((contact) => (
-                      <Pressable
-                        key={contact.id}
-                        style={styles.activeContactItem}
-                        onPress={() => {
-                          void chat.startConversation(contact.id).then((convo) => {
-                            router.navigate({
-                              pathname: "/chat/[id]",
-                              params: { id: convo.id },
-                            });
-                          });
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Chat with ${contact.name}`}
-                      >
-                        <View style={styles.activeAvatarBox}>
-                          {contact.avatarUrl ? (
-                            <Image
-                              source={{ uri: contact.avatarUrl }}
-                              style={styles.activeAvatarImg}
-                            />
-                          ) : (
-                            <View
-                              style={[
-                                styles.activeAvatarImg,
-                                styles.activeAvatarFallback,
-                                { backgroundColor: colors.secondary },
-                              ]}
-                            >
-                              <Ionicons name="person" size={19} color={colors.mutedForeground} />
-                            </View>
-                          )}
-                          <View
-                            style={[
-                              styles.activeOnlineDot,
-                              { backgroundColor: "#22C55E", borderColor: colors.background },
-                            ]}
-                          />
-                        </View>
-                        <Text
-                          style={[styles.activeContactName, { color: colors.foreground }]}
-                          numberOfLines={1}
-                        >
-                          {contact.name.split(" ")[0]}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                </View>
-              ) : undefined
-            }
             renderItem={({ item }) => {
               const contact = chat.getContact(item.contactId);
               if (!contact) return null;
@@ -583,11 +521,11 @@ export default function ChatScreen() {
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </Pressable>
 
-      {/* Start Chat / Group Action Sheet Modal */}
+      {/* Start Chat / Group Action Sheet Bottom Sheet */}
       <Modal
         visible={actionSheetOpen}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setActionSheetOpen(false)}
       >
         <Pressable
@@ -602,6 +540,72 @@ export default function ChatScreen() {
             <Text style={[styles.sheetTitle, { color: colors.foreground }]}>
               Start a Conversation
             </Text>
+
+            {/* Active / Online users row inside the bottom sheet */}
+            {activeContacts.length > 0 ? (
+              <View style={styles.sheetActiveSection}>
+                <View style={styles.sheetActiveHeader}>
+                  <View style={styles.sheetOnlineDot} />
+                  <Text style={[styles.sheetActiveTitle, { color: colors.mutedForeground }]}>
+                    Active Now ({activeContacts.length})
+                  </Text>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.sheetActiveScroll}
+                >
+                  {activeContacts.map((contact) => (
+                    <Pressable
+                      key={contact.id}
+                      style={styles.sheetActiveItem}
+                      onPress={() => {
+                        setActionSheetOpen(false);
+                        void chat.startConversation(contact.id).then((convo) => {
+                          router.navigate({
+                            pathname: "/chat/[id]",
+                            params: { id: convo.id },
+                          });
+                        });
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Chat with ${contact.name}`}
+                    >
+                      <View style={styles.activeAvatarBox}>
+                        {contact.avatarUrl ? (
+                          <Image
+                            source={{ uri: contact.avatarUrl }}
+                            style={styles.activeAvatarImg}
+                          />
+                        ) : (
+                          <View
+                            style={[
+                              styles.activeAvatarImg,
+                              styles.activeAvatarFallback,
+                              { backgroundColor: colors.secondary },
+                            ]}
+                          >
+                            <Ionicons name="person" size={19} color={colors.mutedForeground} />
+                          </View>
+                        )}
+                        <View
+                          style={[
+                            styles.activeOnlineDot,
+                            { backgroundColor: "#22C55E", borderColor: colors.card },
+                          ]}
+                        />
+                      </View>
+                      <Text
+                        style={[styles.activeContactName, { color: colors.foreground }]}
+                        numberOfLines={1}
+                      >
+                        {contact.name.split(" ")[0]}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
 
             <Pressable
               accessibilityRole="button"
@@ -1274,6 +1278,40 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: "Inter_700Bold",
     marginBottom: 12,
+  },
+  sheetActiveSection: {
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(150, 150, 150, 0.18)",
+    marginBottom: 8,
+  },
+  sheetActiveHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  sheetOnlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#22C55E",
+  },
+  sheetActiveTitle: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  sheetActiveScroll: {
+    gap: 12,
+    paddingHorizontal: 2,
+  },
+  sheetActiveItem: {
+    alignItems: "center",
+    width: 58,
+    gap: 4,
   },
   modalSubDesc: {
     fontSize: 13,
