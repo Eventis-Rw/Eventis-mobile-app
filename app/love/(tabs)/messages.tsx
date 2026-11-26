@@ -84,7 +84,7 @@ export default function LoveInboxScreen() {
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 30 }]} showsVerticalScrollIndicator={false}>
         {activeTab === "connections" ? (
           conversations.length ? (
-            <View style={[styles.chatList, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.chatList}>
               {conversations.map(({ profile, lastMessage, unreadCount }, index) => (
                 <ConversationRow
                   key={profile.id}
@@ -138,7 +138,6 @@ function ConversationRow({
       accessibilityLabel={`Chat with ${profile.username}. ${unread ? `${unreadCount} unread. ` : ""}${preview}`}
       style={({ pressed }) => [
         styles.chatRow,
-        !last && { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
         pressed && { backgroundColor: colors.secondary },
       ]}
     >
@@ -152,7 +151,12 @@ function ConversationRow({
         )}
         {presenceOf(profile) === "online" ? <View style={[styles.onlineDot, { backgroundColor: colors.success, borderColor: colors.card }]} /> : null}
       </Pressable>
-      <View style={styles.profileCopy}>
+      <View
+        style={[
+          styles.profileCopy,
+          !last && { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
+        ]}
+      >
         <View style={styles.chatTopRow}>
           <View style={styles.chatName}>
             <Text style={[styles.name, { color: colors.foreground }]} numberOfLines={1}>{profile.username}</Text>
@@ -200,23 +204,23 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   countBadge: { minWidth: 21, height: 21, borderRadius: 11, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
   countText: { fontSize: 10, fontFamily: "Inter_700Bold" },
-  content: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 16 },
-  chatList: { borderWidth: 1, borderRadius: 20, overflow: "hidden" },
-  chatRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  content: { width: "100%", maxWidth: 760, alignSelf: "center", paddingVertical: 4 },
+  chatList: { width: "100%" },
+  chatRow: { flexDirection: "row", alignItems: "center", gap: 13, paddingHorizontal: 16, paddingVertical: 10, minHeight: 74 },
   chatAvatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: "#E5E7EB" },
   avatarFallback: { alignItems: "center", justifyContent: "center" },
   avatarInitials: { fontSize: 17, fontFamily: "Inter_700Bold" },
   onlineDot: { position: "absolute", right: 1, bottom: 1, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
   chatTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   chatName: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5 },
-  chatTime: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  chatTime: { fontSize: 12, fontFamily: "Inter_500Medium" },
   chatTimeUnread: { fontFamily: "Inter_700Bold" },
   chatBottomRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
-  chatPreview: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular" },
+  chatPreview: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular" },
   chatPreviewUnread: { fontFamily: "Inter_600SemiBold" },
   unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   unreadText: { color: "#FFFFFF", fontSize: 11, fontFamily: "Inter_700Bold" },
-  profileCopy: { flex: 1, minWidth: 0 },
+  profileCopy: { flex: 1, minWidth: 0, minHeight: 74, justifyContent: "center" },
   name: { flexShrink: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
   empty: { alignItems: "center", paddingVertical: 70, paddingHorizontal: 24 },
   emptyIcon: { width: 68, height: 68, borderRadius: 23, alignItems: "center", justifyContent: "center" },

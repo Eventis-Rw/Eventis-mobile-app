@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { StoryViewer } from "@/components/StoryViewer";
 import { buildStorySession } from "@/utils/storyPlayback";
 import { deleteStatus, fetchStatusStories, recordStatusView } from "@/services/statusService";
-import { getViewedStories, groupStories, persistStoryView, storyKey, subscribeStories,
+import { deleteLocalStory, getStoryFeed, getViewedStories, groupStories, persistStoryView, storyKey, subscribeStories,
   type PublishedStory, type StoryCollection, type ViewedStories } from "@/services/storyService";
 import { ApiError, getToken } from "@/utils/apiClient";
 
@@ -51,9 +51,20 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
       }
       const [savedViews, token] = await Promise.all([getViewedStories(viewerId), getToken()]);
       const useStatusApi = token !== null && !token.startsWith("demo_token_");
-      const remote = useStatusApi ? await fetchStatusStories() : [];
+      let remote: PublishedStory[] = [];
+      if (useStatusApi) {
+        try {
+          remote = await fetchStatusStories();
+        } catch {
+          // If remote fetch fails, we continue with local stories
+        }
+      }
+      const local = await getStoryFeed();
       if (!mounted.current || version !== request.current) return;
-      const synced = new Map(remote.map(item => [item.id, item]));
+      const synced = new Map<string, PublishedStory>();
+      for (const item of [...remote, ...local]) {
+        synced.set(item.id, item);
+      }
       for (const [id, item] of recentPublications.current) {
         const serverStory = synced.get(id);
         if (item.expiresAt <= Date.now() || (serverStory && (!item.organisationId || serverStory.organisationId))) {
@@ -138,12 +149,16 @@ function StoriesScope({ children, viewerId, ownId }: { children: React.ReactNode
   }, [items, viewed, ownId]);
   const close = useCallback(() => setSession(null), []);
   const remove = useCallback(async (story: PublishedStory) => {
-    if (story.ownerId !== ownId || story.source !== "api") throw new Error("You can only delete your own stories.");
-    try {
-      await deleteStatus(story.id);
-    } catch (error) {
-      // Already gone (e.g. an earlier attempt succeeded): just drop it from the list.
-      if (!(error instanceof ApiError && error.status === 404)) throw error;
+    if (story.ownerId !== ownId) throw new Error("You can only delete your own stories.");
+    if (story.source === "api") {
+      try {
+        await deleteStatus(story.id);
+      } catch (error) {
+        // Already gone (e.g. an earlier attempt succeeded): just drop it from the list.
+        if (!(error instanceof ApiError && error.status === 404)) throw error;
+      }
+    } else {
+      await deleteLocalStory(story.ownerId, story.id);
     }
     if (inFlight.current) {
       request.current++;

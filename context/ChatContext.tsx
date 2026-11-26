@@ -108,6 +108,15 @@ interface ChatContextValue {
   markConversationRead: (conversationId: string) => Promise<void>;
   syncDeviceContacts: () => Promise<number>;
   acceptInvitation: (token: string) => Promise<ChatConversation>;
+  createGroup: (title: string, memberContactIds: string[]) => Promise<ChatConversation>;
+  addMembersToGroup: (conversationId: string, contactIds: string[]) => Promise<ChatConversation>;
+  joinGroup: (inviteCodeOrId: string) => Promise<ChatConversation>;
+  logCall: (
+    conversationId: string,
+    type: "VOICE" | "VIDEO",
+    status: "MISSED" | "ENDED" | "REJECTED",
+    durationSec?: number,
+  ) => Promise<ChatMessage>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -250,6 +259,69 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     );
     return conversation;
   }, []);
+
+  const createGroup = useCallback(
+    async (title: string, memberContactIds: string[]) => {
+      const conversation = await serviceRef.current.createGroup(title, memberContactIds);
+      await refresh(true);
+      return conversation;
+    },
+    [refresh],
+  );
+
+  const addMembersToGroup = useCallback(
+    async (conversationId: string, contactIds: string[]) => {
+      const conversation = await serviceRef.current.addMembersToGroup(conversationId, contactIds);
+      await refresh(true);
+      return conversation;
+    },
+    [refresh],
+  );
+
+  const joinGroup = useCallback(
+    async (inviteCodeOrId: string) => {
+      const conversation = await serviceRef.current.joinGroup(inviteCodeOrId);
+      await refresh(true);
+      return conversation;
+    },
+    [refresh],
+  );
+
+  const logCall = useCallback(
+    async (
+      conversationId: string,
+      type: "VOICE" | "VIDEO",
+      status: "MISSED" | "ENDED" | "REJECTED",
+      durationSec?: number,
+    ) => {
+      const message = await serviceRef.current.logCall(
+        conversationId,
+        type,
+        status,
+        durationSec,
+      );
+      setAllMessages((curr) => [...curr, message]);
+      setMessagesByConversation((curr) => ({
+        ...curr,
+        [conversationId]: [...(curr[conversationId] ?? []), message],
+      }));
+      setConversations((curr) =>
+        sortConversations(
+          curr.map((c) =>
+            c.id === conversationId
+              ? {
+                  ...c,
+                  lastMessage: chatMessagePreview(message),
+                  lastMessageAt: message.sentAt,
+                }
+              : c,
+          ),
+        ),
+      );
+      return message;
+    },
+    [],
+  );
 
   const pendingId = useRef(0);
   const sendMessage = useCallback(
@@ -678,6 +750,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       markConversationRead,
       syncDeviceContacts,
       acceptInvitation,
+      createGroup,
+      addMembersToGroup,
+      joinGroup,
+      logCall,
     }),
     [
       contacts,
@@ -713,6 +789,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       markConversationRead,
       syncDeviceContacts,
       acceptInvitation,
+      createGroup,
+      addMembersToGroup,
+      joinGroup,
+      logCall,
     ],
   );
 

@@ -11,9 +11,9 @@ export type EventPalette = {
 const DEFAULT_PALETTE: EventPalette = {
   accent: "#2F6BFF",
   accentSoft: "#D9E6FF",
-  deep: "#0D1838",
+  deep: "#121212",
   pageLight: ["#D9E6FF", "#F4F7FF", "#E8EEF8"],
-  pageDark: ["#172149", "#070814", "#070814"],
+  pageDark: ["#18181B", "#000000", "#000000"],
 };
 
 const EVENT_PALETTES: Record<string, EventPalette> = {

@@ -63,8 +63,8 @@ export default function FindLoveOnboardingScreen({ onDone }: { onDone?: () => vo
         colors={[
           "rgba(0, 163, 255, 0.08)",
           "rgba(255, 45, 85, 0.12)",
-          "rgba(7, 8, 20, 0.4)",
-          "#070814",
+          "rgba(0, 0, 0, 0.6)",
+          "#000000",
         ]}
         locations={[0, 0.35, 0.7, 1]}
         style={StyleSheet.absoluteFill}
@@ -152,7 +152,7 @@ export default function FindLoveOnboardingScreen({ onDone }: { onDone?: () => vo
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#070814",
+    backgroundColor: "#000000",
   },
   topRow: {
     position: "absolute",

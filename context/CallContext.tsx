@@ -173,12 +173,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const finish = useCallback(async (status: "REJECTED" | "CANCELLED" | "ENDED") => {
     const active = callRef.current;
     if (!active) return;
+    if (active.direction === "incoming" && status === "REJECTED" && active.status === "RINGING") {
+      void chat.logCall(active.conversationId, active.type, "MISSED").catch(() => {});
+    }
     updateCall({ ...active, status });
     try { await transition(active.id, status); } finally {
       await cleanup();
       updateCall(null);
     }
-  }, [cleanup, transition, updateCall]);
+  }, [cleanup, transition, updateCall, chat]);
 
   const startCall = useCallback(async (conversationId: string, type: "VOICE" | "VIDEO", peerName: string) => {
     if (!user || user.isDemo) throw new Error("Sign in to make an Eventis call.");
@@ -264,6 +267,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         if (!current || current.id !== updated.id) return;
         updateCall({ ...current, status: updated.status });
         if (["REJECTED", "MISSED", "ENDED", "CANCELLED"].includes(updated.status)) {
+          if (updated.status === "MISSED") {
+            void chat.logCall(updated.conversationId, updated.type, "MISSED").catch(() => {});
+          }
           void cleanup().finally(() => updateCall(null));
         }
       });

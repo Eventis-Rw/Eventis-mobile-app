@@ -32,6 +32,8 @@ interface ProfileHeaderProps {
   /** Only shown for business accounts, from the actual verification record. */
   verificationStatus?: BusinessVerificationStatus;
   onEditProfile: () => void;
+  onOpenOrganiser?: () => void;
+  isPublisher?: boolean;
 }
 
 /** Placeholder names given to phone sign-ups before they choose one. */
@@ -46,6 +48,8 @@ export function ProfileHeader({
   location,
   verificationStatus,
   onEditProfile,
+  onOpenOrganiser,
+  isPublisher,
 }: ProfileHeaderProps) {
   const colors = useColors();
   const isBusiness = accountType === "business" && !!organisation;
@@ -151,18 +155,51 @@ export function ProfileHeader({
         </Pressable>
       )}
 
-      <Pressable
-        onPress={onEditProfile}
-        style={({ pressed }) => [
-          styles.editBtn,
-          { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Edit profile"
-      >
-        <Ionicons name="create-outline" size={16} color={colors.foreground} />
-        <Text style={[styles.editText, { color: colors.foreground }]}>Edit Profile</Text>
-      </Pressable>
+      <View style={styles.actionButtonsRow}>
+        <Pressable
+          onPress={onEditProfile}
+          style={({ pressed }) => [
+            styles.actionBtn,
+            styles.editBtn,
+            { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Edit profile"
+        >
+          <Ionicons name="create-outline" size={15} color={colors.foreground} />
+          <Text style={[styles.actionBtnText, { color: colors.foreground }]}>Edit Profile</Text>
+        </Pressable>
+
+        {onOpenOrganiser ? (
+          <Pressable
+            onPress={onOpenOrganiser}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              {
+                backgroundColor: isPublisher ? "rgba(0, 163, 255, 0.12)" : `${colors.primary}18`,
+                borderColor: isPublisher ? "rgba(0, 163, 255, 0.35)" : `${colors.primary}40`,
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={isPublisher ? "Organizer Dashboard" : "Become an organizer"}
+          >
+            <Ionicons
+              name={isPublisher ? "grid-outline" : "sparkles"}
+              size={14}
+              color={isPublisher ? "#00A3FF" : colors.primary}
+            />
+            <Text
+              style={[
+                styles.actionBtnText,
+                { color: isPublisher ? "#00A3FF" : colors.primary, fontFamily: "Inter_700Bold" },
+              ]}
+            >
+              {isPublisher ? "Dashboard" : "Become Organizer"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
     </GlassSurface>
   );
 }
@@ -198,7 +235,14 @@ const styles = StyleSheet.create({
   bio: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular" },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: { fontSize: 13, fontFamily: "Inter_400Regular", flexShrink: 1 },
-  editBtn: {
+  actionButtonsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 4,
+  },
+  actionBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -207,5 +251,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  editText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  editBtn: {},
+  actionBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

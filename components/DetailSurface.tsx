@@ -10,7 +10,7 @@ export function DetailSurface({ style, ...props }: ViewProps) {
   return <View {...props} style={[styles.surface, {
     backgroundColor: colors.card,
     borderColor: colors.border,
-    borderTopColor: scheme === "dark" ? "#343C50" : "#FFFFFF",
+    borderTopColor: scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "#FFFFFF",
     boxShadow: scheme === "dark"
       ? "5px 5px 14px rgba(0,0,0,0.28), -3px -3px 10px rgba(255,255,255,0.025)"
       : "5px 5px 14px rgba(35,57,89,0.09), -4px -4px 12px rgba(255,255,255,0.85)",

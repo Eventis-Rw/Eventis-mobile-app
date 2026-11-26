@@ -304,6 +304,97 @@ export class ApiChatService implements ChatService {
     return this.mapConversation(conversation);
   }
 
+  async createGroup(title: string, memberContactIds: string[]): Promise<ChatConversation> {
+    const groupName = title.trim() || "Eventis Group";
+    try {
+      const result = await api.post<ApiConversation>("/api/v1/chat/conversations", {
+        type: "GROUP",
+        title: groupName,
+        userIds: memberContactIds,
+        service: "EVENTIS",
+      });
+      return this.mapConversation(result);
+    } catch (e) {
+      // Fallback local group structure
+      const groupId = `group-${Date.now()}`;
+      const code = `EVENTIS-${groupName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4) || "KGL"}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const groupContact: ChatContact = {
+        id: `group:${groupId}`,
+        name: groupName,
+        phone: "",
+        avatarUrl: FALLBACK_AVATAR,
+        headline: `${memberContactIds.length + 1} members`,
+        isEventisUser: true,
+        isOnline: true,
+        isGroup: true,
+        memberCount: memberContactIds.length + 1,
+      };
+      this.contacts.set(groupContact.id, groupContact);
+      const conversation: ChatConversation = {
+        id: groupId,
+        contactId: groupContact.id,
+        lastMessage: `Group "${groupName}" created`,
+        lastMessageAt: new Date().toISOString(),
+        unreadCount: 0,
+        isGroup: true,
+        title: groupName,
+        memberCount: memberContactIds.length + 1,
+        memberIds: memberContactIds,
+        inviteCode: code,
+      };
+      return conversation;
+    }
+  }
+
+  async addMembersToGroup(conversationId: string, contactIds: string[]): Promise<ChatConversation> {
+    try {
+      const result = await api.post<ApiConversation>(`/api/v1/chat/conversations/${conversationId}/participants`, {
+        userIds: contactIds,
+      });
+      return this.mapConversation(result);
+    } catch {
+      const existing = await this.startConversation(conversationId).catch(() => null);
+      if (existing) {
+        existing.memberCount = (existing.memberCount ?? 1) + contactIds.length;
+        existing.lastMessage = `Added ${contactIds.length} members`;
+        return existing;
+      }
+      throw new Error("Could not add members to group.");
+    }
+  }
+
+  async joinGroup(inviteCodeOrId: string): Promise<ChatConversation> {
+    try {
+      const result = await api.post<ApiConversation>("/api/v1/chat/conversations/join", {
+        inviteCode: inviteCodeOrId.trim(),
+        groupName: inviteCodeOrId.trim(),
+      });
+      return this.mapConversation(result);
+    } catch {
+      const title = inviteCodeOrId.trim() || "Joined Group";
+      return this.createGroup(title, []);
+    }
+  }
+
+  async logCall(
+    conversationId: string,
+    type: "VOICE" | "VIDEO",
+    status: "MISSED" | "ENDED" | "REJECTED",
+    durationSec?: number,
+  ): Promise<ChatMessage> {
+    const text =
+      status === "MISSED"
+        ? type === "VIDEO"
+          ? "Missed video call"
+          : "Missed voice call"
+        : type === "VIDEO"
+          ? "Video call"
+          : "Voice call";
+    return this.sendMessage(conversationId, text, {
+      callInfo: { type, status, durationSec },
+    });
+  }
+
   async sendMessage(
     conversationId: string,
     text: string,
