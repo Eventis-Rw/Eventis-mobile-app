@@ -1745,48 +1745,43 @@ export default function ConversationScreen() {
       </View>
       <ChatActionSheet
         visible={attachOpen}
-        title="Share in Chat"
+        layout="grid"
         actions={[
           {
-            label: "Photos & Library",
-            subtitle: "Send photos from your gallery",
-            icon: "images-outline",
-            iconColor: "#38BDF8",
-            iconBg: "rgba(56, 189, 248, 0.12)",
+            label: "Gallery",
+            icon: "images" as const,
+            iconColor: "#FFFFFF",
+            iconBg: "#7C3AED",
             onPress: () => void pickPhoto(),
           },
           {
             label: "Camera",
-            subtitle: "Take a photo right now",
-            icon: "camera-outline",
-            iconColor: "#EC4899",
-            iconBg: "rgba(236, 72, 153, 0.12)",
+            icon: "camera" as const,
+            iconColor: "#FFFFFF",
+            iconBg: "#EC4899",
             onPress: () => void takePhoto(),
           },
           {
             label: "Video",
-            subtitle: "Send a video from your gallery",
-            icon: "videocam-outline",
-            iconColor: "#F59E0B",
-            iconBg: "rgba(245, 158, 11, 0.12)",
+            icon: "videocam" as const,
+            iconColor: "#FFFFFF",
+            iconBg: "#E11D48",
             onPress: () => void pickVideo(),
           },
           {
-            label: "Voice Note",
-            subtitle: "Record a quick voice message",
-            icon: "mic-outline",
-            iconColor: "#22C55E",
-            iconBg: "rgba(34, 197, 94, 0.12)",
+            label: "Audio",
+            icon: "mic" as const,
+            iconColor: "#FFFFFF",
+            iconBg: "#F97316",
             onPress: () => void startVoiceRecording(),
           },
           ...(isGroupChat
             ? [
                 {
-                  label: "Share Group Invite",
-                  subtitle: `Invite friends to ${contactDisplayName}`,
-                  icon: "share-social-outline" as const,
-                  iconColor: "#A855F7",
-                  iconBg: "rgba(168, 85, 247, 0.12)",
+                  label: "Invite",
+                  icon: "people" as const,
+                  iconColor: "#FFFFFF",
+                  iconBg: "#3B82F6",
                   onPress: () => {
                     if (conversation?.inviteCode) {
                       void Share.share({
@@ -1799,18 +1794,16 @@ export default function ConversationScreen() {
             : [
                 {
                   label: "Voice Call",
-                  subtitle: `Audio call with ${contactDisplayName}`,
-                  icon: "call-outline" as const,
-                  iconColor: "#10B981",
-                  iconBg: "rgba(16, 185, 129, 0.12)",
+                  icon: "call" as const,
+                  iconColor: "#FFFFFF",
+                  iconBg: "#10B981",
                   onPress: () => startCall("VOICE"),
                 },
                 {
                   label: "Video Call",
-                  subtitle: `Face-to-face video with ${contactDisplayName}`,
-                  icon: "videocam-outline" as const,
-                  iconColor: "#6366F1",
-                  iconBg: "rgba(99, 102, 241, 0.12)",
+                  icon: "videocam" as const,
+                  iconColor: "#FFFFFF",
+                  iconBg: "#06B6D4",
                   onPress: () => startCall("VIDEO"),
                 },
               ]),
@@ -1819,6 +1812,7 @@ export default function ConversationScreen() {
       />
       <ChatActionSheet
         visible={Boolean(selected)}
+        layout="list"
         title="Message"
         actions={messageActions}
         onClose={() => setSelected(null)}

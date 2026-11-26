@@ -451,7 +451,14 @@ function TabLayout() {
             tabBarAccessibilityLabel: LIVE_ENABLED ? "Live" : "Live, temporarily unavailable",
             tabBarItemStyle: [styles.item, !LIVE_ENABLED && styles.disabledItem],
             tabBarIcon: ({ color, focused }) => (
-              <LiveTabIcon color={color} focused={LIVE_ENABLED && focused} isDisabled={!LIVE_ENABLED} />
+              <TabIcon
+                activeIcon="videocam"
+                inactiveIcon="videocam-outline"
+                color={focused ? "#EF4444" : color}
+                focused={LIVE_ENABLED && focused}
+                isDisabled={!LIVE_ENABLED}
+                label="Live"
+              />
             ),
           }}
         />
