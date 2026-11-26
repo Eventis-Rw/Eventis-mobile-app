@@ -1624,38 +1624,30 @@ export default function ConversationScreen() {
                 },
               ]}
             >
-              {Platform.OS === "android" ? null : (
-                <Pressable
-                  onPress={openAttachments}
-                  disabled={busy || Boolean(editing)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add an attachment"
-                  style={styles.composerSideButton}
+              <Pressable
+                onPress={openAttachments}
+                disabled={busy || Boolean(editing)}
+                accessibilityRole="button"
+                accessibilityLabel="Add an attachment"
+                style={styles.composerPlusButton}
+              >
+                <View
+                  style={[
+                    styles.composerPlusCircle,
+                    {
+                      backgroundColor: colors.secondary,
+                    },
+                  ]}
                 >
                   <Ionicons
                     name="add"
-                    size={31}
+                    size={24}
                     color={busy || editing ? colors.disabled : colors.primary}
                   />
-                </Pressable>
-              )}
+                </View>
+              </Pressable>
+
               <View style={[styles.inputPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                {Platform.OS === "android" ? (
-                  <Pressable
-                    onPress={toggleEmojiPicker}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      emojiOpen ? "Close emoji picker" : "Open emoji picker"
-                    }
-                    style={styles.inputAction}
-                  >
-                    <Ionicons
-                      name="happy-outline"
-                      size={25}
-                      color={colors.mutedForeground}
-                    />
-                  </Pressable>
-                ) : null}
                 <TextInput
                   ref={input}
                   value={composer}
@@ -1676,41 +1668,23 @@ export default function ConversationScreen() {
                   maxLength={4000}
                   accessibilityLabel="Message composer"
                 />
-                {Platform.OS === "android" ? (
-                  <Pressable
-                    onPress={openAttachments}
-                    disabled={busy || Boolean(editing)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add an attachment"
-                    style={styles.inputAction}
-                  >
-                    <Ionicons
-                      name="attach-outline"
-                      size={25}
-                      color={
-                        busy || editing
-                          ? colors.disabled
-                          : colors.mutedForeground
-                      }
-                    />
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    onPress={toggleEmojiPicker}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      emojiOpen ? "Close emoji picker" : "Open emoji picker"
-                    }
-                    style={styles.inputAction}
-                  >
-                    <Ionicons
-                      name="happy-outline"
-                      size={25}
-                      color={colors.mutedForeground}
-                    />
-                  </Pressable>
-                )}
-                {Platform.OS === "android" ? (
+
+                <Pressable
+                  onPress={toggleEmojiPicker}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    emojiOpen ? "Close emoji picker" : "Open emoji picker"
+                  }
+                  style={styles.inputAction}
+                >
+                  <Ionicons
+                    name="happy-outline"
+                    size={24}
+                    color={colors.mutedForeground}
+                  />
+                </Pressable>
+
+                {!composer.trim() && !media && (
                   <Pressable
                     onPress={() => void takePhoto()}
                     disabled={busy || Boolean(editing)}
@@ -1720,7 +1694,7 @@ export default function ConversationScreen() {
                   >
                     <Ionicons
                       name="camera-outline"
-                      size={25}
+                      size={24}
                       color={
                         busy || editing
                           ? colors.disabled
@@ -1728,25 +1702,9 @@ export default function ConversationScreen() {
                       }
                     />
                   </Pressable>
-                ) : null}
+                )}
               </View>
-              {Platform.OS === "android" ? null : (
-                <Pressable
-                  onPress={() => void takePhoto()}
-                  disabled={busy || Boolean(editing)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Take a photo"
-                  style={styles.composerSideButton}
-                >
-                  <Ionicons
-                    name="camera-outline"
-                    size={28}
-                    color={
-                      busy || editing ? colors.disabled : colors.mutedForeground
-                    }
-                  />
-                </Pressable>
-              )}
+
               <Pressable
                 onPress={
                   composer.trim() || media || editing
@@ -1769,19 +1727,17 @@ export default function ConversationScreen() {
                   },
                 ]}
               >
-                {(
-                  <Ionicons
-                    name={
-                      editing
-                        ? "checkmark"
-                        : busy || composer.trim() || media
-                          ? "send"
-                          : "mic"
-                    }
-                    size={24}
-                    color="#FFFFFF"
-                  />
-                )}
+                <Ionicons
+                  name={
+                    editing
+                      ? "checkmark"
+                      : busy || composer.trim() || media
+                        ? "send"
+                        : "mic"
+                  }
+                  size={22}
+                  color="#FFFFFF"
+                />
               </Pressable>
             </View>
           )}
@@ -1789,23 +1745,75 @@ export default function ConversationScreen() {
       </View>
       <ChatActionSheet
         visible={attachOpen}
-        title="Add to chat"
+        title="Share in Chat"
         actions={[
           {
-            label: "Photo",
-            icon: "image-outline",
+            label: "Photos & Library",
+            subtitle: "Send photos from your gallery",
+            icon: "images-outline",
+            iconColor: "#38BDF8",
+            iconBg: "rgba(56, 189, 248, 0.12)",
             onPress: () => void pickPhoto(),
           },
           {
+            label: "Camera",
+            subtitle: "Take a photo right now",
+            icon: "camera-outline",
+            iconColor: "#EC4899",
+            iconBg: "rgba(236, 72, 153, 0.12)",
+            onPress: () => void takePhoto(),
+          },
+          {
             label: "Video",
+            subtitle: "Send a video from your gallery",
             icon: "videocam-outline",
+            iconColor: "#F59E0B",
+            iconBg: "rgba(245, 158, 11, 0.12)",
             onPress: () => void pickVideo(),
           },
           {
-            label: "Take a photo",
-            icon: "camera-outline",
-            onPress: () => void takePhoto(),
+            label: "Voice Note",
+            subtitle: "Record a quick voice message",
+            icon: "mic-outline",
+            iconColor: "#22C55E",
+            iconBg: "rgba(34, 197, 94, 0.12)",
+            onPress: () => void startVoiceRecording(),
           },
+          ...(isGroupChat
+            ? [
+                {
+                  label: "Share Group Invite",
+                  subtitle: `Invite friends to ${contactDisplayName}`,
+                  icon: "share-social-outline" as const,
+                  iconColor: "#A855F7",
+                  iconBg: "rgba(168, 85, 247, 0.12)",
+                  onPress: () => {
+                    if (conversation?.inviteCode) {
+                      void Share.share({
+                        message: `Join our group "${contactDisplayName}" on Eventis using invite code: ${conversation.inviteCode}`,
+                      });
+                    }
+                  },
+                },
+              ]
+            : [
+                {
+                  label: "Voice Call",
+                  subtitle: `Audio call with ${contactDisplayName}`,
+                  icon: "call-outline" as const,
+                  iconColor: "#10B981",
+                  iconBg: "rgba(16, 185, 129, 0.12)",
+                  onPress: () => startCall("VOICE"),
+                },
+                {
+                  label: "Video Call",
+                  subtitle: `Face-to-face video with ${contactDisplayName}`,
+                  icon: "videocam-outline" as const,
+                  iconColor: "#6366F1",
+                  iconBg: "rgba(99, 102, 241, 0.12)",
+                  onPress: () => startCall("VIDEO"),
+                },
+              ]),
         ]}
         onClose={() => setAttachOpen(false)}
       />
@@ -2308,6 +2316,18 @@ const styles = StyleSheet.create({
   composerSideButton: {
     width: 42,
     height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  composerPlusButton: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 2,
+  },
+  composerPlusCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },

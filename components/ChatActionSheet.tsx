@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +12,10 @@ import { useChatColors } from "@/hooks/useChatColors";
 
 export interface ChatAction {
   label: string;
+  subtitle?: string;
   icon: React.ComponentProps<typeof Ionicons>["name"];
+  iconColor?: string;
+  iconBg?: string;
   destructive?: boolean;
   onPress: () => void;
 }
@@ -34,10 +38,10 @@ export function ChatActionSheet({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+      <View style={[styles.overlay, { backgroundColor: "rgba(0, 0, 0, 0.55)" }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
@@ -53,6 +57,7 @@ export function ChatActionSheet({
             },
           ]}
         >
+          <View style={styles.handle} />
           <Text
             accessibilityRole="header"
             style={[styles.title, { color: colors.foreground }]}
@@ -64,7 +69,7 @@ export function ChatActionSheet({
               {subtitle}
             </Text>
           ) : null}
-          <ScrollView>
+          <ScrollView showsVerticalScrollIndicator={false}>
             {actions.map((action, index) => (
               <Pressable
                 key={`${action.label}-${index}`}
@@ -81,34 +86,67 @@ export function ChatActionSheet({
                   },
                 ]}
               >
-                <Ionicons
-                  name={action.icon}
-                  size={21}
-                  color={
-                    action.destructive ? colors.destructive : colors.primary
-                  }
-                />
-                <Text
+                <View
                   style={[
-                    styles.label,
+                    styles.actionIconBox,
                     {
-                      color: action.destructive
-                        ? colors.destructive
-                        : colors.foreground,
+                      backgroundColor:
+                        action.iconBg ??
+                        (action.destructive
+                          ? "rgba(239, 68, 68, 0.12)"
+                          : colors.secondary),
                     },
                   ]}
                 >
-                  {action.label}
-                </Text>
+                  <Ionicons
+                    name={action.icon}
+                    size={22}
+                    color={
+                      action.iconColor ??
+                      (action.destructive ? colors.destructive : colors.primary)
+                    }
+                  />
+                </View>
+                <View style={styles.actionTextBox}>
+                  <Text
+                    style={[
+                      styles.label,
+                      {
+                        color: action.destructive
+                          ? colors.destructive
+                          : colors.foreground,
+                      },
+                    ]}
+                  >
+                    {action.label}
+                  </Text>
+                  {action.subtitle ? (
+                    <Text
+                      style={[
+                        styles.actionSubtitle,
+                        { color: colors.mutedForeground },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {action.subtitle}
+                    </Text>
+                  ) : null}
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={colors.mutedForeground}
+                  style={{ opacity: 0.5 }}
+                />
               </Pressable>
             ))}
           </ScrollView>
           <Pressable
             onPress={onClose}
             accessibilityRole="button"
-            style={styles.cancel}
+            style={[styles.cancel, { backgroundColor: colors.secondary }]}
           >
-            <Text style={[styles.label, { color: colors.primary }]}>
+            <Text style={[styles.cancelLabel, { color: colors.foreground }]}>
               Cancel
             </Text>
           </Pressable>
@@ -121,41 +159,82 @@ export function ChatActionSheet({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
   },
   sheet: {
     width: "100%",
-    maxWidth: 480,
-    maxHeight: "76%",
-    borderRadius: 18,
+    maxWidth: 580,
+    alignSelf: "center",
+    maxHeight: "82%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 20,
-    elevation: 14,
-    boxShadow: "0 10px 32px rgba(0,0,0,0.26)",
+    borderBottomWidth: 0,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+    elevation: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
   },
-  title: { fontFamily: "Inter_700Bold", fontSize: 18, marginBottom: 8 },
+  handle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(150, 150, 150, 0.4)",
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  title: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
   subtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 18,
     marginBottom: 12,
+    paddingHorizontal: 4,
   },
   action: {
-    minHeight: 52,
-    borderRadius: 12,
+    minHeight: 56,
+    borderRadius: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
-  label: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  cancel: {
-    minHeight: 48,
-    borderRadius: 14,
+  actionIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 12,
+  },
+  actionTextBox: {
+    flex: 1,
+    gap: 2,
+  },
+  label: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
+  actionSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+  },
+  cancel: {
+    minHeight: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 14,
+  },
+  cancelLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
   },
 });
