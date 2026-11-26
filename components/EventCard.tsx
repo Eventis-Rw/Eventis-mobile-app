@@ -900,7 +900,6 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
           styles.instaCard,
           {
             backgroundColor: postSurface,
-            borderBottomColor: colors.border,
           },
           animatedStyle,
         ]}
@@ -1565,9 +1564,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 0,
     borderRadius: 0,
     borderWidth: 0,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
     overflow: "hidden",
-    marginBottom: 0,
+    marginBottom: 16,
   },
   instaHeader: {
     flexDirection: "row",

@@ -386,7 +386,7 @@ export default function EventDetailScreen() {
           style={styles.contentContainer}
         >
           {/* INTERACTIVE SOCIAL BAR: Like, Comment, Share, Save */}
-          <View style={[styles.socialBar, { borderBottomColor: colors.border }]}>
+          <View style={styles.socialBar}>
             <View style={styles.socialBarLeft}>
               <EventInteractions event={event} viewer={user} />
               <Pressable
@@ -1215,7 +1215,7 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     justifyContent: "space-between",
     paddingBottom: 14,
     marginBottom: 18,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
   },
   socialBarLeft: {
     flexDirection: "row",
@@ -1235,9 +1235,9 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     fontFamily: "Inter_600SemiBold",
   },
   sectionDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginVertical: 24,
+    height: 0,
+    backgroundColor: "transparent",
+    marginVertical: 12,
   },
   sectionHeadingTitle: {
     color: colors.foreground,
@@ -1256,8 +1256,7 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     alignItems: "flex-start",
     gap: 14,
     paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomWidth: 0,
   },
   specRowLast: {
     borderBottomWidth: 0,
@@ -1441,8 +1440,7 @@ const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create
     paddingVertical: 10,
   },
   guidelineRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomWidth: 0,
   },
   guidelineCheckCircle: {
     width: 22,

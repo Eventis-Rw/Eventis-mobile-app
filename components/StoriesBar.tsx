@@ -32,7 +32,7 @@ export function StoriesBar({
   };
 
   return (
-    <View style={[styles.container, { borderBottomColor: colors.border }]}>
+    <View style={styles.container}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   container: {
     paddingTop: 8,
     paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
   },
   row: {
     paddingHorizontal: 14,
