@@ -1,3 +1,6 @@
+import { type InfiniteData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchHomeEventPage, USE_EVENTS_API } from "@/services/eventApi";
+import { localToday } from "@/utils/dates";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { type ComponentRef, useCallback, useMemo, useRef, useState } from "react";
@@ -42,10 +45,24 @@ export default function HomeScreen() {
   const colors = useColors();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isRestoringOrganiser } = useAuth();
   const { step: organiserStep, openOrganiserFlow } = useOrganiserAccess();
   const application = user?.organiserApplication;
+  const organiserLabel = isRestoringOrganiser ? "Checking access…" : application?.status === "IN_REVIEW" ? "In Review"
+    : application?.status === "REJECTED" ? "Reapply"
+    : application?.status === "PENDING_PAYMENT" ? "Pending"
+    : organiserStep === "ready" ? "Dashboard" : organiserStep === "setup" ? "Set up organizer" : "Become organizer";
+
   const organizerConfig = useMemo(() => {
+    if (isRestoringOrganiser) {
+      return {
+        label: "Checking access…",
+        icon: "time-outline" as const,
+        bg: "rgba(255, 255, 255, 0.08)",
+        border: "rgba(255, 255, 255, 0.2)",
+        color: colors.foreground,
+      };
+    }
     if (application?.status === "IN_REVIEW") {
       return {
         label: "In Review",
@@ -89,7 +106,7 @@ export default function HomeScreen() {
       border: "rgba(255, 45, 85, 0.32)",
       color: colors.primary,
     };
-  }, [application?.status, organiserStep, colors.primary]);
+  }, [application?.status, organiserStep, colors.primary, colors.foreground, isRestoringOrganiser]);
 
   const handleOrganizerPress = useCallback(() => {
     if (organiserStep === "intro" && !application) {
@@ -102,7 +119,8 @@ export default function HomeScreen() {
   const flatListRef = useRef<FlatList<any>>(null);
   const notifications = useNotificationsOptional();
   const unreadNotifications = notifications?.unreadCount ?? 0;
-  const { events, categories, isLoading, error, refreshEvents } = useEvents();
+  const catalogue = useEvents(!USE_EVENTS_API);
+  const { categories } = catalogue;
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
@@ -112,10 +130,36 @@ export default function HomeScreen() {
   const feedAnalytics = useFeedAnalytics(selectedCategory === "All" ? "home" : "category", viewerOpen || showOrganizerModal || cardCovered);
   const location = useLocationPermission();
 
-  // Keep visible events during refresh. Empty feeds show skeletons until the request settles.
-  const showSkeletons = (!user || isLoading) && events.length === 0;
-
   const now = useEventClock();
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - 1); // Include overnight events, then check their exact end time below.
+  const since = localToday(cutoff);
+  const queryKey = useMemo(() => ["home-events", user?.id, selectedCategory, since], [user?.id, selectedCategory, since]);
+  const queryClient = useQueryClient();
+  const { data, isPending, error: pageError, isFetching, hasNextPage, fetchNextPage, refetch } = useInfiniteQuery({
+    queryKey,
+    enabled: USE_EVENTS_API && !!user,
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => fetchHomeEventPage(pageParam, selectedCategory, since),
+    getNextPageParam: last => last.nextPage,
+    staleTime: 30_000,
+    retry: 1,
+  });
+  const pageEvents = useMemo(() => {
+    const byId = new Map(data?.pages.flatMap(page => page.items.map(item => [item.id, item] as const)));
+    return Array.from(byId.values());
+  }, [data]);
+  const events = USE_EVENTS_API ? pageEvents : catalogue.events;
+  const isLoading = USE_EVENTS_API ? isPending : catalogue.isLoading;
+  const error = USE_EVENTS_API ? pageError : catalogue.error;
+  const refreshCatalogue = catalogue.refreshEvents;
+  const refreshEvents = useCallback(async () => {
+    if (!USE_EVENTS_API) return refreshCatalogue();
+    if (!user?.id) return;
+    queryClient.setQueryData<InfiniteData<Awaited<ReturnType<typeof fetchHomeEventPage>>>>(queryKey, old =>
+      old && old.pages.length > 1 ? { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) } : old);
+    await refetch();
+  }, [user?.id, queryKey, queryClient, refetch, refreshCatalogue]);
   const currentEvents = useMemo(() => events.filter(event => getEventTiming(event, now).kind !== "ended"), [events, now]);
 
   const filtered = useMemo(() => {
@@ -124,7 +168,7 @@ export default function HomeScreen() {
         ? currentEvents
         : currentEvents.filter((e) => e.category === selectedCategory);
     // Demo/featured posts are pinned first; everything else keeps the API's
-    // order (most recently posted first) — Array.sort is stable, so returning
+    // order — Array.sort is stable, so returning
     // 0 here preserves that order instead of re-ranking by distance.
     return [...list].sort((a, b) => {
       const first = DEMO_POST_ORDER.indexOf(a.id);
@@ -135,6 +179,17 @@ export default function HomeScreen() {
       return 0;
     });
   }, [currentEvents, selectedCategory]);
+  const needsMore = USE_EVENTS_API && !!hasNextPage && filtered.length < visibleCount;
+  React.useEffect(() => {
+    if (needsMore && !isFetching && !pageError) void fetchNextPage();
+  }, [needsMore, isFetching, pageError, fetchNextPage]);
+  const showSkeletons = filtered.length === 0 && (!user || isLoading || (needsMore && !pageError));
+  const recheck = useCallback(() => {
+    if (!USE_EVENTS_API) { void refreshCatalogue(); return; }
+    // Scrolling through previous pages must not cause those pages to download on every poll.
+    if (user?.id && (data?.pages.length ?? 0) <= 1) void refetch({ cancelRefetch: false });
+  }, [user?.id, data?.pages.length, refetch, refreshCatalogue]);
+
   const onRefresh = useCallback(async () => {
     setVisibleCount(FEED_PAGE_SIZE);
     setRefreshing(true);
@@ -147,18 +202,19 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (USE_EVENTS_API && queryClient.getQueryState(queryKey)?.isInvalidated) void refreshEvents();
       // Recheck the feed while the landing page is open, so a dropped
       // connection recovers on its own when the API becomes reachable again.
       const interval = setInterval(() => {
         if (AppState.currentState === "active") {
-          void refreshEvents();
+          recheck();
           void refreshStories();
         }
       }, 30_000);
       const appState = AppState.addEventListener("change", (state) => {
-        if (state === "active") void refreshEvents();
+        if (state === "active") recheck();
       });
-      const onOnline = () => void refreshEvents();
+      const onOnline = recheck;
       if (Platform.OS === "web") window.addEventListener("online", onOnline);
 
       return () => {
@@ -166,7 +222,7 @@ export default function HomeScreen() {
         appState.remove();
         if (Platform.OS === "web") window.removeEventListener("online", onOnline);
       };
-    }, [refreshEvents, refreshStories]),
+    }, [recheck, queryClient, queryKey, refreshEvents, refreshStories]),
   );
 
   const categoryScrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -190,8 +246,9 @@ export default function HomeScreen() {
   );
   const loadMore = useCallback(() => {
     if (isLoading || refreshing) return;
-    setVisibleCount((count) => Math.min(count + FEED_PAGE_SIZE, filtered.length));
-  }, [isLoading, refreshing, filtered.length]);
+    if (visibleCount < filtered.length) setVisibleCount(count => count + FEED_PAGE_SIZE);
+    else if (hasNextPage && !isFetching && !pageError) setVisibleCount(count => count + FEED_PAGE_SIZE);
+  }, [isLoading, refreshing, filtered.length, visibleCount, hasNextPage, isFetching, pageError]);
 
   const openSearch = useCallback(() => {
     router.push("/search");
@@ -210,7 +267,7 @@ export default function HomeScreen() {
       );
     }
 
-    if (!showSkeletons && !currentEvents.length) {
+    if (!showSkeletons && !currentEvents.length && selectedCategory === "All") {
       return (
         <StateMessage
           icon="calendar-clear-outline"
@@ -381,9 +438,13 @@ export default function HomeScreen() {
             {renderBody()}
           </>
         }
-        ListFooterComponent={visibleEvents.length ? (
+        ListFooterComponent={pageError && visibleEvents.length > 0 && hasNextPage ? (
+          <Pressable onPress={() => void fetchNextPage()} accessibilityRole="button">
+            <Text style={{ color: colors.primary, textAlign: "center", paddingVertical: 20 }}>Retry loading more events</Text>
+          </Pressable>
+        ) : visibleEvents.length ? (
           <Text style={{ color: colors.mutedForeground, textAlign: "center", paddingVertical: 20 }}>
-            {visibleCount < filtered.length ? "Scroll for more events" : "You're all caught up"}
+            {visibleCount < filtered.length || hasNextPage ? "Scroll for more events" : "You're all caught up"}
           </Text>
         ) : undefined}
         onEndReached={loadMore}

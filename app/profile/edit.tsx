@@ -124,7 +124,7 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { user, updateProfile, updateOrganisation } = useAuth();
-  const { categories: eventCategories } = useEvents();
+  const { categories: eventCategories } = useEvents(false);
   const { accountType, isPublisher } = useAccountCapabilities();
   const isBusiness = accountType === "business" && !!user?.organisation;
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);

@@ -16,7 +16,7 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useEventClock } from "@/hooks/useEventClock";
 import { getEventTiming } from "@/constants/eventPresentation";
 import { useBookings } from "@/context/BookingsContext";
-import { useEvents } from "@/context/EventsContext";
+import { useListedEvent } from "@/context/EventsContext";
 import { useColors } from "@/hooks/useColors";
 import { GlassSurface } from "@/components/GlassSurface";
 
@@ -33,10 +33,9 @@ export default function BookingScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { bookings, hasBookedEvent } = useBookings();
-  const { getEventById } = useEvents();
+  const { event } = useListedEvent(id);
   const [quantity, setQuantity] = useState(1);
 
-  const event = getEventById(id ?? "");
   const isAlreadyBooked = hasBookedEvent(id ?? "");
   const activeBooking = bookings.find((b) => b.eventId === id && b.status !== "cancelled");
   const existingBooking = bookings.find((b) => b.id === bookingId && b.eventId === id) ?? activeBooking;

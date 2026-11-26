@@ -23,7 +23,7 @@ export default function DiscoveryPreferencesScreen() {
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const navigation = useNavigation();
-  const { categories: allCategories } = useEvents();
+  const { categories: allCategories } = useEvents(false);
   const discovery = useDiscoveryPreferences();
   const locationPermission = useLocationPermission();
 

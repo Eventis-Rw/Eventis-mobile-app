@@ -288,7 +288,7 @@ const HIDDEN_TAB_OPTIONS = {
 
 function TabLayout() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isRestoringOrganiser } = useAuth();
   const postsLeft = user?.organiserSubscription?.postsRemaining ?? 0;
   const { conversations } = useChat();
   const [showOrganizerSheet, setShowOrganizerSheet] = useState(false);
@@ -483,7 +483,9 @@ function TabLayout() {
             onPress={(e) => e.stopPropagation()}
           >
             <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
-            {user?.isBusinessAccount ? (
+            {isRestoringOrganiser ? (
+              <Text accessibilityLiveRegion="polite" style={[styles.modalTitle, { color: colors.foreground }]}>Checking organiser access…</Text>
+            ) : user?.isBusinessAccount ? (
               <>
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>Create something worth sharing</Text>
                 <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>Publish an event or share a story with your audience.</Text>

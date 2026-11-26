@@ -1,3 +1,4 @@
+import { type InfiniteData, useQueryClient } from "@tanstack/react-query";
 import React, {
   createContext,
   useCallback,
@@ -14,6 +15,7 @@ import {
   type EventCategory,
 } from "@/constants/events";
 import { useAuth } from "@/context/AuthContext";
+import type { fetchHomeEventPage } from "@/services/eventApi";
 import { fetchEvents } from "@/utils/eventsService";
 
 interface ApiCategory {
@@ -36,13 +38,15 @@ interface EventsContextValue {
   isLoading: boolean;
   error: string | null;
   refreshEvents: () => Promise<void>;
+  ensureEvents: () => void;
 }
 
 const EventsContext = createContext<EventsContextValue | null>(null);
 
 export function EventsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [events, setEvents] = useState<Event[]>([]);
+  const queryClient = useQueryClient();
+  const [catalogue, setCatalogue] = useState<{ userId: string; items: Event[] } | null>(null);
   const categories = CATEGORIES;
   const [activeCategory, setActiveCategory] = useState<EventCategory>("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,19 +60,20 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
 
   const refreshEvents = useCallback(async () => {
     if (!userId) {
-      setEvents([]);
+      setCatalogue(null);
       setError(null);
       setSettledUserId(null);
       setIsLoading(false);
       return;
     }
+    void queryClient.invalidateQueries({ queryKey: ["home-events", userId], refetchType: "none" });
     if (refreshInFlight.current === userId) return;
     refreshInFlight.current = userId;
     setIsLoading(true);
     setError(null);
     try {
       const next = await fetchEvents();
-      if (activeUserId.current === userId) setEvents(next);
+      if (activeUserId.current === userId) setCatalogue({ userId, items: next });
     } catch (e) {
       if (activeUserId.current === userId) setError(e instanceof Error && e.message ? e.message : "Couldn't load events");
     } finally {
@@ -78,11 +83,15 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
       }
     }
-  }, [userId]);
+  }, [userId, queryClient]);
 
+  const ensureEvents = useCallback(() => {
+    if (userId && settledUserId !== userId) void refreshEvents();
+  }, [userId, settledUserId, refreshEvents]);
   useEffect(() => {
-    refreshEvents();
-  }, [refreshEvents]);
+    if (!userId) void refreshEvents();
+  }, [userId, refreshEvents]);
+  const events = useMemo(() => catalogue && catalogue.userId === userId ? catalogue.items : [], [catalogue, userId]);
 
   const featuredEvents = useMemo(
     () => events.filter((e) => e.isFeatured),
@@ -127,6 +136,7 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
         isLoading: isLoading || Boolean(userId && settledUserId !== userId),
         error,
         refreshEvents,
+        ensureEvents,
       }}
     >
       {children}
@@ -134,8 +144,34 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useEvents() {
+export function useEvents(loadCatalogue = true) {
   const ctx = useContext(EventsContext);
+  const ensureEvents = ctx?.ensureEvents;
+  useEffect(() => { if (loadCatalogue) ensureEvents?.(); }, [loadCatalogue, ensureEvents]);
   if (!ctx) throw new Error("useEvents must be used within EventsProvider");
   return ctx;
+}
+
+/** Feed navigation can reuse the loaded card. Cold links fall back to the catalogue. */
+export function useListedEvent(id: string | undefined) {
+  const { user } = useAuth();
+  const client = useQueryClient();
+  const fromFeed = useMemo(() => {
+    if (!user?.id || !id) return;
+    const feeds = client.getQueriesData<InfiniteData<Awaited<ReturnType<typeof fetchHomeEventPage>>>>({
+      queryKey: ["home-events", user.id],
+      predicate: query => !query.state.isInvalidated && Date.now() - query.state.dataUpdatedAt < 30_000,
+    });
+    for (const [, data] of feeds) {
+      for (const page of data?.pages ?? []) {
+        const hit = page.items.find(item => item.id === id);
+        if (hit) return hit;
+      }
+    }
+  }, [id, user?.id, client]);
+  const catalogue = useEvents(!!id && !fromFeed);
+  return {
+    event: fromFeed ?? (id ? catalogue.getEventById(id) : undefined),
+    isLoading: !!id && !fromFeed && catalogue.isLoading,
+  };
 }

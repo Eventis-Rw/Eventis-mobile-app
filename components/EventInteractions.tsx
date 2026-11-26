@@ -1,3 +1,5 @@
+import { type InfiniteData, useQueryClient } from "@tanstack/react-query";
+import type { fetchHomeEventPage } from "@/services/eventApi";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type GestureResponderEvent } from "react-native";
@@ -26,11 +28,25 @@ export function EventInteractions({ event, viewer, onCommentCount }: {
 }) {
   const { id: eventId, ownerId } = event;
   const userId = viewer?.id;
+  const queryClient = useQueryClient();
+  function updateFeedCounts(changes: Partial<NonNullable<Event["interactions"]>>) {
+    queryClient.setQueriesData<InfiniteData<Awaited<ReturnType<typeof fetchHomeEventPage>>>>(
+      { queryKey: ["home-events", userId] },
+      data => data && ({
+        ...data,
+        pages: data.pages.map(page => ({
+          ...page,
+          items: page.items.map(item => item.id === eventId && item.interactions
+            ? { ...item, interactions: { ...item.interactions, ...changes } } : item),
+        })),
+      }),
+    );
+  }
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const [liked, setLiked] = useState(false);
-  const [likes, setLikes] = useState(0);
-  const [commentsCount, setCommentsCount] = useState(0);
+  const [liked, setLiked] = useState(event.interactions?.liked ?? false);
+  const [likes, setLikes] = useState(event.interactions?.likeCount ?? 0);
+  const [commentsCount, setCommentsCount] = useState(event.interactions?.commentCount ?? 0);
   const [open, setOpen] = useState(false);
   const [comments, setComments] = useState<EventComment[]>([]);
   const [text, setText] = useState("");
@@ -50,7 +66,8 @@ export function EventInteractions({ event, viewer, onCommentCount }: {
     let alive = true;
     const likesAtRequest = likeRevision.current;
     const commentsAtRequest = commentRevision.current;
-    getEventInteractions(eventId).then((summary) => {
+    const result = event.interactions ? Promise.resolve(event.interactions) : getEventInteractions(eventId);
+    result.then((summary) => {
       if (!alive) return;
       if (likesAtRequest === likeRevision.current) {
         setLiked(summary.liked);
@@ -64,7 +81,7 @@ export function EventInteractions({ event, viewer, onCommentCount }: {
       if (alive) setError(cause instanceof Error ? cause.message : "Could not load post interactions.");
     });
     return () => { alive = false; };
-  }, [eventId, onCommentCount]);
+  }, [eventId, userId, event.interactions, onCommentCount]);
 
   const onLike = async (pressEvent: GestureResponderEvent) => {
     pressEvent.stopPropagation();
@@ -72,7 +89,12 @@ export function EventInteractions({ event, viewer, onCommentCount }: {
     likeRevision.current += 1;
     const wasLiked = liked;
     setLiked(!wasLiked); setLikes((count) => Math.max(0, count + (wasLiked ? -1 : 1))); setBusy(true); setError("");
-    try { const result = await setEventLike(eventId, !wasLiked); setLiked(result.liked); setLikes(result.likeCount); }
+    try {
+      const result = await setEventLike(eventId, !wasLiked);
+      setLiked(result.liked);
+      setLikes(result.likeCount);
+      updateFeedCounts({ liked: result.liked, likeCount: result.likeCount });
+    }
     catch (cause) { setLiked(wasLiked); setLikes((count) => Math.max(0, count + (wasLiked ? 1 : -1))); setError(cause instanceof Error ? `Like failed: ${cause.message}` : "Could not update your like. Try again."); }
     finally { setBusy(false); }
   };
@@ -89,6 +111,7 @@ export function EventInteractions({ event, viewer, onCommentCount }: {
         const ids = new Set(items.map((item) => item.id));
         return [...items, ...page.items.filter((item) => !ids.has(item.id))];
       });
+      updateFeedCounts({ commentCount: page.total });
       setCommentPage(pageNumber); setCommentsCount(page.total); onCommentCount?.(page.total);
     }
     catch (cause) {
@@ -134,6 +157,7 @@ export function EventInteractions({ event, viewer, onCommentCount }: {
         scrollToNewComment.current = true;
         setComments((items) => [...items, comment]);
         setCommentsCount((count) => count + 1);
+        updateFeedCounts({ commentCount: commentsCount + 1 });
         onCommentCount?.(commentsCount + 1);
       }
       setText("");
@@ -151,6 +175,7 @@ export function EventInteractions({ event, viewer, onCommentCount }: {
       await deleteEventComment(comment.id);
       setComments((items) => items.filter((item) => item.id !== comment.id));
       setCommentsCount((count) => Math.max(0, count - 1));
+      updateFeedCounts({ commentCount: Math.max(0, commentsCount - 1) });
       onCommentCount?.(Math.max(0, commentsCount - 1));
       if (editing?.id === comment.id) { setEditing(null); setText(""); }
       await loadComments(1);

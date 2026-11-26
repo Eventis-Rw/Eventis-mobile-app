@@ -99,17 +99,17 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
     [toggleSaveEvent, event, isSaved, source, trackEvent]
   );
 
-  const { conversations, getContact, sendMessage } = useChat();
   const [showShareModal, setShowShareModal] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [showInsightsModal, setShowInsightsModal] = useState(false);
   const [reportState, setReportState] = useState<"idle" | "reported">("idle");
   const [hidden, setHidden] = useState(false);
-  const [chatSearch, setChatSearch] = useState("");
   const [sentChatIds, setSentChatIds] = useState<Record<string, boolean>>({});
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [sendingAll, setSendingAll] = useState(false);
   const [shareError, setShareError] = useState("");
+  const [captionExpanded, setCaptionExpanded] = useState(false);
+  const captionCanExpand = event.description.trim().length > 110;
 
   const localActivity = records.filter((record) => record.entityType === "event" && record.entityId === event.id);
   const localViewCount = localActivity.filter((record) => record.type === "detail_view").length;
@@ -140,7 +140,6 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
   const handleShare = useCallback((e?: any) => {
     e?.stopPropagation?.();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setChatSearch("");
     setShowShareModal(true);
   }, []);
 
@@ -193,322 +192,13 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
     setHidden(true);
   }, []);
 
-  const handleSendToChat = useCallback(
-    async (convId: string) => {
-      if (sentChatIds[convId]) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setSentChatIds((prev) => ({ ...prev, [convId]: true }));
-      const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
-      try {
-        setShareError("");
-        await sendMessage(convId, shareText);
-        trackEvent(event, "share", source);
-      } catch {
-        setSentChatIds((prev) => ({ ...prev, [convId]: false }));
-        setShareError("Couldn't send this event. Please try again.");
-      }
-    },
-    [event, sendMessage, sentChatIds, source, trackEvent]
-  );
+  const shareModal = showShareModal ? (
+    <EventShareSheet event={event} source={source} onClose={() => setShowShareModal(false)}
+      handleCopyLink={handleCopyLink} copyFeedback={copyFeedback}
+      sentChatIds={sentChatIds} setSentChatIds={setSentChatIds} />
+  ) : null;
 
-  const handleSendToAllChats = useCallback(async () => {
-    if (!conversations.length || sendingAll) return;
-    setSendingAll(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
-    try {
-      setShareError("");
-      for (const conv of conversations) {
-        if (sentChatIds[conv.id]) continue;
-        await sendMessage(conv.id, shareText);
-        setSentChatIds((prev) => ({ ...prev, [conv.id]: true }));
-        trackEvent(event, "share", source);
-      }
-    } catch { setShareError("Some events couldn't be sent. Try again to send the remaining ones."); }
-    finally { setSendingAll(false); }
-  }, [conversations, sendingAll, event, sendMessage, sentChatIds, source, trackEvent]);
-
-  const handleNativeShare = useCallback(() => {
-    setShowShareModal(false);
-    // Let the share-sheet modal finish its dismiss animation before handing off
-    // to the native share Intent — firing it in the same tick races the modal's
-    // closing window transition on Android release builds and gets swallowed.
-    setTimeout(async () => {
-      if (await shareEvent(event)) trackEvent(event, "share", source);
-    }, 300);
-  }, [event, source, trackEvent]);
-
-  const handleShareToChat = useCallback(() => {
-    setShowShareModal(false);
-    router.push({
-      pathname: "/chat",
-      params: { eventId: event.id, eventTitle: event.title },
-    } as any);
-  }, [router, event]);
-
-  const filteredConversations = useMemo(() => {
-    if (!chatSearch.trim()) return conversations;
-    const q = chatSearch.toLowerCase();
-    return conversations.filter((c) => {
-      const contact = getContact(c.contactId);
-      return (
-        contact?.name.toLowerCase().includes(q) ||
-        contact?.headline.toLowerCase().includes(q) ||
-        c.lastMessage.toLowerCase().includes(q)
-      );
-    });
-  }, [conversations, chatSearch, getContact]);
-
-  const shareModal = (
-    <Modal
-      visible={showShareModal}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowShareModal(false)}
-    >
-      <Pressable
-        style={styles.shareOverlay}
-        onPress={() => setShowShareModal(false)}
-      >
-        <Pressable
-          style={[
-            styles.shareCard,
-            Platform.OS === "web"
-              ? ({
-                  backdropFilter: "blur(28px) saturate(1.5)",
-                  WebkitBackdropFilter: "blur(28px) saturate(1.5)",
-                } as any)
-              : null,
-            {
-              backgroundColor:
-                scheme === "dark"
-                  ? "rgba(10, 16, 36, 0.78)"
-                  : "rgba(255, 255, 255, 0.82)",
-              borderColor:
-                scheme === "dark"
-                  ? "rgba(255, 255, 255, 0.16)"
-                  : "rgba(255, 255, 255, 0.75)",
-            },
-          ]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          {Platform.OS !== "web" ? (
-            <BlurView
-              intensity={85}
-              tint={scheme === "dark" ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-          ) : null}
-          <View
-            style={[
-              styles.shareHandle,
-              {
-                backgroundColor:
-                  scheme === "dark"
-                    ? "rgba(255, 255, 255, 0.28)"
-                    : "rgba(0, 0, 0, 0.2)",
-              },
-            ]}
-          />
-
-          {/* Header */}
-          <View style={styles.shareHeaderRow}>
-            <Text style={[styles.shareTitle, { color: colors.foreground }]}>Share Event</Text>
-            <Pressable
-              onPress={() => setShowShareModal(false)}
-              style={[styles.shareCloseBtn, { backgroundColor: colors.secondary }]}
-              hitSlop={8}
-            >
-              <Ionicons name="close" size={18} color={colors.foreground} />
-            </Pressable>
-          </View>
-
-          {/* Search bar */}
-          <View
-            style={[
-              styles.shareSearchBox,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-          >
-            <Ionicons name="search" size={16} color={colors.mutedForeground} />
-            <TextInput
-              placeholder="Search chats..."
-              placeholderTextColor={colors.mutedForeground}
-              value={chatSearch}
-              onChangeText={setChatSearch}
-              style={[styles.shareSearchInput, { color: colors.foreground }]}
-            />
-            {chatSearch.length > 0 && (
-              <Pressable onPress={() => setChatSearch("")}>
-                <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
-              </Pressable>
-            )}
-          </View>
-
-          {/* Send to all chats button */}
-          {shareError ? <Text accessibilityRole="alert" style={{ color: colors.destructive, paddingVertical: 8 }}>{shareError}</Text> : null}
-          {conversations.length > 0 && (
-            <Pressable
-              style={[
-                styles.shareSendAllBtn,
-                {
-                  backgroundColor: sendingAll ? colors.card : `${colors.primary}18`,
-                  borderColor: colors.primary,
-                },
-              ]}
-              onPress={handleSendToAllChats}
-              disabled={sendingAll}
-            >
-              <Ionicons
-                name={sendingAll ? "checkmark-circle" : "paper-plane"}
-                size={16}
-                color={colors.primary}
-              />
-              <Text style={[styles.shareSendAllText, { color: colors.primary }]}>
-                {sendingAll
-                  ? "Sent to all chats!"
-                  : `Send to all chats (${conversations.length})`}
-              </Text>
-            </Pressable>
-          )}
-
-          {/* Chats List */}
-          <ScrollView
-            style={styles.shareChatsList}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {filteredConversations.length > 0 ? (
-              filteredConversations.map((conv) => {
-                const contact = getContact(conv.contactId);
-                const isSent = sentChatIds[conv.id];
-                return (
-                  <View
-                    key={conv.id}
-                    style={[
-                      styles.shareChatItem,
-                      { borderBottomColor: colors.border },
-                    ]}
-                  >
-                    <View style={styles.shareChatLeft}>
-                      {contact?.avatarUrl ? (
-                        <Image source={{ uri: contact.avatarUrl }} style={styles.shareChatAvatar} />
-                      ) : (
-                        <View style={[styles.shareChatAvatarFallback, { backgroundColor: colors.primary }]}>
-                          <Text style={styles.shareChatAvatarLetter}>
-                            {(contact?.name || "U").charAt(0).toUpperCase()}
-                          </Text>
-                        </View>
-                      )}
-                      <View style={styles.shareChatInfo}>
-                        <Text style={[styles.shareChatName, { color: colors.foreground }]} numberOfLines={1}>
-                          {contact?.name || "Attendee"}
-                        </Text>
-                        <Text style={[styles.shareChatDesc, { color: colors.mutedForeground }]} numberOfLines={1}>
-                          {contact?.headline || conv.lastMessage || "Active on Eventis"}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Pressable
-                      style={[
-                        styles.shareChatSendBtn,
-                        isSent
-                          ? { backgroundColor: colors.secondary, borderColor: colors.border }
-                          : { backgroundColor: colors.primary, borderColor: colors.primary },
-                      ]}
-                      onPress={() => handleSendToChat(conv.id)}
-                    >
-                      {isSent ? (
-                        <View style={styles.shareSentRow}>
-                          <Ionicons name="checkmark" size={13} color={colors.foreground} />
-                          <Text style={[styles.shareChatSendText, { color: colors.foreground }]}>
-                            Sent
-                          </Text>
-                        </View>
-                      ) : (
-                        <Text style={[styles.shareChatSendText, { color: "#FFFFFF" }]}>
-                          Send
-                        </Text>
-                      )}
-                    </Pressable>
-                  </View>
-                );
-              })
-            ) : (
-              <View style={styles.shareEmptyChats}>
-                <Text style={[styles.shareEmptyChatsText, { color: colors.mutedForeground }]}>
-                  {chatSearch ? "No chats match your search." : "No chat history yet."}
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-
-          {/* Quick Instagram-style circular action icons */}
-          <View style={[styles.shareQuickActionsRow, { borderTopColor: colors.border }]}>
-            {/* Share to external apps */}
-            <Pressable
-              style={styles.shareQuickAction}
-              onPress={handleNativeShare}
-            >
-              <View style={[styles.shareQuickActionCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Ionicons name="share-social" size={20} color={colors.foreground} />
-              </View>
-              <Text style={[styles.shareQuickActionLabel, { color: colors.mutedForeground }]}>
-                Share to Apps
-              </Text>
-            </Pressable>
-
-            {/* Copy Link */}
-            <Pressable
-              style={styles.shareQuickAction}
-              onPress={handleCopyLink}
-            >
-              <View
-                style={[
-                  styles.shareQuickActionCircle,
-                  {
-                    backgroundColor: copyFeedback ? `${colors.primary}22` : colors.card,
-                    borderColor: copyFeedback ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={copyFeedback ? "checkmark" : "link"}
-                  size={20}
-                  color={copyFeedback ? colors.primary : colors.foreground}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.shareQuickActionLabel,
-                  { color: copyFeedback ? colors.primary : colors.mutedForeground },
-                ]}
-              >
-                {copyFeedback ? "Copied!" : "Copy link"}
-              </Text>
-            </Pressable>
-
-            {/* Open in Chat */}
-            <Pressable
-              style={styles.shareQuickAction}
-              onPress={handleShareToChat}
-            >
-              <View style={[styles.shareQuickActionCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Ionicons name="chatbubbles-outline" size={20} color={colors.foreground} />
-              </View>
-              <Text style={[styles.shareQuickActionLabel, { color: colors.mutedForeground }]}>
-                Event Chat
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-
-  const optionsModal = (
+  const optionsModal = showOptionsModal && (
     <Modal
       visible={showOptionsModal}
       transparent
@@ -790,7 +480,7 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
     </Modal>
   );
 
-  const insightsModal = (
+  const insightsModal = showInsightsModal && (
     <Modal
       visible={showInsightsModal}
       transparent
@@ -1361,6 +1051,340 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
       {insightsModal}
     </>
   );
+}
+
+function EventShareSheet({ event, source, onClose, handleCopyLink, copyFeedback, sentChatIds, setSentChatIds }: {
+  event: Event;
+  source: AnalyticsSource;
+  onClose: () => void;
+  handleCopyLink: () => Promise<void>;
+  copyFeedback: boolean;
+  sentChatIds: Record<string, boolean>;
+  setSentChatIds: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+}) {
+  const colors = useColors();
+  const { scheme } = useTheme();
+  const { trackEvent } = useAnalytics();
+  const router = useRouter();
+  const { conversations, getContact, sendMessage } = useChat();
+  const [chatSearch, setChatSearch] = useState("");
+  const [sendingAll, setSendingAll] = useState(false);
+  const [shareError, setShareError] = useState("");
+  const handleSendToChat = useCallback(
+    async (convId: string) => {
+      if (sentChatIds[convId]) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setSentChatIds((prev) => ({ ...prev, [convId]: true }));
+      const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+      try {
+        setShareError("");
+        await sendMessage(convId, shareText);
+        trackEvent(event, "share", source);
+      } catch {
+        setSentChatIds((prev) => ({ ...prev, [convId]: false }));
+        setShareError("Couldn't send this event. Please try again.");
+      }
+    },
+    [event, sendMessage, sentChatIds, source, trackEvent]
+  );
+
+  const handleSendToAllChats = useCallback(async () => {
+    if (!conversations.length || sendingAll) return;
+    setSendingAll(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+    try {
+      setShareError("");
+      for (const conv of conversations) {
+        if (sentChatIds[conv.id]) continue;
+        await sendMessage(conv.id, shareText);
+        setSentChatIds((prev) => ({ ...prev, [conv.id]: true }));
+        trackEvent(event, "share", source);
+      }
+    } catch { setShareError("Some events couldn't be sent. Try again to send the remaining ones."); }
+    finally { setSendingAll(false); }
+  }, [conversations, sendingAll, event, sendMessage, sentChatIds, source, trackEvent]);
+
+  const handleNativeShare = useCallback(() => {
+    onClose();
+    // Let the share-sheet modal finish its dismiss animation before handing off
+    // to the native share Intent — firing it in the same tick races the modal's
+    // closing window transition on Android release builds and gets swallowed.
+    setTimeout(async () => {
+      if (await shareEvent(event)) trackEvent(event, "share", source);
+    }, 300);
+  }, [event, source, trackEvent, onClose]);
+
+  const handleShareToChat = useCallback(() => {
+    onClose();
+    router.push({
+      pathname: "/chat",
+      params: { eventId: event.id, eventTitle: event.title },
+    } as any);
+  }, [router, event, onClose]);
+
+  const filteredConversations = useMemo(() => {
+    if (!chatSearch.trim()) return conversations;
+    const q = chatSearch.toLowerCase();
+    return conversations.filter((c) => {
+      const contact = getContact(c.contactId);
+      return (
+        contact?.name.toLowerCase().includes(q) ||
+        contact?.headline.toLowerCase().includes(q) ||
+        c.lastMessage.toLowerCase().includes(q)
+      );
+    });
+  }, [conversations, chatSearch, getContact]);
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="slide"
+      onRequestClose={() => onClose()}
+    >
+      <Pressable
+        style={styles.shareOverlay}
+        onPress={() => onClose()}
+      >
+        <Pressable
+          style={[
+            styles.shareCard,
+            Platform.OS === "web"
+              ? ({
+                  backdropFilter: "blur(28px) saturate(1.5)",
+                  WebkitBackdropFilter: "blur(28px) saturate(1.5)",
+                } as any)
+              : null,
+            {
+              backgroundColor:
+                scheme === "dark"
+                  ? "rgba(10, 16, 36, 0.78)"
+                  : "rgba(255, 255, 255, 0.82)",
+              borderColor:
+                scheme === "dark"
+                  ? "rgba(255, 255, 255, 0.16)"
+                  : "rgba(255, 255, 255, 0.75)",
+            },
+          ]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          {Platform.OS !== "web" ? (
+            <BlurView
+              intensity={85}
+              tint={scheme === "dark" ? "dark" : "light"}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+          ) : null}
+          <View
+            style={[
+              styles.shareHandle,
+              {
+                backgroundColor:
+                  scheme === "dark"
+                    ? "rgba(255, 255, 255, 0.28)"
+                    : "rgba(0, 0, 0, 0.2)",
+              },
+            ]}
+          />
+
+          {/* Header */}
+          <View style={styles.shareHeaderRow}>
+            <Text style={[styles.shareTitle, { color: colors.foreground }]}>Share Event</Text>
+            <Pressable
+              onPress={() => onClose()}
+              style={[styles.shareCloseBtn, { backgroundColor: colors.secondary }]}
+              hitSlop={8}
+            >
+              <Ionicons name="close" size={18} color={colors.foreground} />
+            </Pressable>
+          </View>
+
+          {/* Search bar */}
+          <View
+            style={[
+              styles.shareSearchBox,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Ionicons name="search" size={16} color={colors.mutedForeground} />
+            <TextInput
+              placeholder="Search chats..."
+              placeholderTextColor={colors.mutedForeground}
+              value={chatSearch}
+              onChangeText={setChatSearch}
+              style={[styles.shareSearchInput, { color: colors.foreground }]}
+            />
+            {chatSearch.length > 0 && (
+              <Pressable onPress={() => setChatSearch("")}>
+                <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
+              </Pressable>
+            )}
+          </View>
+
+          {/* Send to all chats button */}
+          {shareError ? <Text accessibilityRole="alert" style={{ color: colors.destructive, paddingVertical: 8 }}>{shareError}</Text> : null}
+          {conversations.length > 0 && (
+            <Pressable
+              style={[
+                styles.shareSendAllBtn,
+                {
+                  backgroundColor: sendingAll ? colors.card : `${colors.primary}18`,
+                  borderColor: colors.primary,
+                },
+              ]}
+              onPress={handleSendToAllChats}
+              disabled={sendingAll}
+            >
+              <Ionicons
+                name={sendingAll ? "checkmark-circle" : "paper-plane"}
+                size={16}
+                color={colors.primary}
+              />
+              <Text style={[styles.shareSendAllText, { color: colors.primary }]}>
+                {sendingAll
+                  ? "Sent to all chats!"
+                  : `Send to all chats (${conversations.length})`}
+              </Text>
+            </Pressable>
+          )}
+
+          {/* Chats List */}
+          <ScrollView
+            style={styles.shareChatsList}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {filteredConversations.length > 0 ? (
+              filteredConversations.map((conv) => {
+                const contact = getContact(conv.contactId);
+                const isSent = sentChatIds[conv.id];
+                return (
+                  <View
+                    key={conv.id}
+                    style={[
+                      styles.shareChatItem,
+                      { borderBottomColor: colors.border },
+                    ]}
+                  >
+                    <View style={styles.shareChatLeft}>
+                      {contact?.avatarUrl ? (
+                        <Image source={{ uri: contact.avatarUrl }} style={styles.shareChatAvatar} />
+                      ) : (
+                        <View style={[styles.shareChatAvatarFallback, { backgroundColor: colors.primary }]}>
+                          <Text style={styles.shareChatAvatarLetter}>
+                            {(contact?.name || "U").charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.shareChatInfo}>
+                        <Text style={[styles.shareChatName, { color: colors.foreground }]} numberOfLines={1}>
+                          {contact?.name || "Attendee"}
+                        </Text>
+                        <Text style={[styles.shareChatDesc, { color: colors.mutedForeground }]} numberOfLines={1}>
+                          {contact?.headline || conv.lastMessage || "Active on Eventis"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      style={[
+                        styles.shareChatSendBtn,
+                        isSent
+                          ? { backgroundColor: colors.secondary, borderColor: colors.border }
+                          : { backgroundColor: colors.primary, borderColor: colors.primary },
+                      ]}
+                      onPress={() => handleSendToChat(conv.id)}
+                    >
+                      {isSent ? (
+                        <View style={styles.shareSentRow}>
+                          <Ionicons name="checkmark" size={13} color={colors.foreground} />
+                          <Text style={[styles.shareChatSendText, { color: colors.foreground }]}>
+                            Sent
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.shareChatSendText, { color: "#FFFFFF" }]}>
+                          Send
+                        </Text>
+                      )}
+                    </Pressable>
+                  </View>
+                );
+              })
+            ) : (
+              <View style={styles.shareEmptyChats}>
+                <Text style={[styles.shareEmptyChatsText, { color: colors.mutedForeground }]}>
+                  {chatSearch ? "No chats match your search." : "No chat history yet."}
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Quick Instagram-style circular action icons */}
+          <View style={[styles.shareQuickActionsRow, { borderTopColor: colors.border }]}>
+            {/* Share to external apps */}
+            <Pressable
+              style={styles.shareQuickAction}
+              onPress={handleNativeShare}
+            >
+              <View style={[styles.shareQuickActionCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Ionicons name="share-social" size={20} color={colors.foreground} />
+              </View>
+              <Text style={[styles.shareQuickActionLabel, { color: colors.mutedForeground }]}>
+                Share to Apps
+              </Text>
+            </Pressable>
+
+            {/* Copy Link */}
+            <Pressable
+              style={styles.shareQuickAction}
+              onPress={handleCopyLink}
+            >
+              <View
+                style={[
+                  styles.shareQuickActionCircle,
+                  {
+                    backgroundColor: copyFeedback ? `${colors.primary}22` : colors.card,
+                    borderColor: copyFeedback ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={copyFeedback ? "checkmark" : "link"}
+                  size={20}
+                  color={copyFeedback ? colors.primary : colors.foreground}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.shareQuickActionLabel,
+                  { color: copyFeedback ? colors.primary : colors.mutedForeground },
+                ]}
+              >
+                {copyFeedback ? "Copied!" : "Copy link"}
+              </Text>
+            </Pressable>
+
+            {/* Open in Chat */}
+            <Pressable
+              style={styles.shareQuickAction}
+              onPress={handleShareToChat}
+            >
+              <View style={[styles.shareQuickActionCircle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Ionicons name="chatbubbles-outline" size={20} color={colors.foreground} />
+              </View>
+              <Text style={[styles.shareQuickActionLabel, { color: colors.mutedForeground }]}>
+                Event Chat
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+
 }
 
 function formatDate(dateStr: string): string {

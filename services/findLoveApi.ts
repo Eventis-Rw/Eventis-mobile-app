@@ -434,6 +434,7 @@ export type ApiLoveChatMessage = {
 export type ApiLoveChatSummary = {
   profileId: string;
   connectionStatus: "PENDING" | "ACCEPTED";
+  pendingMessages?: ApiLoveChatMessage[];
   lastMessage: ApiLoveChatMessage | null;
   unreadCount: number;
   readAt: string | null;

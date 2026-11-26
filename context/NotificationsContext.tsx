@@ -44,6 +44,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const [error, setError] = useState<string | null>(null);
   const [popup, setPopup] = useState<PopupNotification | null>(null);
 
+  const requestId = useRef(0);
   const knownIdsRef = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
   const popupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -57,6 +58,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const refresh = useCallback(async () => {
+    const revision = ++requestId.current;
     if (!enabled) {
       setNotifications([]);
       setUnreadCount(0);
@@ -67,13 +69,14 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     }
     try {
       setError(null);
-      const [list, unread] = await Promise.all([
-        fetchNotifications({ page: 1, limit: 50 }),
-        fetchNotifications({ page: 1, limit: 1, unreadOnly: true }),
-      ]);
+      const list = await fetchNotifications({ page: 1, limit: 50 });
       const items = list.items ?? [];
+      const unreadCount = list.unreadCount ?? (items.length >= list.total
+        ? items.filter(item => !item.readAt).length
+        : (await fetchNotifications({ page: 1, limit: 1, unreadOnly: true })).total);
+      if (revision !== requestId.current) return;
       setNotifications(items);
-      setUnreadCount(unread.total ?? 0);
+      setUnreadCount(unreadCount);
 
       const known = knownIdsRef.current;
       if (!initializedRef.current) {
@@ -85,13 +88,18 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         if (fresh) showPopup(fresh);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load notifications.");
+      if (revision === requestId.current) setError(e instanceof Error ? e.message : "Could not load notifications.");
     } finally {
-      setIsLoading(false);
+      if (revision === requestId.current) setIsLoading(false);
     }
-  }, [enabled, showPopup]);
+  }, [enabled, showPopup, user?.id]);
 
   useEffect(() => {
+    initializedRef.current = false;
+    knownIdsRef.current.clear();
+    setPopup(null);
+    setNotifications([]);
+    setUnreadCount(0);
     setIsLoading(!!enabled);
     void refresh();
   }, [enabled, refresh]);

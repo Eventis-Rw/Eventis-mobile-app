@@ -141,7 +141,7 @@ export default function CreateEventScreen() {
   // `id` switches the screen to editing one of the publisher's own events.
   const { id: editId } = useLocalSearchParams<{ id?: string }>();
   const { user, consumePost } = useAuth();
-  const { refreshEvents } = useEvents();
+  const { refreshEvents } = useEvents(false);
   const [form, setForm] = useState<FormState>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
