@@ -29,6 +29,18 @@ import { describeError, USE_ORGANISER_API } from "@/services/organiserService";
 
 const LIMITS = { name: 80, description: 1000, activities: 140, location: 100 };
 
+const EVENT_CATEGORIES = [
+  "Music",
+  "Nightlife",
+  "Business",
+  "Tech",
+  "Art",
+  "Food",
+  "Sports",
+  "Community",
+  "Other",
+];
+
 export default function OrganiserApplicationScreen() {
   const router = useRouter();
   const palette = useOrganiserPalette();
@@ -41,6 +53,29 @@ export default function OrganiserApplicationScreen() {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ manualPaymentId: string | null } | null>(null);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  // Category multi-selection state
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    if (!values.activities) return [];
+    const parts = values.activities.split(",").map((s) => s.trim()).filter(Boolean);
+    const known = parts.filter((p) => EVENT_CATEGORIES.includes(p));
+    const unknown = parts.filter((p) => !EVENT_CATEGORIES.includes(p));
+    if (unknown.length > 0) {
+      return [...known, "Other"];
+    }
+    return known;
+  });
+
+  const [otherCategory, setOtherCategory] = useState<string>(() => {
+    if (!values.activities) return "";
+    const parts = values.activities.split(",").map((s) => s.trim()).filter(Boolean);
+    const unknown = parts.filter((p) => !EVENT_CATEGORIES.includes(p));
+    return unknown.join(", ");
+  });
+
+  const mutedPlaceholder = palette.dark
+    ? "rgba(255, 255, 255, 0.32)"
+    : "rgba(0, 0, 0, 0.32)";
 
   const errors = validateOrganisation(values);
 
@@ -56,6 +91,28 @@ export default function OrganiserApplicationScreen() {
     if (!created) {
       setValues((prev) => ({ ...prev, [key]: val }));
     }
+  };
+
+  const syncActivities = (cats: string[], customOther: string) => {
+    const active = cats.filter((c) => c !== "Other");
+    const result = [...active];
+    if (cats.includes("Other") && customOther.trim()) {
+      result.push(customOther.trim());
+    }
+    updateField("activities", result.join(", "));
+  };
+
+  const toggleCategory = (cat: string) => {
+    setSelectedCategories((prev) => {
+      const next = prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat];
+      syncActivities(next, otherCategory);
+      return next;
+    });
+  };
+
+  const handleOtherCategoryChange = (text: string) => {
+    setOtherCategory(text);
+    syncActivities(selectedCategories, text);
   };
 
   const submit = async () => {
@@ -147,7 +204,6 @@ export default function OrganiserApplicationScreen() {
 
           <Text style={[styles.headerTitle, { color: palette.text }]}>Application</Text>
 
-          {/* Spacer to balance back button */}
           <View style={styles.headerSpacer} />
         </View>
       </View>
@@ -198,7 +254,7 @@ export default function OrganiserApplicationScreen() {
                 <Ionicons
                   name="business-outline"
                   size={17}
-                  color={focusedField === "name" ? palette.blue : palette.muted}
+                  color={focusedField === "name" ? palette.blue : mutedPlaceholder}
                   style={styles.fieldLeadingIcon}
                 />
                 <TextInput
@@ -207,7 +263,7 @@ export default function OrganiserApplicationScreen() {
                   onFocus={() => setFocusedField("name")}
                   onBlur={() => setFocusedField(null)}
                   placeholder="e.g. Kigali Jazz Collective"
-                  placeholderTextColor={palette.muted}
+                  placeholderTextColor={mutedPlaceholder}
                   maxLength={LIMITS.name}
                   style={[styles.textInput, { color: palette.text }]}
                   accessibilityLabel="Organization name"
@@ -220,46 +276,93 @@ export default function OrganiserApplicationScreen() {
               ) : null}
             </View>
 
-            {/* Event Focus */}
+            {/* Event Categories Multi-Select Chips */}
             <View style={styles.fieldItem}>
               <Text style={[styles.fieldLabel, { color: palette.text }]}>
                 What kind of events do you host? <Text style={{ color: palette.blue }}>*</Text>
               </Text>
-              <View
-                style={[
-                  styles.inputContainer,
-                  {
-                    backgroundColor: palette.surface,
-                    borderColor:
-                      submitted && errors.activities
-                        ? palette.danger
-                        : focusedField === "activities"
-                        ? palette.blue
-                        : palette.line,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="sparkles-outline"
-                  size={17}
-                  color={focusedField === "activities" ? palette.blue : palette.muted}
-                  style={styles.fieldLeadingIcon}
-                />
-                <TextInput
-                  value={values.activities}
-                  onChangeText={(t) => updateField("activities", t)}
-                  onFocus={() => setFocusedField("activities")}
-                  onBlur={() => setFocusedField(null)}
-                  placeholder="e.g. Live music concerts, festivals, conferences"
-                  placeholderTextColor={palette.muted}
-                  maxLength={LIMITS.activities}
-                  style={[styles.textInput, { color: palette.text }]}
-                  accessibilityLabel="What kind of events do you host"
-                />
+              <View style={styles.categoryWrap}>
+                {EVENT_CATEGORIES.map((cat) => {
+                  const isSelected = selectedCategories.includes(cat);
+                  return (
+                    <Pressable
+                      key={cat}
+                      onPress={() => toggleCategory(cat)}
+                      style={({ pressed }) => [
+                        styles.categoryChip,
+                        {
+                          backgroundColor: isSelected
+                            ? `${palette.blue}18`
+                            : palette.surface,
+                          borderColor: isSelected ? palette.blue : palette.line,
+                          opacity: pressed ? 0.8 : 1,
+                        },
+                      ]}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: isSelected }}
+                    >
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark"
+                          size={14}
+                          color={palette.blue}
+                          style={styles.chipCheckIcon}
+                        />
+                      )}
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          {
+                            color: isSelected ? palette.blue : palette.text,
+                            fontFamily: isSelected ? "Inter_700Bold" : "Inter_500Medium",
+                          },
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-              {submitted && errors.activities ? (
+
+              {/* Other Category Custom Text Input */}
+              {selectedCategories.includes("Other") ? (
+                <View
+                  style={[
+                    styles.inputContainer,
+                    {
+                      backgroundColor: palette.surface,
+                      borderColor:
+                        focusedField === "otherCategory" ? palette.blue : palette.line,
+                      marginTop: 4,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="create-outline"
+                    size={17}
+                    color={
+                      focusedField === "otherCategory" ? palette.blue : mutedPlaceholder
+                    }
+                    style={styles.fieldLeadingIcon}
+                  />
+                  <TextInput
+                    value={otherCategory}
+                    onChangeText={handleOtherCategoryChange}
+                    onFocus={() => setFocusedField("otherCategory")}
+                    onBlur={() => setFocusedField(null)}
+                    placeholder="Specify your event category (e.g. Comedy, Gaming)..."
+                    placeholderTextColor={mutedPlaceholder}
+                    maxLength={60}
+                    style={[styles.textInput, { color: palette.text }]}
+                    accessibilityLabel="Specify other event category"
+                  />
+                </View>
+              ) : null}
+
+              {submitted && (!values.activities.trim() || errors.activities) ? (
                 <Text style={[styles.fieldError, { color: palette.danger }]}>
-                  {errors.activities}
+                  {errors.activities || "Select at least one event category."}
                 </Text>
               ) : null}
             </View>
@@ -295,7 +398,7 @@ export default function OrganiserApplicationScreen() {
                   onFocus={() => setFocusedField("description")}
                   onBlur={() => setFocusedField(null)}
                   placeholder="A brief bio of who you are and what attendees can expect..."
-                  placeholderTextColor={palette.muted}
+                  placeholderTextColor={mutedPlaceholder}
                   multiline
                   numberOfLines={3}
                   textAlignVertical="top"
@@ -333,7 +436,7 @@ export default function OrganiserApplicationScreen() {
                 <Ionicons
                   name="location-outline"
                   size={17}
-                  color={focusedField === "location" ? palette.blue : palette.muted}
+                  color={focusedField === "location" ? palette.blue : mutedPlaceholder}
                   style={styles.fieldLeadingIcon}
                 />
                 <TextInput
@@ -342,7 +445,7 @@ export default function OrganiserApplicationScreen() {
                   onFocus={() => setFocusedField("location")}
                   onBlur={() => setFocusedField(null)}
                   placeholder="e.g. Kigali, Rwanda"
-                  placeholderTextColor={palette.muted}
+                  placeholderTextColor={mutedPlaceholder}
                   maxLength={LIMITS.location}
                   style={[styles.textInput, { color: palette.text }]}
                   accessibilityLabel="Location"
@@ -355,10 +458,10 @@ export default function OrganiserApplicationScreen() {
               ) : null}
             </View>
 
-            {/* Website or Social */}
+            {/* Website Only (No Social) */}
             <View style={styles.fieldItem}>
               <Text style={[styles.fieldLabel, { color: palette.text }]}>
-                Website or social{" "}
+                Website{" "}
                 <Text style={{ color: palette.muted, fontFamily: "Inter_400Regular" }}>(optional)</Text>
               </Text>
               <View
@@ -378,7 +481,7 @@ export default function OrganiserApplicationScreen() {
                 <Ionicons
                   name="globe-outline"
                   size={17}
-                  color={focusedField === "website" ? palette.blue : palette.muted}
+                  color={focusedField === "website" ? palette.blue : mutedPlaceholder}
                   style={styles.fieldLeadingIcon}
                 />
                 <TextInput
@@ -386,13 +489,13 @@ export default function OrganiserApplicationScreen() {
                   onChangeText={(t) => updateField("website", t)}
                   onFocus={() => setFocusedField("website")}
                   onBlur={() => setFocusedField(null)}
-                  placeholder="https://instagram.com/yourhandle"
-                  placeholderTextColor={palette.muted}
+                  placeholder="https://yourwebsite.com"
+                  placeholderTextColor={mutedPlaceholder}
                   keyboardType="url"
                   autoCapitalize="none"
                   autoCorrect={false}
                   style={[styles.textInput, { color: palette.text }]}
-                  accessibilityLabel="Website or social"
+                  accessibilityLabel="Website"
                 />
               </View>
               {submitted && errors.website ? (
@@ -416,7 +519,7 @@ export default function OrganiserApplicationScreen() {
             </View>
           ) : null}
 
-          {/* Submit CTA Button */}
+          {/* Submit CTA Button labeled simply "Continue" */}
           <Pressable
             style={({ pressed }) => [
               styles.button,
@@ -431,7 +534,7 @@ export default function OrganiserApplicationScreen() {
               <ActivityIndicator color={palette.onBlue} />
             ) : (
               <Text style={[styles.buttonText, { color: palette.onBlue }]}>
-                {created ? "Retry and continue" : "Continue to plans"}
+                {created ? "Retry and continue" : "Continue"}
               </Text>
             )}
           </Pressable>
@@ -498,7 +601,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   fieldsContainer: {
-    gap: 14,
+    gap: 16,
   },
   fieldItem: {
     gap: 6,
@@ -506,6 +609,26 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
+  },
+  categoryWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 2,
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  chipCheckIcon: {
+    marginRight: 4,
+  },
+  categoryChipText: {
+    fontSize: 13,
   },
   labelWithCounter: {
     flexDirection: "row",
