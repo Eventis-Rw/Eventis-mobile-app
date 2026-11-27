@@ -70,7 +70,9 @@ export function getEventTiming(event: Pick<Event, "date" | "time" | "endTime" | 
   const suppliedEnd = event.endTime
     ? parseEventDate(endDate, event.endTime)
     : event.endDate ? parseEventDate(endDate, "00:00") : null;
-  const end = suppliedEnd ?? new Date(start.getTime() + 3 * 60 * 60 * 1000);
+  // Organizers can't enter an end time today, so an event with none stays visible
+  // for the rest of its start day instead of vanishing a few hours after it begins.
+  const end = suppliedEnd ?? endOfDay(start);
   if (event.endDate && !event.endTime && suppliedEnd) end.setDate(end.getDate() + 1);
   if (suppliedEnd && endDate === event.date && end < start) end.setDate(end.getDate() + 1);
 
@@ -89,6 +91,11 @@ export function getEventTiming(event: Pick<Event, "date" | "time" | "endTime" | 
   return { kind: "upcoming", label: `Upcoming · ${formatShortDate(start)}` };
 }
 
+/** Start timestamp used to order the feed; null when the date/time can't be parsed. */
+export function getEventStart(event: Pick<Event, "date" | "time">): Date | null {
+  return parseEventDate(event.date, event.time);
+}
+
 function parseEventDate(date: string, time: string) {
   const value = new Date(`${date}T${normaliseTime(time)}:00`);
   return Number.isNaN(value.getTime()) ? null : value;
@@ -98,6 +105,12 @@ function normaliseTime(time: string) {
   const match = time.match(/^(\d{1,2}):(\d{2})/);
   if (!match) return "00:00";
   return `${match[1].padStart(2, "0")}:${match[2]}`;
+}
+
+function endOfDay(date: Date) {
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return end;
 }
 
 function isSameDay(first: Date, second: Date) {
