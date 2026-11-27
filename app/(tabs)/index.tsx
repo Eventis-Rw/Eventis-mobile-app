@@ -1,6 +1,5 @@
 import { type InfiniteData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchHomeEventPage, USE_EVENTS_API } from "@/services/eventApi";
-import { localToday } from "@/utils/dates";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { type ComponentRef, useCallback, useMemo, useRef, useState } from "react";
@@ -21,8 +20,7 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 
 import { CategoryPill } from "@/components/CategoryPill";
 import { EventCard } from "@/components/EventCard";
-import { getEventTiming } from "@/constants/eventPresentation";
-import { useEventClock } from "@/hooks/useEventClock";
+import { getEventStart } from "@/constants/eventPresentation";
 import { useNotificationsOptional } from "@/context/NotificationsContext";
 import { EventCardSkeleton } from "@/components/SkeletonLoader";
 import { StoriesBar } from "@/components/StoriesBar";
@@ -37,6 +35,7 @@ import { useStories } from "@/context/StoriesContext";
 
 const PAGE_PADDING = 20;
 const FEED_PAGE_SIZE = 6;
+const ALL_EVENTS_SINCE = "1970-01-01";
 
 type EventsView = "nearby" | "all";
 
@@ -124,10 +123,11 @@ export default function HomeScreen() {
   const feedAnalytics = useFeedAnalytics(selectedCategory === "All" ? "home" : "category", viewerOpen || cardCovered);
   const location = useLocationPermission();
 
-  const now = useEventClock();
-  const cutoff = new Date(now);
-  cutoff.setDate(cutoff.getDate() - 1); // Include overnight events, then check their exact end time below.
-  const since = localToday(cutoff);
+  // A fixed, far-past date rather than "now": the landing page shows every
+  // published event (upcoming, ongoing and past), never hiding one because its
+  // date has passed. Kept truthy so the API still applies excludeCategories
+  // and includes like/comment counts, which only run when activeSince is set.
+  const since = ALL_EVENTS_SINCE;
   const queryKey = useMemo(() => ["home-events", user?.id, selectedCategory, since], [user?.id, selectedCategory, since]);
   const queryClient = useQueryClient();
   const { data, isPending, error: pageError, isFetching, hasNextPage, fetchNextPage, refetch } = useInfiniteQuery({
@@ -154,23 +154,28 @@ export default function HomeScreen() {
       old && old.pages.length > 1 ? { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) } : old);
     await refetch();
   }, [user?.id, queryKey, queryClient, refetch, refreshCatalogue]);
-  const currentEvents = useMemo(() => events.filter(event => getEventTiming(event, now).kind !== "ended"), [events, now]);
+  // No timing-based filtering here: every published event (upcoming, ongoing
+  // or past) stays on the landing page. An event only disappears when it's
+  // unpublished or deleted, which the API's published-only query already enforces.
+  const currentEvents = events;
 
   const filtered = useMemo(() => {
     const list =
       selectedCategory === "All"
         ? currentEvents
         : currentEvents.filter((e) => e.category === selectedCategory);
-    // Demo/featured posts are pinned first; everything else keeps the API's
-    // order — Array.sort is stable, so returning
-    // 0 here preserves that order instead of re-ranking by distance.
+    // Demo/featured posts are pinned first; everything else is ordered by
+    // start date/time, latest first, so a newly published event slots into
+    // its correct chronological position automatically.
     return [...list].sort((a, b) => {
       const first = DEMO_POST_ORDER.indexOf(a.id);
       const second = DEMO_POST_ORDER.indexOf(b.id);
       if (first >= 0 || second >= 0) {
         return (first < 0 ? Infinity : first) - (second < 0 ? Infinity : second);
       }
-      return 0;
+      const aStart = getEventStart(a)?.getTime() ?? 0;
+      const bStart = getEventStart(b)?.getTime() ?? 0;
+      return bStart - aStart;
     });
   }, [currentEvents, selectedCategory]);
   const needsMore = USE_EVENTS_API && !!hasNextPage && filtered.length < visibleCount;
@@ -265,7 +270,7 @@ export default function HomeScreen() {
       return (
         <StateMessage
           icon="calendar-clear-outline"
-          title="No upcoming events"
+          title="No events yet"
           text="New events will show up here as soon as they're published."
           actionLabel="Refresh"
           onAction={refreshEvents}
@@ -372,6 +377,19 @@ export default function HomeScreen() {
 
                   {/* Distinct Organizer / Dashboard Pill */}
                   <Pressable
+                    onPress={() => router.push("/profile" as any)}
+                    style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Your profile and settings"
+                  >
+                    {user?.avatarUrl ? (
+                      <Image source={{ uri: user.avatarUrl }} style={styles.profileIconImg} />
+                     ) : (
+                      <Ionicons name="person-circle-outline" size={19} color={colors.foreground} />
+                    )}
+                  </Pressable>
+
+                  <Pressable
                     onPress={handleOrganizerPress}
                     style={[
                       styles.organizerPill,
@@ -423,20 +441,17 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {application && application.status !== "PENDING_PAYMENT" && application.status !== "APPROVED" ? (
+            {application && application.status === "REJECTED" ? (
               <View style={{ margin: 20, padding: 16, borderRadius: 12, backgroundColor: colors.card, gap: 8 }}>
                 <Text style={{ color: colors.foreground, fontWeight: "700" }}>
                   {`Organizer Application Status: ${application.status.replace("_", " ")}`}
                 </Text>
                 <Text style={{ color: colors.foreground }}>
-                  {application.status === "IN_REVIEW" ? "Your payment was successful, and your organizer application has been submitted successfully. Our administration team is currently reviewing your application. You will receive a notification once a decision has been made."
-                    : `Reason: ${application.rejectionReason}. You can reapply with a new verified payment.`}
+                  {`Reason: ${application.rejectionReason}. You can reapply with a new verified payment.`}
                 </Text>
-                {application.status !== "IN_REVIEW" ? (
-                  <Pressable onPress={() => openOrganiserFlow()} accessibilityRole="button">
-                    <Text style={{ color: colors.primary, fontWeight: "700" }}>Apply again</Text>
-                  </Pressable>
-                ) : null}
+                <Pressable onPress={() => openOrganiserFlow()} accessibilityRole="button">
+                  <Text style={{ color: colors.primary, fontWeight: "700" }}>Apply again</Text>
+                </Pressable>
               </View>
             ) : null}
             <StoriesBar user={user} onOpenBecomeOrganizer={openOrganiserFlow} />
@@ -697,6 +712,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
+  },
+  profileIconImg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   notifBadge: {
     position: "absolute",

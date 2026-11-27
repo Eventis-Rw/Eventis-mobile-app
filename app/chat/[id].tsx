@@ -7,6 +7,7 @@ import {
   useAudioRecorder,
 } from "expo-audio";
 import * as Clipboard from "expo-clipboard";
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { type ComponentRef,
@@ -43,27 +44,37 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { ChatActionSheet, type ChatAction } from "@/components/ChatActionSheet";
 import { ChatConfirmDialog } from "@/components/ChatConfirmDialog";
 import { ChatEmojiPicker } from "@/components/ChatEmojiPicker";
+import { ChatEventCard } from "@/components/ChatEventCard";
+import { ChatPollBubble } from "@/components/ChatPollBubble";
+import { ChatQuickReplyPanel } from "@/components/ChatQuickReplyPanel";
 import {
   ChatPopupMenu,
   type ChatMenuAnchor,
 } from "@/components/ChatPopupMenu";
 import { ChatVideoBubble } from "@/components/ChatVideoBubble";
 import { VoiceNoteBubble } from "@/components/VoiceNoteBubble";
+import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
 import { useCall } from "@/context/CallContext";
 import { useChatColors } from "@/hooks/useChatColors";
 import { useChatBottomInset } from "@/hooks/useChatBottomInset";
 import {
   chatMessagePreview,
+  DEMO_SELF_ID,
   type ChatMessage,
 } from "@/services/chatService";
+import { extractSharedEventId } from "@/utils/shareEvent";
 
 function dayLabel(value: string) {
   const date = new Date(value);
-  if (date.toDateString() === new Date().toDateString()) return "Today";
-  return date.toLocaleDateString([], {
-    month: "short",
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) return "Today";
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString("en-GB", {
     day: "numeric",
+    month: "short",
     year: "numeric",
   });
 }
@@ -94,6 +105,10 @@ function MessageBubble({
   replyEnabled,
   contactName,
   onCallBack,
+  yourUserId,
+  resolveVoterName,
+  onVotePoll,
+  onRetractPollVote,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -105,6 +120,10 @@ function MessageBubble({
   replyEnabled: boolean;
   contactName: string;
   onCallBack?: (type: "VOICE" | "VIDEO") => void;
+  yourUserId: string | undefined;
+  resolveVoterName: (userId: string) => string;
+  onVotePoll: (messageId: string, pollOptionId: string) => void;
+  onRetractPollVote: (messageId: string) => void;
 }) {
   const colors = useChatColors();
   const [attempt, setAttempt] = useState(0);
@@ -121,6 +140,7 @@ function MessageBubble({
   }, [summary.id, summary.attachmentDeferred, loadAttachment, attempt]);
   const resolved = media?.id === summary.id ? media.fields : undefined;
   const message = resolved ? { ...summary, ...resolved } : summary;
+  const sharedEventId = useMemo(() => extractSharedEventId(message.text), [message.text]);
   const showActions = () => onActions(message);
   const swipe = useRef<SwipeableMethods>(null);
   const own = message.direction === "outgoing";
@@ -368,6 +388,16 @@ function MessageBubble({
                 {message.text}
               </Text>
             ) : null}
+            {sharedEventId ? <ChatEventCard eventId={sharedEventId} /> : null}
+            {message.poll ? (
+              <ChatPollBubble
+                poll={message.poll}
+                yourUserId={yourUserId}
+                resolveName={resolveVoterName}
+                onVote={(pollOptionId) => onVotePoll(message.id, pollOptionId)}
+                onRetract={() => onRetractPollVote(message.id)}
+              />
+            ) : null}
             <View style={styles.meta}>
               {message.editedAt ? (
                 <Text
@@ -427,6 +457,32 @@ export default function ConversationScreen() {
   const { viewport, measureViewport, bottomInset } =
     useChatBottomInset(keyboardVisible);
   const chat = useChat();
+  const { user } = useAuth();
+  const yourUserId = chat.isDemoMode ? DEMO_SELF_ID : user?.id;
+  const resolveVoterName = useCallback(
+    (userId: string) => chat.getContact(userId)?.name ?? "Someone",
+    [chat],
+  );
+  const votePollOption = useCallback(
+    (messageId: string, pollOptionId: string) => {
+      void chat.votePoll(id, messageId, pollOptionId).catch((error) => {
+        setNotice(
+          error instanceof Error ? error.message : "Could not vote on this poll.",
+        );
+      });
+    },
+    [chat, id],
+  );
+  const retractPollVote = useCallback(
+    (messageId: string) => {
+      void chat.retractPollVote(id, messageId).catch((error) => {
+        setNotice(
+          error instanceof Error ? error.message : "Could not update your vote.",
+        );
+      });
+    },
+    [chat, id],
+  );
   const callActions = useCall();
   const audioRecorder = useAudioRecorder({
     ...RecordingPresets.HIGH_QUALITY,
@@ -521,6 +577,7 @@ export default function ConversationScreen() {
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   const [media, setMedia] = useState<ComposerMedia | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [quickReplyOpen, setQuickReplyOpen] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [menu, setMenu] = useState(false);
@@ -772,6 +829,26 @@ export default function ConversationScreen() {
     });
   }
 
+  async function pickDocumentImage() {
+    setEmojiOpen(false);
+    setAttachOpen(false);
+    await run(async () => {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "image/*",
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset) return;
+      setMedia({
+        kind: "image",
+        uri: asset.uri,
+        mimeType: asset.mimeType ?? "image/jpeg",
+        fileName: asset.name || `image-${Date.now()}.jpg`,
+      });
+    });
+  }
+
   async function pickVideo() {
     setEmojiOpen(false);
     setAttachOpen(false);
@@ -821,9 +898,31 @@ export default function ConversationScreen() {
 
   const openAttachments = () => {
     if (busy || editing) return;
+    if (attachOpen) {
+      setAttachOpen(false);
+      return;
+    }
     Keyboard.dismiss();
     setEmojiOpen(false);
+    setQuickReplyOpen(false);
     setAttachOpen(true);
+  };
+
+  const toggleQuickReplies = () => {
+    if (quickReplyOpen) {
+      setQuickReplyOpen(false);
+      return;
+    }
+    Keyboard.dismiss();
+    setEmojiOpen(false);
+    setAttachOpen(false);
+    setQuickReplyOpen(true);
+  };
+
+  const insertQuickReply = (text: string) => {
+    setComposer((current) => (current.trim() ? `${current.trim()} ${text}` : text));
+    setQuickReplyOpen(false);
+    setTimeout(() => input.current?.focus(), 50);
   };
 
   const startCall = (type: "VOICE" | "VIDEO") => {
@@ -852,6 +951,8 @@ export default function ConversationScreen() {
       return;
     }
     Keyboard.dismiss();
+    setAttachOpen(false);
+    setQuickReplyOpen(false);
     setEmojiOpen(true);
   };
 
@@ -1150,7 +1251,7 @@ export default function ConversationScreen() {
                 style={[styles.smallText, { color: colors.mutedForeground }]}
               >
                 {isGroupChat
-                  ? `${conversation.memberCount ?? contact.memberCount ?? 2} members${conversation.inviteCode ? ` · ${conversation.inviteCode}` : ""}`
+                  ? `${conversation.memberCount ?? contact.memberCount ?? 2} members`
                   : contact.blocked
                     ? chat.isDemoMode
                       ? "Blocked on this device"
@@ -1345,6 +1446,10 @@ export default function ConversationScreen() {
                   onImage={setImagePreview}
                   loadAttachment={chat.loadAttachment}
                   onCallBack={startCall}
+                  yourUserId={yourUserId}
+                  resolveVoterName={resolveVoterName}
+                  onVotePoll={votePollOption}
+                  onRetractPollVote={retractPollVote}
                 />
               )}
               ListFooterComponent={
@@ -1628,7 +1733,7 @@ export default function ConversationScreen() {
                 onPress={openAttachments}
                 disabled={busy || Boolean(editing)}
                 accessibilityRole="button"
-                accessibilityLabel="Add an attachment"
+                accessibilityLabel={attachOpen ? "Close attachments" : "Add an attachment"}
                 style={styles.composerPlusButton}
               >
                 <View
@@ -1655,6 +1760,10 @@ export default function ConversationScreen() {
                   onChangeText={(value) => {
                     setComposer(value);
                     if (emojiOpen) setEmojiOpen(false);
+                  }}
+                  onFocus={() => {
+                    if (attachOpen) setAttachOpen(false);
+                    if (quickReplyOpen) setQuickReplyOpen(false);
                   }}
                   selection={composerSelection}
                   onSelectionChange={(event) =>
@@ -1741,75 +1850,117 @@ export default function ConversationScreen() {
               </Pressable>
             </View>
           )}
+          <ChatActionSheet
+            visible={attachOpen}
+            layout="grid"
+            inline
+            actions={[
+              {
+                label: "Gallery",
+                icon: "images" as const,
+                iconColor: "#FFFFFF",
+                iconBg: "#7C3AED",
+                onPress: () => void pickPhoto(),
+              },
+              {
+                label: "Upload Image",
+                icon: "folder-open" as const,
+                iconColor: "#FFFFFF",
+                iconBg: "#6366F1",
+                onPress: () => void pickDocumentImage(),
+              },
+              {
+                label: "Event",
+                icon: "calendar" as const,
+                iconColor: "#FFFFFF",
+                iconBg: "#F59E0B",
+                onPress: () =>
+                  router.push({
+                    pathname: "/chat/share-event",
+                    params: { conversationId: id },
+                  } as never),
+              },
+              {
+                label: "Quick Reply",
+                icon: "flash" as const,
+                iconColor: "#FFFFFF",
+                iconBg: "#FACC15",
+                onPress: () => toggleQuickReplies(),
+              },
+              {
+                label: "Poll",
+                icon: "bar-chart" as const,
+                iconColor: "#FFFFFF",
+                iconBg: "#22C55E",
+                onPress: () =>
+                  router.push({
+                    pathname: "/chat/create-poll",
+                    params: { conversationId: id },
+                  } as never),
+              },
+              {
+                label: "Camera",
+                icon: "camera" as const,
+                iconColor: "#FFFFFF",
+                iconBg: "#EC4899",
+                onPress: () => void takePhoto(),
+              },
+              {
+                label: "Video",
+                icon: "videocam" as const,
+                iconColor: "#FFFFFF",
+                iconBg: "#E11D48",
+                onPress: () => void pickVideo(),
+              },
+              {
+                label: "Audio",
+                icon: "mic" as const,
+                iconColor: "#FFFFFF",
+                iconBg: "#F97316",
+                onPress: () => void startVoiceRecording(),
+              },
+              ...(isGroupChat
+                ? [
+                    {
+                      label: "Invite",
+                      icon: "people" as const,
+                      iconColor: "#FFFFFF",
+                      iconBg: "#3B82F6",
+                      onPress: () => {
+                        if (conversation?.inviteCode) {
+                          void Share.share({
+                            message: `Join our group "${contactDisplayName}" on Eventis using invite code: ${conversation.inviteCode}`,
+                          });
+                        }
+                      },
+                    },
+                  ]
+                : [
+                    {
+                      label: "Voice Call",
+                      icon: "call" as const,
+                      iconColor: "#FFFFFF",
+                      iconBg: "#10B981",
+                      onPress: () => startCall("VOICE"),
+                    },
+                    {
+                      label: "Video Call",
+                      icon: "videocam" as const,
+                      iconColor: "#FFFFFF",
+                      iconBg: "#06B6D4",
+                      onPress: () => startCall("VIDEO"),
+                    },
+                  ]),
+            ]}
+            onClose={() => setAttachOpen(false)}
+          />
+          <ChatQuickReplyPanel
+            visible={quickReplyOpen}
+            onSelect={insertQuickReply}
+            onClose={() => setQuickReplyOpen(false)}
+          />
         </KeyboardAvoidingView>
       </View>
-      <ChatActionSheet
-        visible={attachOpen}
-        layout="grid"
-        actions={[
-          {
-            label: "Gallery",
-            icon: "images" as const,
-            iconColor: "#FFFFFF",
-            iconBg: "#7C3AED",
-            onPress: () => void pickPhoto(),
-          },
-          {
-            label: "Camera",
-            icon: "camera" as const,
-            iconColor: "#FFFFFF",
-            iconBg: "#EC4899",
-            onPress: () => void takePhoto(),
-          },
-          {
-            label: "Video",
-            icon: "videocam" as const,
-            iconColor: "#FFFFFF",
-            iconBg: "#E11D48",
-            onPress: () => void pickVideo(),
-          },
-          {
-            label: "Audio",
-            icon: "mic" as const,
-            iconColor: "#FFFFFF",
-            iconBg: "#F97316",
-            onPress: () => void startVoiceRecording(),
-          },
-          ...(isGroupChat
-            ? [
-                {
-                  label: "Invite",
-                  icon: "people" as const,
-                  iconColor: "#FFFFFF",
-                  iconBg: "#3B82F6",
-                  onPress: () => {
-                    if (conversation?.inviteCode) {
-                      void Share.share({
-                        message: `Join our group "${contactDisplayName}" on Eventis using invite code: ${conversation.inviteCode}`,
-                      });
-                    }
-                  },
-                },
-              ]
-            : [
-                {
-                  label: "Voice Call",
-                  icon: "call" as const,
-                  iconColor: "#FFFFFF",
-                  iconBg: "#10B981",
-                  onPress: () => startCall("VOICE"),
-                },
-                {
-                  label: "Video Call",
-                  icon: "videocam" as const,
-                  iconColor: "#FFFFFF",
-                  iconBg: "#06B6D4",
-                  onPress: () => startCall("VIDEO"),
-                },
-              ]),
-        ]}
-        onClose={() => setAttachOpen(false)}
-      />
       <ChatActionSheet
         visible={Boolean(selected)}
         layout="list"
@@ -1825,6 +1976,15 @@ export default function ConversationScreen() {
           ...(isGroupChat
             ? [
                 {
+                  label: "Group info & members",
+                  icon: "information-circle-outline" as const,
+                  onPress: () =>
+                    router.push({
+                      pathname: "/chat/group-info",
+                      params: { id },
+                    }),
+                },
+                {
                   label: "Add members",
                   icon: "person-add-outline" as const,
                   onPress: () => {
@@ -1836,7 +1996,7 @@ export default function ConversationScreen() {
                 ...(conversation.inviteCode
                   ? [
                       {
-                        label: `Copy invite code (${conversation.inviteCode})`,
+                        label: "Copy invite code",
                         icon: "copy-outline" as const,
                         onPress: async () => {
                           await Clipboard.setStringAsync(conversation.inviteCode!);

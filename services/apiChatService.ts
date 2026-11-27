@@ -7,11 +7,16 @@ import type {
   ChatContact,
   ChatContactUpdate,
   ChatConversation,
+  ChatGroupMember,
+  ChatGroupSummary,
   ChatMessage,
   ChatReport,
   ChatUserSearchPage,
   ChatService,
   ChatSnapshot,
+  GroupMemberRole,
+  GroupSearchInput,
+  GroupSettingsInput,
   PhoneLookupResult,
 } from "./chatService";
 
@@ -25,6 +30,9 @@ interface ApiProfile {
 
 interface ApiParticipant {
   userId: string;
+  role: string;
+  status: string;
+  joinedAt: string;
   isOnline?: boolean;
   isArchived: boolean;
   isMuted: boolean;
@@ -48,6 +56,21 @@ interface ApiReceipt {
   status: string;
 }
 
+interface ApiPollOption {
+  id: string;
+  text: string;
+  position: number;
+  voterIds: string[];
+}
+
+interface ApiPoll {
+  id: string;
+  question: string;
+  createdAt: string;
+  options: ApiPollOption[];
+  totalVotes: number;
+}
+
 interface ApiMessage {
   id: string;
   conversationId: string;
@@ -61,6 +84,7 @@ interface ApiMessage {
   deletedAt: string | null;
   attachments: ApiAttachment[];
   receipts: ApiReceipt[];
+  poll: ApiPoll | null;
 }
 
 interface ApiConversation {
@@ -68,6 +92,13 @@ interface ApiConversation {
   type: string;
   service: string;
   title: string | null;
+  description: string | null;
+  category: string | null;
+  isPublic: boolean;
+  requiresApproval: boolean;
+  avatarUrl: string | null;
+  inviteCode: string | null;
+  status: string;
   createdAt: string;
   updatedAt: string;
   unreadCount: number;
@@ -135,6 +166,7 @@ function displayName(profile: ApiProfile | null, fallback: string) {
 function messagePreview(message: ApiMessage | null) {
   if (!message) return "Start a conversation";
   if (message.content?.trim()) return message.content;
+  if (message.type === "POLL") return `📊 ${message.poll?.question ?? "Poll"}`;
   if (message.type === "IMAGE") return "Photo";
   if (message.type === "VOICE") return "Voice message";
   if (message.attachments.some((item) => item.mimeType.startsWith("video/")))
@@ -304,76 +336,194 @@ export class ApiChatService implements ChatService {
     return this.mapConversation(conversation);
   }
 
-  async createGroup(title: string, memberContactIds: string[]): Promise<ChatConversation> {
+  async createGroup(
+    title: string,
+    memberContactIds: string[],
+    settings?: GroupSettingsInput,
+  ): Promise<ChatConversation> {
     const groupName = title.trim() || "Eventis Group";
-    try {
-      const result = await api.post<ApiConversation>("/api/v1/chat/conversations", {
-        type: "GROUP",
-        title: groupName,
-        userIds: memberContactIds,
-        service: "EVENTIS",
-      });
-      return this.mapConversation(result);
-    } catch (e) {
-      // Fallback local group structure
-      const groupId = `group-${Date.now()}`;
-      const code = `EVENTIS-${groupName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4) || "KGL"}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const groupContact: ChatContact = {
-        id: `group:${groupId}`,
-        name: groupName,
-        phone: "",
-        avatarUrl: FALLBACK_AVATAR,
-        headline: `${memberContactIds.length + 1} members`,
-        isEventisUser: true,
-        isOnline: true,
-        isGroup: true,
-        memberCount: memberContactIds.length + 1,
-      };
-      this.contacts.set(groupContact.id, groupContact);
-      const conversation: ChatConversation = {
-        id: groupId,
-        contactId: groupContact.id,
-        lastMessage: `Group "${groupName}" created`,
-        lastMessageAt: new Date().toISOString(),
-        unreadCount: 0,
-        isGroup: true,
-        title: groupName,
-        memberCount: memberContactIds.length + 1,
-        memberIds: memberContactIds,
-        inviteCode: code,
-      };
-      return conversation;
-    }
+    const result = await api.post<ApiConversation>("/api/v1/chat/conversations", {
+      type: "GROUP",
+      title: groupName,
+      userIds: memberContactIds,
+      service: "EVENTIS",
+      ...(settings?.description !== undefined ? { description: settings.description } : {}),
+      ...(settings?.category !== undefined ? { category: settings.category } : {}),
+      ...(settings?.isPublic !== undefined ? { isPublic: settings.isPublic } : {}),
+      ...(settings?.requiresApproval !== undefined
+        ? { requiresApproval: settings.requiresApproval }
+        : {}),
+    });
+    return this.mapConversation(result);
   }
 
   async addMembersToGroup(conversationId: string, contactIds: string[]): Promise<ChatConversation> {
-    try {
-      const result = await api.post<ApiConversation>(`/api/v1/chat/conversations/${conversationId}/participants`, {
-        userIds: contactIds,
-      });
-      return this.mapConversation(result);
-    } catch {
-      const existing = await this.startConversation(conversationId).catch(() => null);
-      if (existing) {
-        existing.memberCount = (existing.memberCount ?? 1) + contactIds.length;
-        existing.lastMessage = `Added ${contactIds.length} members`;
-        return existing;
-      }
-      throw new Error("Could not add members to group.");
-    }
+    const result = await api.post<ApiConversation>(
+      `/api/v1/chat/conversations/${conversationId}/participants`,
+      { userIds: contactIds },
+    );
+    return this.mapConversation(result);
   }
 
-  async joinGroup(inviteCodeOrId: string): Promise<ChatConversation> {
-    try {
-      const result = await api.post<ApiConversation>("/api/v1/chat/conversations/join", {
-        inviteCode: inviteCodeOrId.trim(),
-        groupName: inviteCodeOrId.trim(),
-      });
-      return this.mapConversation(result);
-    } catch {
-      const title = inviteCodeOrId.trim() || "Joined Group";
-      return this.createGroup(title, []);
-    }
+  async searchGroups(
+    input: GroupSearchInput,
+  ): Promise<{ items: ChatGroupSummary[]; total: number }> {
+    const query = new URLSearchParams({
+      page: String(input.page ?? 1),
+      limit: String(input.limit ?? 20),
+    });
+    if (input.query) query.set("query", input.query);
+    if (input.category) query.set("category", input.category);
+    const result = await api.get<{
+      items: {
+        id: string;
+        title: string | null;
+        description: string | null;
+        category: string | null;
+        isPublic: boolean;
+        requiresApproval: boolean;
+        avatarUrl: string | null;
+        createdAt: string;
+        memberCount: number;
+        isMember: boolean;
+        hasPendingRequest: boolean;
+      }[];
+      total: number;
+    }>(`/api/v1/chat/groups/search?${query}`);
+    return {
+      items: result.items.map((item) => ({
+        id: item.id,
+        title: item.title?.trim() || "Group chat",
+        description: item.description ?? undefined,
+        category: item.category ?? undefined,
+        isPublic: item.isPublic,
+        requiresApproval: item.requiresApproval,
+        avatarUrl: item.avatarUrl ?? undefined,
+        memberCount: item.memberCount,
+        isMember: item.isMember,
+        hasPendingRequest: item.hasPendingRequest,
+      })),
+      total: result.total,
+    };
+  }
+
+  async joinGroupById(groupId: string): Promise<ChatConversation> {
+    const result = await api.post<ApiConversation>(
+      `/api/v1/chat/conversations/${groupId}/join`,
+      {},
+    );
+    return this.mapConversation(result);
+  }
+
+  async joinGroupByInviteCode(inviteCode: string): Promise<ChatConversation> {
+    const result = await api.post<ApiConversation>("/api/v1/chat/groups/join-by-code", {
+      inviteCode: inviteCode.trim(),
+    });
+    return this.mapConversation(result);
+  }
+
+  async leaveGroup(conversationId: string): Promise<void> {
+    await api.post(`/api/v1/chat/conversations/${conversationId}/leave`, {});
+  }
+
+  async listJoinRequests(conversationId: string): Promise<ChatGroupMember[]> {
+    const rows = await api.get<
+      { userId: string; requestedAt: string; profile: ApiProfile | null }[]
+    >(`/api/v1/chat/conversations/${conversationId}/requests`);
+    return rows.map((row) => ({
+      userId: row.userId,
+      name: displayName(row.profile, "Eventis user"),
+      avatarUrl: row.profile?.avatarUrl ?? undefined,
+      role: "MEMBER",
+      status: "PENDING_APPROVAL",
+      joinedAt: row.requestedAt,
+    }));
+  }
+
+  async approveJoinRequest(conversationId: string, userId: string): Promise<void> {
+    await api.post(
+      `/api/v1/chat/conversations/${conversationId}/requests/${userId}/approve`,
+      {},
+    );
+  }
+
+  async rejectJoinRequest(conversationId: string, userId: string): Promise<void> {
+    await api.post(
+      `/api/v1/chat/conversations/${conversationId}/requests/${userId}/reject`,
+      {},
+    );
+  }
+
+  async removeGroupMember(conversationId: string, userId: string): Promise<void> {
+    await api.delete(`/api/v1/chat/conversations/${conversationId}/participants/${userId}`);
+  }
+
+  async setGroupMemberBan(
+    conversationId: string,
+    userId: string,
+    banned: boolean,
+  ): Promise<void> {
+    await api.post(
+      `/api/v1/chat/conversations/${conversationId}/participants/${userId}/${banned ? "ban" : "unban"}`,
+      {},
+    );
+  }
+
+  async setGroupMemberRole(
+    conversationId: string,
+    userId: string,
+    role: Extract<GroupMemberRole, "ADMIN" | "MEMBER">,
+  ): Promise<void> {
+    await api.patch(
+      `/api/v1/chat/conversations/${conversationId}/participants/${userId}/role`,
+      { role },
+    );
+  }
+
+  async transferGroupOwnership(conversationId: string, userId: string): Promise<void> {
+    await api.post(`/api/v1/chat/conversations/${conversationId}/transfer-ownership`, {
+      userId,
+    });
+  }
+
+  async updateGroupSettings(
+    conversationId: string,
+    input: GroupSettingsInput,
+  ): Promise<ChatConversation> {
+    const result = await api.patch<ApiConversation>(
+      `/api/v1/chat/conversations/${conversationId}/group`,
+      input,
+    );
+    return this.mapConversation(result);
+  }
+
+  async updateGroupAvatar(conversationId: string, imageUri: string): Promise<ChatConversation> {
+    const form = new FormData();
+    await appendChatFile(form, imageUri, `avatar-${Date.now()}.jpg`, inferMimeType(imageUri, "image/jpeg"));
+    const result = await api.postForm<ApiConversation>(
+      `/api/v1/chat/conversations/${conversationId}/group/avatar`,
+      form,
+    );
+    return this.mapConversation(result);
+  }
+
+  async refreshGroup(
+    conversationId: string,
+  ): Promise<{ conversation: ChatConversation; members: ChatGroupMember[] }> {
+    const result = await api.get<ApiConversation>(
+      `/api/v1/chat/conversations/${conversationId}`,
+    );
+    const members = result.participants
+      .filter((participant) => participant.status !== "REMOVED")
+      .map((participant) => ({
+        userId: participant.userId,
+        name: displayName(participant.profile, "Eventis user"),
+        avatarUrl: participant.profile?.avatarUrl ?? undefined,
+        role: participant.role as GroupMemberRole,
+        status: participant.status as ChatGroupMember["status"],
+        joinedAt: participant.joinedAt,
+      }));
+    return { conversation: this.mapConversation(result), members };
   }
 
   async logCall(
@@ -441,6 +591,42 @@ export class ApiChatService implements ChatService {
         ...(options?.replyTo ? { replyToId: options.replyTo.id } : {}),
         clientMessageId,
       },
+    );
+    this.messageCache.set(message.id, message);
+    return this.mapMessage(message);
+  }
+
+  async createPoll(
+    conversationId: string,
+    question: string,
+    options: string[],
+  ): Promise<ChatMessage> {
+    const message = await api.post<ApiMessage>(
+      `/api/v1/chat/conversations/${conversationId}/messages/poll`,
+      { question, options },
+    );
+    this.messageCache.set(message.id, message);
+    return this.mapMessage(message);
+  }
+
+  private pollIdFor(messageId: string): string {
+    const pollId = this.messageCache.get(messageId)?.poll?.id;
+    if (!pollId) throw new Error("This poll is no longer available.");
+    return pollId;
+  }
+
+  async votePoll(messageId: string, pollOptionId: string): Promise<ChatMessage> {
+    const message = await api.post<ApiMessage>(
+      `/api/v1/chat/polls/${this.pollIdFor(messageId)}/vote`,
+      { pollOptionId },
+    );
+    this.messageCache.set(message.id, message);
+    return this.mapMessage(message);
+  }
+
+  async retractPollVote(messageId: string): Promise<ChatMessage> {
+    const message = await api.delete<ApiMessage>(
+      `/api/v1/chat/polls/${this.pollIdFor(messageId)}/vote`,
     );
     this.messageCache.set(message.id, message);
     return this.mapMessage(message);
@@ -712,6 +898,10 @@ export class ApiChatService implements ChatService {
     const self = conversation.participants.find(
       (participant) => participant.userId === this.currentUserId(),
     );
+    const isGroup = conversation.type === "GROUP";
+    const activeParticipants = conversation.participants.filter(
+      (participant) => participant.status === "ACTIVE",
+    );
     return {
       id: conversation.id,
       contactId: contact.id,
@@ -722,18 +912,41 @@ export class ApiChatService implements ChatService {
         conversation.lastMessage?.createdAt ?? conversation.updatedAt,
       unreadCount: conversation.unreadCount,
       muted: self?.isMuted ?? false,
+      isGroup,
+      ...(isGroup
+        ? {
+            title: conversation.title ?? undefined,
+            description: conversation.description ?? undefined,
+            category: conversation.category ?? undefined,
+            isPublic: conversation.isPublic,
+            requiresApproval: conversation.requiresApproval,
+            avatarUrl: conversation.avatarUrl ?? undefined,
+            memberCount: activeParticipants.length,
+            memberIds: activeParticipants.map((participant) => participant.userId),
+            inviteCode: conversation.inviteCode ?? undefined,
+            ...(self?.role ? { myRole: self.role as ChatConversation["myRole"] } : {}),
+            ...(self?.status
+              ? { myStatus: self.status as ChatConversation["myStatus"] }
+              : {}),
+          }
+        : {}),
     };
   }
 
   private contactForConversation(conversation: ApiConversation): ChatContact {
     if (conversation.type === "GROUP") {
+      const activeCount = conversation.participants.filter(
+        (participant) => participant.status === "ACTIVE",
+      ).length;
       return {
         id: `group:${conversation.id}`,
         name: conversation.title?.trim() || "Group chat",
         phone: "",
-        avatarUrl: FALLBACK_AVATAR,
-        headline: `${conversation.participants.length} members`,
+        avatarUrl: conversation.avatarUrl ?? FALLBACK_AVATAR,
+        headline: `${activeCount} member${activeCount === 1 ? "" : "s"}`,
         isEventisUser: true,
+        isGroup: true,
+        memberCount: activeCount,
       };
     }
     const peer =
@@ -865,6 +1078,7 @@ export class ApiChatService implements ChatService {
             },
           }
         : {}),
+      ...(message.poll ? { poll: message.poll } : {}),
     };
     if (attachment) {
       if (deferAttachments) result.attachmentDeferred = true;

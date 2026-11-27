@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { type ComponentRef, useMemo, useRef, useState } from "react";
+import { type ComponentRef, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -24,7 +24,7 @@ import {
 } from "@/components/ChatPopupMenu";
 import { useChat } from "@/context/ChatContext";
 import { useChatColors } from "@/hooks/useChatColors";
-import type { ChatContact, ChatConversation } from "@/services/chatService";
+import type { ChatContact, ChatConversation, ChatGroupSummary } from "@/services/chatService";
 
 export default function ChatScreen() {
   const colors = useChatColors();
@@ -48,89 +48,117 @@ export default function ChatScreen() {
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [joinGroupOpen, setJoinGroupOpen] = useState(false);
   const [groupTitle, setGroupTitle] = useState("");
+  const [groupDescription, setGroupDescription] = useState("");
+  const [groupCategory, setGroupCategory] = useState("");
+  const [groupIsPublic, setGroupIsPublic] = useState(true);
+  const [groupRequiresApproval, setGroupRequiresApproval] = useState(false);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [searchGroupQuery, setSearchGroupQuery] = useState("");
   const [groupBusy, setGroupBusy] = useState(false);
   const [groupModalError, setGroupModalError] = useState<string | null>(null);
   const [joinSuccessNotice, setJoinSuccessNotice] = useState<string | null>(null);
 
+  // Real group discovery: searches the actual backend, debounced as the user types.
+  const [groupResults, setGroupResults] = useState<ChatGroupSummary[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsSearchError, setGroupsSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!joinGroupOpen) return;
+    let active = true;
+    setGroupsLoading(true);
+    setGroupsSearchError(null);
+    const timeout = setTimeout(() => {
+      void chat
+        .searchGroups({ query: searchGroupQuery.trim() || undefined, limit: 30 })
+        .then((result) => {
+          if (active) setGroupResults(result.items);
+        })
+        .catch((err) => {
+          if (active)
+            setGroupsSearchError(
+              err instanceof Error ? err.message : "Could not load groups.",
+            );
+        })
+        .finally(() => {
+          if (active) setGroupsLoading(false);
+        });
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
+  }, [joinGroupOpen, searchGroupQuery, chat]);
+
+  // Add Members search: looks up every Eventis account, not just existing contacts.
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [memberSearchResults, setMemberSearchResults] = useState<ChatContact[]>([]);
+  const [memberSearchLoading, setMemberSearchLoading] = useState(false);
+  const [memberSearchError, setMemberSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!createGroupOpen) return;
+    const needle = memberSearchQuery.trim();
+    if (!needle) {
+      setMemberSearchResults([]);
+      setMemberSearchLoading(false);
+      setMemberSearchError(null);
+      return;
+    }
+    let active = true;
+    setMemberSearchLoading(true);
+    setMemberSearchError(null);
+    const timeout = setTimeout(() => {
+      void chat
+        .searchUsers(needle, 1)
+        .then((result) => {
+          if (active) setMemberSearchResults(result.items);
+        })
+        .catch((err) => {
+          if (active)
+            setMemberSearchError(
+              err instanceof Error ? err.message : "Could not search Eventis users.",
+            );
+        })
+        .finally(() => {
+          if (active) setMemberSearchLoading(false);
+        });
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
+  }, [createGroupOpen, memberSearchQuery, chat]);
+
   const availableContacts = useMemo(
     () => chat.contacts.filter((c) => !c.blocked && !c.isGroup && !c.id.startsWith("group:")),
     [chat.contacts],
   );
 
-  const discoverableGroups = useMemo(
-    () => [
-      {
-        id: "chelsea-fc-rwanda",
-        name: "Chelsea FC Rwanda Fans",
-        icon: "football",
-        desc: "1,420 members · Premier League matchday meetups & debates",
-        category: "Sports",
-        requiresApproval: false,
-      },
-      {
-        id: "chelsea-worldwide",
-        name: "Chelsea Blues Worldwide",
-        icon: "football",
-        desc: "3,890 members · Global fan club & live match chats",
-        category: "Sports",
-        requiresApproval: true,
-      },
-      {
-        id: "arsenal-supporters-kgl",
-        name: "Arsenal Supporters Kigali",
-        icon: "football",
-        desc: "980 members · Match screenings at BK Arena lounge",
-        category: "Sports",
-        requiresApproval: false,
-      },
-      {
-        id: "eventis-fiesta-2026",
-        name: "Eventis Fiesta 2026",
-        icon: "sparkles",
-        desc: "2,150 members · Official Festival announcements & afterparties",
-        category: "Events",
-        requiresApproval: false,
-      },
-      {
-        id: "bk-arena-fans",
-        name: "BK Arena Fans Club",
-        icon: "basketball",
-        desc: "840 members · Basketball, Concerts & Ticket drops",
-        category: "Entertainment",
-        requiresApproval: false,
-      },
-      {
-        id: "kigali-nightlife-vip",
-        name: "Kigali Nightlife VIP",
-        icon: "moon",
-        desc: "612 members · Weekend DJ sets, lounges & guestlists",
-        category: "Nightlife",
-        requiresApproval: true,
-      },
-      {
-        id: "kigali-tech-devs",
-        name: "Kigali Tech & Developers",
-        icon: "code-slash",
-        desc: "560 members · Hackathons, Startups & AI meetups",
-        category: "Tech",
-        requiresApproval: false,
-      },
-    ],
-    [],
-  );
+  // Known contacts by default; once the admin searches, show every matching Eventis account.
+  const memberPickerContacts = useMemo(() => {
+    if (!memberSearchQuery.trim()) return availableContacts;
+    const known = new Set(availableContacts.map((c) => c.id));
+    return [
+      ...availableContacts.filter((c) =>
+        c.name.toLowerCase().includes(memberSearchQuery.trim().toLowerCase()),
+      ),
+      ...memberSearchResults.filter((c) => !c.blocked && !known.has(c.id)),
+    ];
+  }, [availableContacts, memberSearchQuery, memberSearchResults]);
 
-  const filteredGroups = useMemo(() => {
-    const q = searchGroupQuery.trim().toLowerCase();
-    if (!q) return discoverableGroups;
-    return discoverableGroups.filter(
-      (g) =>
-        g.name.toLowerCase().includes(q) ||
-        g.desc.toLowerCase().includes(q) ||
-        g.category.toLowerCase().includes(q),
-    );
-  }, [discoverableGroups, searchGroupQuery]);
+  const resetCreateGroupForm = () => {
+    setCreateGroupOpen(false);
+    setMemberSearchQuery("");
+    setMemberSearchResults([]);
+    setMemberSearchError(null);
+    setGroupTitle("");
+    setGroupDescription("");
+    setGroupCategory("");
+    setGroupIsPublic(true);
+    setGroupRequiresApproval(false);
+    setSelectedMembers([]);
+  };
 
   const handleCreateGroup = async () => {
     if (!groupTitle.trim()) {
@@ -140,10 +168,13 @@ export default function ChatScreen() {
     setGroupBusy(true);
     setGroupModalError(null);
     try {
-      const convo = await chat.createGroup(groupTitle.trim(), selectedMembers);
-      setCreateGroupOpen(false);
-      setGroupTitle("");
-      setSelectedMembers([]);
+      const convo = await chat.createGroup(groupTitle.trim(), selectedMembers, {
+        description: groupDescription.trim() || undefined,
+        category: groupCategory.trim() || undefined,
+        isPublic: groupIsPublic,
+        requiresApproval: groupIsPublic ? groupRequiresApproval : false,
+      });
+      resetCreateGroupForm();
       router.navigate({
         pathname: "/chat/[id]",
         params: { id: convo.id },
@@ -155,20 +186,21 @@ export default function ChatScreen() {
     }
   };
 
-  const handleJoinGroup = async (groupNameOrId?: string, requiresApproval = false) => {
-    const target = (groupNameOrId ?? searchGroupQuery).trim();
-    if (!target) {
-      setGroupModalError("Please enter or select a group to join.");
-      return;
-    }
+  const openCreateGroupWithName = (name: string) => {
+    setJoinGroupOpen(false);
+    setGroupTitle(name);
+    setCreateGroupOpen(true);
+  };
+
+  const handleJoinGroup = async (group: ChatGroupSummary) => {
     setGroupBusy(true);
     setGroupModalError(null);
-    if (requiresApproval) {
-      setJoinSuccessNotice(`Admin approved your request! Joining ${target}...`);
-      await new Promise((res) => setTimeout(res, 600));
-    }
     try {
-      const convo = await chat.joinGroup(target);
+      const convo = await chat.joinGroupById(group.id);
+      if (convo.myStatus === "PENDING_APPROVAL") {
+        setJoinSuccessNotice(`Your request to join "${group.title}" was sent for approval.`);
+        return;
+      }
       setJoinGroupOpen(false);
       setSearchGroupQuery("");
       setJoinSuccessNotice(null);
@@ -178,7 +210,6 @@ export default function ChatScreen() {
       });
     } catch (err) {
       setGroupModalError(err instanceof Error ? err.message : "Could not join group.");
-      setJoinSuccessNotice(null);
     } finally {
       setGroupBusy(false);
     }
@@ -747,50 +778,161 @@ export default function ChatScreen() {
         animationType="slide"
         transparent
         statusBarTranslucent
-        onRequestClose={() => setCreateGroupOpen(false)}
+        onRequestClose={resetCreateGroupForm}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalSheet, { backgroundColor: colors.card, maxHeight: "90%" }]}>
+          <View style={[styles.modalSheet, styles.createGroupSheet, { backgroundColor: colors.card }]}>
             <View style={styles.sheetHandle} />
             <Text style={[styles.sheetTitle, { color: colors.foreground }]}>
               Create Group
             </Text>
 
-            <TextInput
-              value={groupTitle}
-              onChangeText={setGroupTitle}
-              placeholder="Group name (e.g. Kigali Nightlife, Tech Fest)"
-              placeholderTextColor={colors.mutedForeground}
-              style={[
-                styles.modalInput,
-                {
-                  backgroundColor: colors.input,
-                  borderColor: colors.border,
-                  color: colors.foreground,
-                },
-              ]}
-              autoFocus
-            />
-
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionHeading, { color: colors.mutedForeground }]}>
-                Add Members ({selectedMembers.length} selected)
-              </Text>
-            </View>
-
             <ScrollView
-              style={{ maxHeight: 240, marginVertical: 6 }}
+              style={styles.createGroupScroll}
+              contentContainerStyle={{ paddingBottom: 4 }}
+              keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              {availableContacts.length === 0 ? (
+              <TextInput
+                value={groupTitle}
+                onChangeText={setGroupTitle}
+                placeholder="Group name (e.g. Kigali Nightlife, Tech Fest)"
+                placeholderTextColor={colors.mutedForeground}
+                style={[
+                  styles.modalInput,
+                  {
+                    backgroundColor: colors.input,
+                    borderColor: colors.border,
+                    color: colors.foreground,
+                  },
+                ]}
+                autoFocus
+              />
+
+              <TextInput
+                value={groupDescription}
+                onChangeText={setGroupDescription}
+                placeholder="Description (optional)"
+                placeholderTextColor={colors.mutedForeground}
+                style={[
+                  styles.modalInput,
+                  {
+                    backgroundColor: colors.input,
+                    borderColor: colors.border,
+                    color: colors.foreground,
+                    marginTop: 8,
+                  },
+                ]}
+              />
+
+              <TextInput
+                value={groupCategory}
+                onChangeText={setGroupCategory}
+                placeholder="Category (e.g. Sports, Tech, Nightlife)"
+                placeholderTextColor={colors.mutedForeground}
+                style={[
+                  styles.modalInput,
+                  {
+                    backgroundColor: colors.input,
+                    borderColor: colors.border,
+                    color: colors.foreground,
+                    marginTop: 8,
+                  },
+                ]}
+              />
+
+              <Pressable
+                onPress={() => setGroupIsPublic((value) => !value)}
+                style={[styles.groupToggleRow, { borderColor: colors.border }]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
+                    Public group
+                  </Text>
+                  <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+                    Discoverable by search. Turn off for an invite-only group.
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.checkbox,
+                    {
+                      borderColor: groupIsPublic ? colors.primary : colors.mutedForeground,
+                      backgroundColor: groupIsPublic ? colors.primary : "transparent",
+                    },
+                  ]}
+                >
+                  {groupIsPublic ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+                </View>
+              </Pressable>
+
+              {groupIsPublic ? (
+                <Pressable
+                  onPress={() => setGroupRequiresApproval((value) => !value)}
+                  style={[styles.groupToggleRow, { borderColor: colors.border }]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
+                      Require approval to join
+                    </Text>
+                    <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+                      New members wait for an owner or admin to approve them.
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      {
+                        borderColor: groupRequiresApproval ? colors.primary : colors.mutedForeground,
+                        backgroundColor: groupRequiresApproval ? colors.primary : "transparent",
+                      },
+                    ]}
+                  >
+                    {groupRequiresApproval ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+                  </View>
+                </Pressable>
+              ) : null}
+
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionHeading, { color: colors.mutedForeground }]}>
+                  Add Members ({selectedMembers.length} selected)
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.modalSearchBox,
+                  { backgroundColor: colors.input, borderColor: colors.border, marginBottom: 8 },
+                ]}
+              >
+                <Ionicons name="search" size={16} color={colors.mutedForeground} />
+                <TextInput
+                  value={memberSearchQuery}
+                  onChangeText={setMemberSearchQuery}
+                  placeholder="Search all Eventis users by name or username"
+                  placeholderTextColor={colors.mutedForeground}
+                  style={[styles.modalSearchInput, { color: colors.foreground }]}
+                />
+                {memberSearchLoading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+              </View>
+
+              {memberSearchError ? (
+                <Text style={[styles.modalErrorText, { color: colors.destructive }]}>
+                  {memberSearchError}
+                </Text>
+              ) : null}
+
+              {memberPickerContacts.length === 0 ? (
                 <Text style={[styles.emptyPrompt, { color: colors.mutedForeground }]}>
-                  No contacts available to add.
+                  {memberSearchQuery.trim()
+                    ? `No Eventis users matching "${memberSearchQuery.trim()}"`
+                    : "No contacts yet — search above to find any Eventis user."}
                 </Text>
               ) : (
-                availableContacts.map((contact) => {
+                memberPickerContacts.map((contact) => {
                   const isSelected = selectedMembers.includes(contact.id);
                   return (
                     <Pressable
@@ -853,7 +995,7 @@ export default function ChatScreen() {
 
             <View style={styles.modalBtnRow}>
               <Pressable
-                onPress={() => setCreateGroupOpen(false)}
+                onPress={resetCreateGroupForm}
                 disabled={groupBusy}
                 style={[styles.modalActionBtn, { backgroundColor: colors.secondary }]}
               >
@@ -936,41 +1078,56 @@ export default function ChatScreen() {
 
             <Text style={[styles.sectionHeading, { color: colors.mutedForeground, marginTop: 10, marginBottom: 8 }]}>
               {searchGroupQuery.trim()
-                ? `Results for "${searchGroupQuery.trim()}" (${filteredGroups.length})`
-                : "Discover Popular Groups"}
+                ? `Results for "${searchGroupQuery.trim()}" (${groupResults.length})`
+                : "Discover Public Groups"}
             </Text>
 
             <ScrollView style={{ maxHeight: 270 }} showsVerticalScrollIndicator={false}>
-              {filteredGroups.length === 0 ? (
+              {groupsLoading ? (
+                <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+              ) : groupsSearchError ? (
+                <Text style={{ color: colors.destructive, fontSize: 13, textAlign: "center", paddingVertical: 18 }}>
+                  {groupsSearchError}
+                </Text>
+              ) : groupResults.length === 0 ? (
                 <View style={{ paddingVertical: 18, alignItems: "center", gap: 10 }}>
-                  <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
-                    No group matching "{searchGroupQuery}"
+                  <Text style={{ color: colors.mutedForeground, fontSize: 14, textAlign: "center" }}>
+                    {searchGroupQuery.trim()
+                      ? `No group matching "${searchGroupQuery.trim()}"`
+                      : "No public groups yet."}
                   </Text>
-                  <Pressable
-                    onPress={() => void handleJoinGroup(searchGroupQuery.trim())}
-                    style={[styles.createAndJoinBtn, { backgroundColor: colors.primary }]}
-                  >
-                    <Ionicons name="add" size={16} color="#FFFFFF" />
-                    <Text style={{ color: "#FFFFFF", fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
-                      Create & Join "{searchGroupQuery.trim()}"
-                    </Text>
-                  </Pressable>
+                  {searchGroupQuery.trim() ? (
+                    <Pressable
+                      onPress={() => openCreateGroupWithName(searchGroupQuery.trim())}
+                      style={[styles.createAndJoinBtn, { backgroundColor: colors.primary }]}
+                    >
+                      <Ionicons name="add" size={16} color="#FFFFFF" />
+                      <Text style={{ color: "#FFFFFF", fontFamily: "Inter_600SemiBold", fontSize: 13 }}>
+                        Create "{searchGroupQuery.trim()}"
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ) : (
-                filteredGroups.map((group) => (
+                groupResults.map((group) => (
                   <View
                     key={group.id}
                     style={[styles.featuredGroupCard, { backgroundColor: colors.secondary }]}
                   >
                     <View style={[styles.featuredGroupIcon, { backgroundColor: colors.primary }]}>
-                      <Ionicons name={group.icon as any} size={20} color="#FFFFFF" />
+                      {group.avatarUrl ? (
+                        <Image source={{ uri: group.avatarUrl }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                      ) : (
+                        <Ionicons name="people" size={20} color="#FFFFFF" />
+                      )}
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.featuredGroupName, { color: colors.foreground }]}>
-                        {group.name}
+                        {group.title}
                       </Text>
                       <Text style={[styles.featuredGroupDesc, { color: colors.mutedForeground }]}>
-                        {group.desc}
+                        {group.memberCount} member{group.memberCount === 1 ? "" : "s"}
+                        {group.description ? ` · ${group.description}` : ""}
                       </Text>
                       <View style={styles.groupBadgeRow}>
                         <View
@@ -1002,15 +1159,32 @@ export default function ChatScreen() {
                     </View>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel={`Join ${group.name}`}
-                      onPress={() => void handleJoinGroup(group.name, group.requiresApproval)}
-                      disabled={groupBusy}
-                      style={[styles.joinPillBtn, { backgroundColor: colors.primary }]}
+                      accessibilityLabel={group.isMember ? `Open ${group.title}` : `Join ${group.title}`}
+                      onPress={() => {
+                        if (group.isMember) {
+                          setJoinGroupOpen(false);
+                          router.navigate({ pathname: "/chat/[id]", params: { id: group.id } });
+                        } else {
+                          void handleJoinGroup(group);
+                        }
+                      }}
+                      disabled={groupBusy || group.hasPendingRequest}
+                      style={[
+                        styles.joinPillBtn,
+                        { backgroundColor: group.hasPendingRequest ? colors.secondary : colors.primary },
+                      ]}
                     >
                       {groupBusy ? (
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
-                        <Text style={styles.joinPillBtnText}>Join</Text>
+                        <Text
+                          style={[
+                            styles.joinPillBtnText,
+                            group.hasPendingRequest ? { color: colors.mutedForeground } : null,
+                          ]}
+                        >
+                          {group.isMember ? "Open" : group.hasPendingRequest ? "Pending" : "Join"}
+                        </Text>
                       )}
                     </Pressable>
                   </View>
@@ -1276,6 +1450,13 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: Platform.OS === "ios" ? 36 : 24,
   },
+  createGroupSheet: {
+    maxHeight: "90%",
+  },
+  createGroupScroll: {
+    flex: 1,
+    marginVertical: 6,
+  },
   sheetHandle: {
     width: 38,
     height: 4,
@@ -1417,6 +1598,14 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
+  },
+  groupToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginTop: 4,
   },
   modalErrorText: {
     fontSize: 12,
