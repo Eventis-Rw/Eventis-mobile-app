@@ -394,22 +394,11 @@ function ManualSubscribeCheckout() {
             <View style={[styles.statusActions, { marginTop: 24 }]}>
               <Pressable
                 style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]}
-                onPress={() => router.push("/organiser/payments" as any)}
-                accessibilityRole="button"
-                accessibilityLabel="Track this payment"
-              >
-                <Text style={styles.primaryPayBtnText}>Track this payment</Text>
-              </Pressable>
-
-              <Pressable
                 onPress={() => router.replace("/(tabs)" as any)}
-                style={styles.cancelSheetBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Back to Discover"
               >
-                <Text style={[styles.cancelSheetText, { color: palette.accent, fontSize: 15, fontFamily: "Inter_600SemiBold" }]}>
-                  Back to Discover
-                </Text>
+                <Text style={styles.primaryPayBtnText}>Back to Discover</Text>
               </Pressable>
             </View>
           </Animated.View>
