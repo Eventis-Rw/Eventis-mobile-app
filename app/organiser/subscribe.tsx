@@ -275,7 +275,7 @@ function ManualSubscribeCheckout() {
     return (
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
         <OrganiserAtmosphere />
-        <OrganiserFlowHeader title="Choose access" step={2} canGoBack={false} />
+        <OrganiserFlowHeader title="Choose packages" step={2} canGoBack={false} />
         <ScrollView contentContainerStyle={[styles.statusWrap, { paddingBottom: insets.bottom + 24 }]}>
           <Animated.View entering={FadeIn} style={styles.status}>
             <View style={[styles.statusIconWrap, { backgroundColor: `${colors.primary}20`, borderColor: `${colors.primary}40` }]}>
@@ -558,10 +558,10 @@ function ManualSubscribeCheckout() {
   return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>
       <OrganiserAtmosphere />
-      <OrganiserFlowHeader title="Choose access" step={2} />
+      <OrganiserFlowHeader title="Choose packages" step={2} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.headerBlock}>
-          <Text style={[styles.title, { color: palette.text, fontSize: 19, letterSpacing: -0.3 }]}>Choose your organiser access</Text>
+          <Text style={[styles.title, { color: palette.text, fontSize: 19, letterSpacing: -0.3 }]}>Choose packages</Text>
         </View>
 
         {plansLoading ? (
@@ -848,7 +848,7 @@ function DemoSubscribeCheckout() {
         <OrganiserAtmosphere />
         <Stack.Screen options={{ gestureEnabled: phase !== "processing" }} />
         <OrganiserFlowHeader
-          title="Choose access"
+          title="Choose packages"
           step={2}
           canGoBack={phase !== "processing" && phase !== "succeeded"}
         />
@@ -901,7 +901,7 @@ function DemoSubscribeCheckout() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <OrganiserAtmosphere />
-      <OrganiserFlowHeader title="Choose access" step={2} />
+      <OrganiserFlowHeader title="Choose packages" step={2} />
 
       <ScrollView
         style={styles.scroll}
@@ -911,7 +911,7 @@ function DemoSubscribeCheckout() {
       >
         {/* HERO TITLE & BRANDING */}
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(50).springify() : undefined}>
-          <Text style={[styles.title, { color: palette.text, fontSize: 19, letterSpacing: -0.3 }]}>Choose your organiser access</Text>
+          <Text style={[styles.title, { color: palette.text, fontSize: 19, letterSpacing: -0.3 }]}>Choose packages</Text>
         </Animated.View>
 
         {/* INTERVAL SELECTOR TABS (DAILY / WEEKLY / MONTHLY) */}
