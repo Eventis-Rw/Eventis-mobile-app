@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   BackHandler,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -49,6 +50,9 @@ import {
   type ManualPaymentMethod,
   type ManualPaymentSubmission,
 } from "@/services/manualPaymentsService";
+
+const MTN_LOGO = require("@/assets/images/mtn-logo.png");
+const AIRTEL_LOGO = require("@/assets/images/airtel-logo.png");
 
 const PROVIDER_LABEL: Record<ManualPaymentMethod["provider"], string> = { mtn_momo: "MTN MoMo", airtel_money: "Airtel Money" };
 
@@ -410,47 +414,58 @@ function ManualSubscribeCheckout() {
             </OrganiserSurface>
           ) : (
             <>
-              {methods.length > 1 ? (
-                <OrganiserSurface style={[styles.sectionCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                  <Text style={[styles.sectionTitle, { color: palette.text }]}>Pay with</Text>
-                  <View style={styles.methodsGrid}>
-                    {methods.map((m) => {
-                      const isSelected = m.id === selectedMethodId;
-                      return (
-                        <Pressable
-                          key={m.id}
-                          onPress={() => {
-                            setSelectedMethodId(m.id);
-                            void dialToPay(m);
-                          }}
+              <View style={styles.methodSelectionSection}>
+                <Text style={[styles.sectionTitle, { color: palette.text, fontSize: 16 }]}>Select payment network</Text>
+                <View style={styles.methodsVerticalList}>
+                  {methods.map((m) => {
+                    const isSelected = m.id === selectedMethodId;
+                    const isMtn = m.provider === "mtn_momo";
+                    const logo = isMtn ? MTN_LOGO : AIRTEL_LOGO;
+                    return (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => {
+                          setSelectedMethodId(m.id);
+                          void dialToPay(m);
+                        }}
+                        style={[
+                          styles.logoMethodCard,
+                          {
+                            backgroundColor: isSelected
+                              ? (palette.dark ? "rgba(56,189,248,0.10)" : "rgba(14,165,233,0.07)")
+                              : palette.surface,
+                            borderColor: isSelected ? palette.accent : palette.line,
+                            borderWidth: isSelected ? 2 : 1,
+                          },
+                        ]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: isSelected }}
+                      >
+                        <View style={[styles.logoContainer, { backgroundColor: isMtn ? "#FFCC00" : "#FFFFFF" }]}>
+                          <Image source={logo} style={styles.providerLogoImg} resizeMode="contain" />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0, paddingLeft: 12 }}>
+                          <Text style={[styles.methodTitleText, { color: palette.text }]}>{PROVIDER_LABEL[m.provider]}</Text>
+                          <Text style={[styles.methodUssdText, { color: palette.muted }]}>
+                            {isMtn ? "Tap to dial *182#" : "Tap to dial *500#"}
+                          </Text>
+                        </View>
+                        <View
                           style={[
-                            styles.methodCard,
+                            styles.premiumRadio,
                             {
-                              backgroundColor: isSelected
-                                ? (palette.dark ? "rgba(56,189,248,0.12)" : "rgba(14,165,233,0.08)")
-                                : palette.surfaceRaised,
                               borderColor: isSelected ? palette.accent : palette.line,
+                              backgroundColor: isSelected ? (palette.dark ? "rgba(56,189,248,0.18)" : "rgba(14,165,233,0.12)") : "transparent",
                             },
                           ]}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected: isSelected }}
                         >
-                          <View style={styles.methodHeader}>
-                            <View style={[styles.methodRadioDot, { borderColor: isSelected ? palette.accent : palette.line }]}>
-                              {isSelected ? <View style={[styles.methodRadioInner, { backgroundColor: palette.accent }]} /> : null}
-                            </View>
-                            <Ionicons name="call-outline" size={16} color={isSelected ? palette.accent : palette.muted} />
-                          </View>
-                          <Text style={[styles.methodLabel, { color: palette.text }]}>{PROVIDER_LABEL[m.provider]}</Text>
-                          <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: palette.muted }}>
-                            {m.provider === "mtn_momo" ? "Tap to dial *182#" : "Tap to dial *500#"}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </OrganiserSurface>
-              ) : null}
+                          {isSelected ? <View style={[styles.premiumRadioDot, { backgroundColor: palette.accent }]} /> : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
 
               {selectedMethod && activePlan ? (
                 <OrganiserSurface style={[styles.summaryBox, { backgroundColor: palette.surface, borderColor: palette.line }]}>
@@ -510,42 +525,17 @@ function ManualSubscribeCheckout() {
               ) : null}
 
               {selectedMethod && activePlan ? (
-                <View style={[styles.stepsCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                  <Text style={[styles.stepsCardTitle, { color: palette.text }]}>How to complete payment:</Text>
-                  <View style={styles.stepsList}>
-                    <View style={styles.stepRow}>
-                      <View style={[styles.stepNumberBadge, { backgroundColor: palette.accent + "20" }]}>
-                        <Text style={[styles.stepNumberText, { color: palette.accent }]}>1</Text>
-                      </View>
-                      <Text style={[styles.stepText, { color: palette.muted }]}>
-                        Tap <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>Open Phone App</Text> above to launch {selectedMethod.provider === "mtn_momo" ? "*182#" : "*500#"}.
-                      </Text>
-                    </View>
-                    <View style={styles.stepRow}>
-                      <View style={[styles.stepNumberBadge, { backgroundColor: palette.accent + "20" }]}>
-                        <Text style={[styles.stepNumberText, { color: palette.accent }]}>2</Text>
-                      </View>
-                      <Text style={[styles.stepText, { color: palette.muted }]}>
-                        Select Send Money, paste <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>{selectedMethod.phoneNumber}</Text> and enter <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>{formatPlanPrice(activePlan)}</Text>.
-                      </Text>
-                    </View>
-                    <View style={styles.stepRow}>
-                      <View style={[styles.stepNumberBadge, { backgroundColor: palette.accent + "20" }]}>
-                        <Text style={[styles.stepNumberText, { color: palette.accent }]}>3</Text>
-                      </View>
-                      <Text style={[styles.stepText, { color: palette.muted }]}>
-                        Enter your MoMo PIN to confirm, then take a screenshot of the confirmation.
-                      </Text>
-                    </View>
-                    <View style={styles.stepRow}>
-                      <View style={[styles.stepNumberBadge, { backgroundColor: palette.accent + "20" }]}>
-                        <Text style={[styles.stepNumberText, { color: palette.accent }]}>4</Text>
-                      </View>
-                      <Text style={[styles.stepText, { color: palette.muted }]}>
-                        Return here and tap <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>I've paid — upload screenshot</Text>.
-                      </Text>
-                    </View>
-                  </View>
+                <View style={[styles.simpleGuideCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+                  <Text style={[styles.simpleGuideTitle, { color: palette.text }]}>Quick steps:</Text>
+                  <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
+                    <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>1.</Text> Tap <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>Open Phone App</Text> to dial {selectedMethod.provider === "mtn_momo" ? "*182#" : "*500#"}.
+                  </Text>
+                  <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
+                    <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>2.</Text> Send <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>{formatPlanPrice(activePlan)}</Text> to <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>{selectedMethod.phoneNumber}</Text> & confirm with PIN.
+                  </Text>
+                  <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
+                    <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>3.</Text> Screenshot confirmation SMS and tap <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>I've paid</Text> below.
+                  </Text>
                 </View>
               ) : null}
 
@@ -571,13 +561,9 @@ function ManualSubscribeCheckout() {
       <OrganiserFlowHeader title="Choose access" step={2} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.headerBlock}>
-          <View style={styles.kickerRow}>
-            <View style={styles.kickerDot} />
-            <Text style={[styles.kickerText, { color: palette.accent }]}>EVENTIS ORGANISER PASS</Text>
-          </View>
-          <Text style={[styles.title, { color: palette.text }]}>Choose your organiser access</Text>
-          <Text style={[styles.subtitle, { color: palette.muted }]}>
-            Pick the pass that fits your hosting needs. The 1-month plan is recommended for active organizers.
+          <Text style={[styles.title, { color: palette.text, fontSize: 24 }]}>Choose your access</Text>
+          <Text style={[styles.subtitle, { color: palette.muted, marginTop: 2 }]}>
+            Select a plan to unlock unlimited event hosting and organiser verification.
           </Text>
         </View>
 
@@ -600,10 +586,19 @@ function ManualSubscribeCheckout() {
             <Text style={[styles.statusText, { color: colors.mutedForeground }]}>No plans are available right now.</Text>
           </OrganiserSurface>
         ) : (
-          <View style={{ gap: 14 }}>
+          <View style={{ gap: 10 }}>
             {sortedPlans.map((plan) => {
               const selected = plan.id === selectedPlanId;
               const isRecommended = plan.interval === "month";
+              const billingSubtext =
+                plan.interval === "month"
+                  ? "Unlimited hosting · 30 days"
+                  : plan.interval === "post"
+                  ? "1 event listing · No commitment"
+                  : plan.interval === "quarter"
+                  ? "3 months unlimited · Save 12%"
+                  : "1 year unlimited · Best rate";
+
               return (
                 <Pressable
                   key={plan.id}
@@ -615,31 +610,30 @@ function ManualSubscribeCheckout() {
                   }}
                   accessibilityRole="radio"
                   accessibilityState={{ selected }}
-                  style={{ borderRadius: 20 }}
+                  style={{ borderRadius: 16 }}
                 >
                   <View
                     style={[
-                      styles.premiumCard,
+                      styles.compactPlanCard,
                       {
                         backgroundColor: selected
-                          ? (palette.dark ? "rgba(56,189,248,0.07)" : "rgba(14,165,233,0.05)")
+                          ? (palette.dark ? "rgba(56,189,248,0.08)" : "rgba(14,165,233,0.06)")
                           : palette.surface,
                         borderColor: selected
                           ? palette.accent
                           : isRecommended
-                          ? (palette.dark ? "rgba(56,189,248,0.38)" : "rgba(14,165,233,0.35)")
+                          ? (palette.dark ? "rgba(56,189,248,0.4)" : "rgba(14,165,233,0.35)")
                           : palette.line,
                         borderWidth: selected ? 2 : 1,
                       },
                     ]}
                   >
-                    {/* Header Row with Plan Name, Badges, and Radio */}
-                    <View style={styles.cardHeaderRow}>
-                      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", paddingRight: 8 }}>
-                        <Text style={[styles.cardPlanTitle, { color: palette.text }]}>{plan.name}</Text>
+                    <View style={styles.compactPlanLeft}>
+                      <View style={styles.compactPlanTitleRow}>
+                        <Text style={[styles.compactPlanName, { color: palette.text }]}>{plan.name}</Text>
                         {isRecommended ? (
                           <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
-                            <Ionicons name="sparkles" size={10} color="#000000" />
+                            <Ionicons name="sparkles" size={9} color="#000000" />
                             <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
                           </View>
                         ) : plan.badge && plan.badge !== "Recommended" ? (
@@ -648,7 +642,18 @@ function ManualSubscribeCheckout() {
                           </View>
                         ) : null}
                       </View>
+                      <Text style={[styles.compactPlanSubtext, { color: palette.muted }]}>{billingSubtext}</Text>
+                    </View>
 
+                    <View style={styles.compactPlanRight}>
+                      <View style={styles.compactPriceWrap}>
+                        <Text style={[styles.compactPriceNumber, { color: palette.text }]}>
+                          RWF {plan.price.toLocaleString()}
+                        </Text>
+                        <Text style={[styles.compactPricePeriod, { color: palette.muted }]}>
+                          {plan.interval === "post" ? "/post" : plan.interval === "month" ? "/mo" : plan.interval === "quarter" ? "/3 mo" : "/yr"}
+                        </Text>
+                      </View>
                       <View
                         style={[
                           styles.premiumRadio,
@@ -661,38 +666,6 @@ function ManualSubscribeCheckout() {
                         {selected ? <View style={[styles.premiumRadioDot, { backgroundColor: palette.accent }]} /> : null}
                       </View>
                     </View>
-
-                    {/* Subtitle / Description */}
-                    {plan.description ? (
-                      <Text style={[styles.cardPlanDesc, { color: palette.muted }]}>
-                        {plan.description}
-                      </Text>
-                    ) : null}
-
-                    {/* Price section */}
-                    <View style={styles.cardPriceRow}>
-                      <Text style={[styles.cardPriceCurrency, { color: palette.accent }]}>RWF</Text>
-                      <Text style={[styles.cardPriceAmount, { color: palette.text }]}>
-                        {plan.price.toLocaleString()}
-                      </Text>
-                      <Text style={[styles.cardPricePeriod, { color: palette.muted }]}>
-                        {plan.interval === "post" ? "/ post" : plan.interval === "month" ? "/ month" : plan.interval === "quarter" ? "/ 3 months" : "/ year"}
-                      </Text>
-                    </View>
-
-                    {/* Feature items: displayed on 1-month recommended tier or whenever selected */}
-                    {(isRecommended || selected) && plan.features && plan.features.length > 0 ? (
-                      <View style={[styles.cardFeaturesWrap, { borderTopColor: palette.line }]}>
-                        {plan.features.slice(0, selected ? plan.features.length : 3).map((feat, idx) => (
-                          <View key={idx} style={styles.cardFeatureRow}>
-                            <View style={[styles.cardFeatureCheck, { backgroundColor: palette.accent + "18" }]}>
-                              <Ionicons name="checkmark" size={11} color={palette.accent} />
-                            </View>
-                            <Text style={[styles.cardFeatureText, { color: palette.text }]}>{feat}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null}
                   </View>
                 </Pressable>
               );
@@ -1588,6 +1561,105 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     marginLeft: -2,
+  },
+  compactPlanCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  compactPlanLeft: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 10,
+    gap: 3,
+  },
+  compactPlanTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  compactPlanName: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
+  },
+  compactPlanSubtext: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  compactPlanRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  compactPriceWrap: {
+    alignItems: "flex-end",
+  },
+  compactPriceNumber: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.3,
+  },
+  compactPricePeriod: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+  },
+  methodSelectionSection: {
+    gap: 12,
+  },
+  methodsVerticalList: {
+    gap: 10,
+  },
+  logoMethodCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  logoContainer: {
+    width: 46,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    padding: 3,
+  },
+  providerLogoImg: {
+    width: "100%",
+    height: "100%",
+  },
+  methodTitleText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  methodUssdText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    marginTop: 2,
+  },
+  simpleGuideCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 8,
+    marginTop: 4,
+  },
+  simpleGuideTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
+    marginBottom: 2,
+  },
+  simpleGuideStep: {
+    fontSize: 12.5,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
   },
   headerBlock: {
     marginBottom: 4,
