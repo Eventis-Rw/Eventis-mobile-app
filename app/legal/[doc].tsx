@@ -9,7 +9,7 @@ import { LEGAL_DOCUMENTS, type LegalDocumentKey } from "@/constants/legal";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 
-/** `/legal/terms` or `/legal/privacy`. Same text as the sign-up screen. */
+/** `/legal/terms|privacy|cookies|refunds|guidelines|organiser`. Same text as the sign-up screen and the website. */
 export default function LegalScreen() {
   const { doc } = useLocalSearchParams<{ doc: string }>();
   const colors = useColors();

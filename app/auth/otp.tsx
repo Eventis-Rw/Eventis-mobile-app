@@ -17,6 +17,7 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { DEMO_AUTH, OTP_LENGTH } from "@/constants/auth";
 import { OTPInput } from "@/components/OTPInput";
 import { useAuth } from "@/context/AuthContext";
+import { recordEventisTermsAcceptance } from "@/services/legalAcceptanceService";
 import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -112,6 +113,8 @@ export default function OTPScreen() {
             challengeId: challengeId || initialChallengeId || "demo_email_challenge",
             code,
           });
+          // The register screen only reaches this point after its terms checkbox is ticked.
+          if (purpose === "register") await recordEventisTermsAcceptance();
         } else if (DEMO_AUTH) {
           await signInWithPhoneSession(phone || user?.phone || "+250 7XX XXX XXX", fullName || username);
         } else if (!(await verifyOTP(code, phone, fullName || username))) {

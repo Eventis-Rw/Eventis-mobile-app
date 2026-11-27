@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import * as WebBrowser from "expo-web-browser";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -19,7 +18,6 @@ import {
 import { DateOfBirthPicker } from "@/components/love/DateOfBirthPicker";
 import { LoveScreenShell } from "@/components/love/LoveScreenShell";
 import { InlineError, SectionState } from "@/components/profile/ProfileSection";
-import { PRIVACY_POLICY_URL, TERMS_URL } from "@/constants/legal";
 import { useAuth } from "@/context/AuthContext";
 import { useMyLoveProfile } from "@/context/MyLoveProfileContext";
 import { useColors } from "@/hooks/useColors";
@@ -98,12 +96,9 @@ export default function VerifyAgeScreen() {
 
   const stepLabel = from === "create" ? "Step 1 of 2" : undefined;
 
-  const handleOpenLegalUrl = async (url: string) => {
-    try {
-      await WebBrowser.openBrowserAsync(url);
-    } catch {
-      router.push("/love/policies" as any);
-    }
+  // FindLove's own terms live in the app (the website only has the general Eventis ones).
+  const openPolicy = (doc: "terms" | "guidelines" | "privacy") => {
+    router.push({ pathname: "/love/policies", params: { doc } } as any);
   };
 
   if (!user) {
@@ -147,7 +142,7 @@ export default function VerifyAgeScreen() {
       return;
     }
     if (!confirmed) {
-      setError(`Please confirm you are ${MIN_LOVE_AGE}+ and agree to the Terms & Conditions and Privacy Policy.`);
+      setError(`Please confirm you are ${MIN_LOVE_AGE}+ and agree to the FindLove Terms, Community Guidelines and Privacy Notice.`);
       return;
     }
     setError(null);
@@ -376,7 +371,7 @@ export default function VerifyAgeScreen() {
           style={styles.checkboxTouch}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: confirmed }}
-          accessibilityLabel="I confirm I am 18 or older and agree to the Terms & Conditions and Privacy Policy"
+          accessibilityLabel="I confirm I am 18 or older and agree to the FindLove Terms, Community Guidelines and Privacy Notice"
         >
           <Ionicons
             name={confirmed ? "checkbox" : "square-outline"}
@@ -387,20 +382,17 @@ export default function VerifyAgeScreen() {
 
         <Text style={[styles.confirmText, { color: colors.foreground }]}>
           I confirm I am {MIN_LOVE_AGE}+ and agree to the{" "}
-          <Text
-            style={styles.termsLink}
-            onPress={() => void handleOpenLegalUrl(TERMS_URL)}
-            accessibilityRole="link"
-          >
-            Terms & Conditions
+          FindLove{" "}
+          <Text style={styles.termsLink} onPress={() => openPolicy("terms")} accessibilityRole="link">
+            Terms
+          </Text>
+          ,{" "}
+          <Text style={styles.termsLink} onPress={() => openPolicy("guidelines")} accessibilityRole="link">
+            Community Guidelines
           </Text>
           {" "}and{" "}
-          <Text
-            style={styles.termsLink}
-            onPress={() => void handleOpenLegalUrl(PRIVACY_POLICY_URL)}
-            accessibilityRole="link"
-          >
-            Privacy Policy
+          <Text style={styles.termsLink} onPress={() => openPolicy("privacy")} accessibilityRole="link">
+            Privacy Notice
           </Text>
           .
         </Text>

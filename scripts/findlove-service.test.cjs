@@ -71,6 +71,10 @@ const membership = load("utils/findLoveMembership.ts", {}, () => undefined);
 const ageCheck = load("utils/findLoveAgeVerification.ts", {}, () => undefined);
 const connections = load("utils/findLoveConnections.ts", {}, () => undefined);
 const ageRange = load("utils/findLoveAgeRange.ts", {}, () => undefined);
+const legalContent = load("constants/legalContent.generated.ts", {}, () => undefined);
+const findLoveLegal = load("constants/findLoveLegal.ts", {}, (name) => {
+  if (name === "@/constants/legalContent.generated") return legalContent;
+});
 // The real API mapping layer, wired to the same stub API and storage as the service.
 function loadApi(env) {
   return load("services/findLoveApi.ts", env, (name) => {
@@ -81,6 +85,7 @@ function loadApi(env) {
     if (name === "@/utils/findLoveMembership") return membership;
     if (name === "@/utils/findLoveProfile") return rules;
     if (name === "@/utils/formDataFile") return { appendLocalFile: (form, field, uri) => form.append(field, uri) };
+    if (name === "@/constants/findLoveLegal") return findLoveLegal;
   });
 }
 
@@ -924,6 +929,7 @@ test("real mode: the check belongs to the account; null means not started; photo
     backKey: "uploads/3",
     dateOfBirth: "1999-04-02",
     adultConfirmed: true,
+    termsVersion: findLoveLegal.FINDLOVE_LEGAL_VERSION,
   });
 
   // No date of birth, or under 18: refused before anything is uploaded.

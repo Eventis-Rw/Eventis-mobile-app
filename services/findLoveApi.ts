@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { LoveConnectionStatus, LoveMembership, MyLoveProfileInput } from "@/constants/loveProfiles";
+import { FINDLOVE_LEGAL_VERSION } from "@/constants/findLoveLegal";
 import { api } from "@/utils/apiClient";
 import { isAnyAgeRange, LOVE_AGE_RANGE_MAX, LOVE_AGE_RANGE_MIN, type LoveAgeRange } from "@/utils/findLoveAgeRange";
 import {
@@ -248,6 +249,8 @@ export async function apiSubmitAgeVerification(input: {
     backKey: back?.key ?? null,
     dateOfBirth: input.dateOfBirth,
     adultConfirmed: true,
+    // The age-check checkbox also accepts the FindLove Terms, Guidelines and Privacy Notice.
+    termsVersion: FINDLOVE_LEGAL_VERSION,
   });
   return readVerification(row);
 }

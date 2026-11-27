@@ -3,6 +3,7 @@ import { KeyboardAwareScrollView } from "@/components/KeyboardCompat";
 import { Logo } from "@/components/Logo";
 import { PRIVACY_POLICY_URL, TERMS_URL } from "@/constants/legal";
 import { useAuth } from "@/context/AuthContext";
+import { recordEventisTermsAcceptance } from "@/services/legalAcceptanceService";
 import { useTheme } from "@/context/ThemeContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
@@ -115,6 +116,7 @@ export default function RegisterScreen() {
     setSocialLoading(provider);
     try {
       await signInWithSocial(provider);
+      await recordEventisTermsAcceptance();
       router.replace("/(tabs)");
     } catch (err) {
       setErrors({

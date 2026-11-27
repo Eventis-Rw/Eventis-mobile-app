@@ -71,7 +71,10 @@ const support = load("services/supportService.ts", (name) => {
   if (name === "@/services/profileService") return profile;
   if (name === "@/utils/apiClient") return apiStub;
 });
-const legal = load("constants/legal.ts", () => undefined);
+const legalContent = load("constants/legalContent.generated.ts", () => undefined);
+const legal = load("constants/legal.ts", (name) => {
+  if (name === "@/constants/legalContent.generated") return legalContent;
+});
 const dates = load("utils/dates.ts", () => undefined);
 const security = load("services/securityService.ts", (name) => {
   if (name === "@/services/profileService") return profile;
@@ -565,12 +568,17 @@ test("problem reports need a category, a real description and a reply email", as
 });
 
 test("legal documents have content for every section", () => {
-  for (const key of ["terms", "privacy"]) {
+  for (const key of ["terms", "privacy", "cookies", "refunds", "guidelines", "organiser"]) {
     const doc = legal.LEGAL_DOCUMENTS[key];
-    assert.ok(doc.title && doc.intro);
-    assert.ok(doc.sections.length > 0);
-    assert.ok(doc.sections.every((s) => s.heading && s.paragraphs.length && s.paragraphs.every(Boolean)));
+    assert.ok(doc.title && doc.preamble.length, key);
+    assert.ok(doc.sections.length > 0, key);
+    assert.ok(doc.sections.every((s) => s.heading && s.blocks.length), key);
+    const text = JSON.stringify(doc);
+    assert.match(text, /Travelis Rwanda Ltd/, key);
+    assert.doesNotMatch(text, /PENDING|eventis\.app/, key);
   }
+  assert.ok(legal.LEGAL_IS_DRAFT && legal.LEGAL_DRAFT_NOTICE.includes("pending legal review"));
+  assert.ok(legal.EVENTIS_LEGAL_VERSION.length <= 20);
 });
 
 test("today is the local calendar date, not the UTC one", () => {

@@ -60,7 +60,7 @@ export default function TermsScreen() {
         </Pressable>
         <Text style={[styles.title, { color: colors.foreground }]}>
           {selectedTab === "terms"
-            ? "Terms of Service"
+            ? "Terms & Conditions"
             : selectedTab === "privacy"
             ? "Privacy Policy"
             : "Terms & Policies"}
@@ -73,7 +73,7 @@ export default function TermsScreen() {
         {(
           [
             { key: "all", label: "All" },
-            { key: "terms", label: "Terms of Service" },
+            { key: "terms", label: "Terms & Conditions" },
             { key: "privacy", label: "Privacy Policy" },
           ] as const
         ).map((tab) => {
@@ -141,7 +141,7 @@ export default function TermsScreen() {
         >
           <Ionicons name="open-outline" size={15} color="#00A3FF" />
           <Text style={styles.webLinkText}>
-            View {selectedTab === "privacy" ? "Privacy Policy" : selectedTab === "terms" ? "Terms of Service" : "full policies"} online at eventis.today
+            View {selectedTab === "privacy" ? "Privacy Policy" : selectedTab === "terms" ? "Terms & Conditions" : "full policies"} online at eventis.today
           </Text>
         </Pressable>
 
@@ -167,7 +167,7 @@ export default function TermsScreen() {
             {accepted && <Ionicons name="checkmark" size={14} color="#fff" />}
           </View>
           <Text style={[styles.acceptText, { color: colors.foreground }]}>
-            I have read and accept the Eventis Terms of Service and Privacy Policy.
+            I have read and accept the Eventis Terms & Conditions and Privacy Policy.
           </Text>
         </Pressable>
 

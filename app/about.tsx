@@ -54,7 +54,7 @@ export default function AboutScreen() {
         </GlassSurface>
 
         <SettingsGroup title="Legal">
-          <SettingsRow icon="document-text-outline" label="Terms of Service" onPress={() => router.push("/legal/terms" as any)} />
+          <SettingsRow icon="document-text-outline" label="Terms & Conditions" onPress={() => router.push("/legal/terms" as any)} />
           <SettingsRow icon="lock-closed-outline" label="Privacy Policy" onPress={() => router.push("/legal/privacy" as any)} />
         </SettingsGroup>
       </ScrollView>
