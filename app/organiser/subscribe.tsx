@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   BackHandler,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -205,9 +206,37 @@ function ManualSubscribeCheckout() {
     try {
       await Clipboard.setStringAsync(phone);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 3000);
     } catch {
       // Clipboard access can fail on web without a user gesture; nothing to show for it.
+    }
+  };
+
+  const dialToPay = async (targetMethod: ManualPaymentMethod) => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+    // 1. Copy recipient phone number to clipboard
+    try {
+      await Clipboard.setStringAsync(targetMethod.phoneNumber);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 4000);
+    } catch {}
+
+    // 2. Open phone app to dial USSD (*182# for MTN, *500# for Airtel)
+    const ussd = targetMethod.provider === "mtn_momo" ? "*182#" : "*500#";
+    const dialUrl = `tel:${encodeURIComponent(ussd)}`;
+    const fallbackUrl = `tel:${targetMethod.phoneNumber.replace(/\s+/g, "")}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(dialUrl).catch(() => false);
+      if (canOpen) {
+        await Linking.openURL(dialUrl);
+      } else {
+        await Linking.openURL(fallbackUrl);
+      }
+    } catch {
+      void Linking.openURL(fallbackUrl).catch(() => {});
     }
   };
 
@@ -390,20 +419,32 @@ function ManualSubscribeCheckout() {
                       return (
                         <Pressable
                           key={m.id}
-                          onPress={() => setSelectedMethodId(m.id)}
+                          onPress={() => {
+                            setSelectedMethodId(m.id);
+                            void dialToPay(m);
+                          }}
                           style={[
                             styles.methodCard,
-                            { backgroundColor: isSelected ? palette.blueSoft : palette.surfaceRaised, borderColor: isSelected ? palette.blue : palette.line },
+                            {
+                              backgroundColor: isSelected
+                                ? (palette.dark ? "rgba(56,189,248,0.12)" : "rgba(14,165,233,0.08)")
+                                : palette.surfaceRaised,
+                              borderColor: isSelected ? palette.accent : palette.line,
+                            },
                           ]}
                           accessibilityRole="radio"
                           accessibilityState={{ selected: isSelected }}
                         >
                           <View style={styles.methodHeader}>
-                            <View style={[styles.methodRadioDot, { borderColor: isSelected ? palette.blue : palette.line }]}>
-                              {isSelected ? <View style={[styles.methodRadioInner, { backgroundColor: palette.blue }]} /> : null}
+                            <View style={[styles.methodRadioDot, { borderColor: isSelected ? palette.accent : palette.line }]}>
+                              {isSelected ? <View style={[styles.methodRadioInner, { backgroundColor: palette.accent }]} /> : null}
                             </View>
+                            <Ionicons name="call-outline" size={16} color={isSelected ? palette.accent : palette.muted} />
                           </View>
                           <Text style={[styles.methodLabel, { color: palette.text }]}>{PROVIDER_LABEL[m.provider]}</Text>
+                          <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: palette.muted }}>
+                            {m.provider === "mtn_momo" ? "Tap to dial *182#" : "Tap to dial *500#"}
+                          </Text>
                         </Pressable>
                       );
                     })}
@@ -446,9 +487,71 @@ function ManualSubscribeCheckout() {
                 </OrganiserSurface>
               ) : null}
 
+              {copied && selectedMethod ? (
+                <View style={[styles.copiedAlertPill, { backgroundColor: palette.accent + "18", borderColor: palette.accent + "40" }]}>
+                  <Ionicons name="checkmark-circle" size={16} color={palette.accent} />
+                  <Text style={[styles.copiedAlertText, { color: palette.accent }]}>
+                    Phone number copied! Dial and paste it in MoMo.
+                  </Text>
+                </View>
+              ) : null}
+
+              {selectedMethod ? (
+                <Pressable
+                  style={[styles.dialPayBtn, { backgroundColor: palette.accent }]}
+                  onPress={() => void dialToPay(selectedMethod)}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="call" size={18} color="#000000" />
+                  <Text style={styles.dialPayBtnText}>
+                    Open Phone App ({selectedMethod.provider === "mtn_momo" ? "*182#" : "*500#"})
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {selectedMethod && activePlan ? (
+                <View style={[styles.stepsCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+                  <Text style={[styles.stepsCardTitle, { color: palette.text }]}>How to complete payment:</Text>
+                  <View style={styles.stepsList}>
+                    <View style={styles.stepRow}>
+                      <View style={[styles.stepNumberBadge, { backgroundColor: palette.accent + "20" }]}>
+                        <Text style={[styles.stepNumberText, { color: palette.accent }]}>1</Text>
+                      </View>
+                      <Text style={[styles.stepText, { color: palette.muted }]}>
+                        Tap <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>Open Phone App</Text> above to launch {selectedMethod.provider === "mtn_momo" ? "*182#" : "*500#"}.
+                      </Text>
+                    </View>
+                    <View style={styles.stepRow}>
+                      <View style={[styles.stepNumberBadge, { backgroundColor: palette.accent + "20" }]}>
+                        <Text style={[styles.stepNumberText, { color: palette.accent }]}>2</Text>
+                      </View>
+                      <Text style={[styles.stepText, { color: palette.muted }]}>
+                        Select Send Money, paste <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>{selectedMethod.phoneNumber}</Text> and enter <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>{formatPlanPrice(activePlan)}</Text>.
+                      </Text>
+                    </View>
+                    <View style={styles.stepRow}>
+                      <View style={[styles.stepNumberBadge, { backgroundColor: palette.accent + "20" }]}>
+                        <Text style={[styles.stepNumberText, { color: palette.accent }]}>3</Text>
+                      </View>
+                      <Text style={[styles.stepText, { color: palette.muted }]}>
+                        Enter your MoMo PIN to confirm, then take a screenshot of the confirmation.
+                      </Text>
+                    </View>
+                    <View style={styles.stepRow}>
+                      <View style={[styles.stepNumberBadge, { backgroundColor: palette.accent + "20" }]}>
+                        <Text style={[styles.stepNumberText, { color: palette.accent }]}>4</Text>
+                      </View>
+                      <Text style={[styles.stepText, { color: palette.muted }]}>
+                        Return here and tap <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>I've paid — upload screenshot</Text>.
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+
               <Pressable
                 disabled={!selectedMethodId}
-                style={[styles.primaryPayBtn, { backgroundColor: colors.primary, opacity: selectedMethodId ? 1 : 0.6 }]}
+                style={[styles.primaryPayBtn, { backgroundColor: colors.primary, opacity: selectedMethodId ? 1 : 0.6, marginTop: 4 }]}
                 onPress={() => setStep("upload")}
               >
                 <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
@@ -1865,6 +1968,74 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
 
+  dialPayBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 52,
+    paddingHorizontal: 20,
+    borderRadius: 26,
+    gap: 10,
+    marginTop: 4,
+  },
+  dialPayBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: "#000000",
+  },
+  copiedAlertPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: -4,
+  },
+  copiedAlertText: {
+    fontSize: 12.5,
+    fontFamily: "Inter_600SemiBold",
+    flex: 1,
+  },
+  stepsCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 12,
+    marginTop: 4,
+  },
+  stepsCardTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
+  },
+  stepsList: {
+    gap: 10,
+  },
+  stepRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  stepNumberBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  stepNumberText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+  },
+  stepText: {
+    fontSize: 12.5,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+    lineHeight: 18,
+  },
   // Primary Pay Button
   primaryPayBtn: {
     flexDirection: "row",
