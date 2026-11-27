@@ -36,6 +36,69 @@ export interface AppNotification {
   actorAvatarUrl?: string;
 }
 
+const DEMO_NOTIFICATIONS: AppNotification[] = [
+  {
+    id: "notif_1",
+    category: "events",
+    title: "Upcoming Event Tomorrow",
+    message: "Neon Pulse Music Festival starts tomorrow at 18:00 at BK Arena. Digital pass ready at Gate 2.",
+    timeAgo: "25m ago",
+    isRead: false,
+    iconName: "calendar",
+    iconColor: "#38BDF8",
+    iconBg: "rgba(56, 189, 248, 0.16)",
+    eventId: "evt_1",
+  },
+  {
+    id: "notif_2",
+    category: "events",
+    title: "Ticket Confirmed",
+    message: "Your VIP pass for FutureTech Summit 2026 has been issued. Tap to view QR barcode.",
+    timeAgo: "1h ago",
+    isRead: false,
+    iconName: "ticket",
+    iconColor: "#10B981",
+    iconBg: "rgba(16, 185, 129, 0.16)",
+    eventId: "evt_2",
+  },
+  {
+    id: "notif_3",
+    category: "activity",
+    title: "Sarah K. liked your comment",
+    message: '"Can\'t wait for this festival! See you all there 🔥"',
+    timeAgo: "2h ago",
+    isRead: false,
+    iconName: "heart",
+    iconColor: "#EC4899",
+    iconBg: "rgba(236, 72, 153, 0.16)",
+    actorAvatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200",
+  },
+  {
+    id: "notif_4",
+    category: "organizers",
+    title: "Kigali Jazz Junction",
+    message: "Posted 3 backstage moments for tonight's Jazz Under The Stars live stream.",
+    timeAgo: "4h ago",
+    isRead: true,
+    iconName: "megaphone",
+    iconColor: "#F59E0B",
+    iconBg: "rgba(245, 158, 11, 0.16)",
+    actorAvatarUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200",
+  },
+  {
+    id: "notif_5",
+    category: "activity",
+    title: "David M. replied to your comment",
+    message: '"Are you going to the VIP backstage area before the show?"',
+    timeAgo: "1d ago",
+    isRead: true,
+    iconName: "chatbubble",
+    iconColor: "#8B5CF6",
+    iconBg: "rgba(139, 92, 246, 0.16)",
+    actorAvatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200",
+  },
+];
+
 const CATEGORY_TABS: { label: string; value: NotificationCategory }[] = [
   { label: "All", value: "all" },
   { label: "Events", value: "events" },
@@ -85,6 +148,7 @@ export default function NotificationsScreen() {
   const apiMode = !!ctx && USE_NOTIFICATIONS_API;
   const [selectedCategory, setSelectedCategory] = useState<NotificationCategory>("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [demoNotifications, setDemoNotifications] = useState<AppNotification[]>(DEMO_NOTIFICATIONS);
 
   useFocusEffect(useCallback(() => {
     if (apiMode) void refreshNotifications?.();
@@ -113,11 +177,13 @@ export default function NotificationsScreen() {
     });
   }, [apiMode, ctx]);
 
-  const notifications = apiNotifications;
+  const notifications = apiMode && apiNotifications.length > 0 ? apiNotifications : demoNotifications;
 
   const unreadCount = useMemo(
-    () => apiMode ? (ctx?.unreadCount ?? 0) : 0,
-    [apiMode, ctx?.unreadCount, notifications]
+    () => apiMode && apiNotifications.length > 0
+      ? (ctx?.unreadCount ?? 0)
+      : notifications.filter((n) => !n.isRead).length,
+    [apiMode, apiNotifications.length, ctx?.unreadCount, notifications]
   );
 
   const filteredNotifications = useMemo(() => {
@@ -127,22 +193,43 @@ export default function NotificationsScreen() {
 
   const handleMarkAllRead = useCallback(() => {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    if (apiMode) void ctx?.markAllRead();
-  }, [apiMode, ctx]);
+    if (apiMode && apiNotifications.length > 0) {
+      void ctx?.markAllRead();
+    }
+    setDemoNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  }, [apiMode, apiNotifications.length, ctx]);
+
+  const handleToggleRead = useCallback(
+    (e: any, item: AppNotification) => {
+      e?.stopPropagation?.();
+      if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+      if (apiMode && apiNotifications.length > 0) {
+        void ctx?.markRead(item.id);
+      }
+      setDemoNotifications((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, isRead: !n.isRead } : n))
+      );
+    },
+    [apiMode, apiNotifications.length, ctx]
+  );
 
   const handlePressNotification = useCallback(
     (item: AppNotification) => {
       if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      if (apiMode) void ctx?.markRead(item.id);
+      if (apiMode && apiNotifications.length > 0) {
+        void ctx?.markRead(item.id);
+      }
+      setDemoNotifications((prev) => prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)));
       if (item.eventId) router.push(`/event/${item.eventId}` as any);
     },
-    [apiMode, ctx, router]
+    [apiMode, apiNotifications.length, ctx, router]
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       if (apiMode) await ctx?.refresh();
+      else await new Promise((r) => setTimeout(r, 400));
     } finally {
       setRefreshing(false);
     }
@@ -150,6 +237,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {/* Header bar */}
       <View
         style={[
           styles.header,
@@ -183,17 +271,30 @@ export default function NotificationsScreen() {
             {unreadCount > 0 ? (
               <Pressable
                 onPress={handleMarkAllRead}
-                style={[styles.markReadBtn, { backgroundColor: `${colors.primary}18`, borderColor: colors.primary }]}
+                style={({ pressed }) => [
+                  styles.markReadBtn,
+                  {
+                    backgroundColor: pressed ? `${colors.primary}24` : `${colors.primary}14`,
+                    borderColor: `${colors.primary}35`,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel="Mark all as read"
               >
                 <Ionicons name="checkmark-done" size={15} color={colors.primary} />
-                <Text style={[styles.markReadText, { color: colors.primary }]}>Mark read</Text>
+                <Text style={[styles.markReadText, { color: colors.primary }]}>Mark all read</Text>
               </Pressable>
-            ) : null}
+            ) : (
+              <View style={styles.allReadIndicator}>
+                <Ionicons name="checkmark-circle-outline" size={15} color={colors.mutedForeground} style={{ opacity: 0.65 }} />
+                <Text style={[styles.allReadText, { color: colors.mutedForeground }]}>All read</Text>
+              </View>
+            )}
           </View>
         </View>
 
+        {/* Filter categories */}
         <View style={styles.categoryRow}>
           {CATEGORY_TABS.map((tab) => {
             const isSelected = selectedCategory === tab.value;
@@ -209,7 +310,7 @@ export default function NotificationsScreen() {
                   styles.categoryPill,
                   isSelected
                     ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                    : { backgroundColor: colors.card, borderColor: colors.border },
+                    : { backgroundColor: colors.secondary, borderColor: "transparent" },
                 ]}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: isSelected }}
@@ -226,51 +327,95 @@ export default function NotificationsScreen() {
         </View>
       </View>
 
+      {/* Notifications List */}
       <FlatList
         data={filteredNotifications}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.listContent,
-          { paddingTop: insets.top + 120, paddingBottom: insets.bottom + 24 },
+          { paddingTop: insets.top + 112, paddingBottom: insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        ItemSeparatorComponent={() => (
+          <View style={[styles.separator, { backgroundColor: colors.border }]} />
+        )}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => handlePressNotification(item)}
-            style={[
-              styles.notifCard,
+            style={({ pressed }) => [
+              styles.notifRow,
               {
-                backgroundColor: item.isRead ? colors.card : palette.unread,
-                borderColor: colors.border,
+                backgroundColor: item.isRead ? "transparent" : palette.unread,
+                opacity: pressed ? 0.75 : 1,
               },
             ]}
           >
+            {/* Left Avatar / Icon */}
             <View style={styles.notifLeftWrap}>
-              {item.actorAvatarUrl ? <Image source={{ uri: item.actorAvatarUrl }} style={styles.notifActorAvatar} /> : (
+              {item.actorAvatarUrl ? (
+                <Image source={{ uri: item.actorAvatarUrl }} style={styles.notifActorAvatar} />
+              ) : (
                 <View style={[styles.notifIconWrap, { backgroundColor: item.iconBg }]}>
-                  <Ionicons name={item.iconName} size={20} color={item.iconColor} />
+                  <Ionicons name={item.iconName} size={22} color={item.iconColor} />
                 </View>
               )}
             </View>
+
+            {/* Content Column */}
             <View style={styles.notifCenterCol}>
               <View style={styles.notifTopRow}>
-                <Text style={[styles.notifTitle, { color: colors.foreground, fontFamily: item.isRead ? "Inter_600SemiBold" : "Inter_700Bold" }]} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.notifTitle,
+                    {
+                      color: colors.foreground,
+                      fontFamily: item.isRead ? "Inter_600SemiBold" : "Inter_700Bold",
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
                   {item.title}
                 </Text>
-                <Text style={[styles.notifTime, { color: colors.mutedForeground }]}>{item.timeAgo}</Text>
+                <Text style={[styles.notifTime, { color: colors.mutedForeground }]}>
+                  {item.timeAgo}
+                </Text>
               </View>
-              <Text style={[styles.notifMessage, { color: item.isRead ? colors.mutedForeground : colors.foreground }]} numberOfLines={3}>
+
+              <Text
+                style={[
+                  styles.notifMessage,
+                  { color: item.isRead ? colors.mutedForeground : colors.foreground },
+                ]}
+                numberOfLines={2}
+              >
                 {item.message}
               </Text>
+
               {item.eventId && (
                 <View style={styles.viewEventRow}>
-                  <Text style={[styles.viewEventLink, { color: colors.primary }]}>View event details</Text>
-                  <Ionicons name="arrow-forward" size={12} color={colors.primary} />
+                  <Text style={[styles.viewEventLink, { color: colors.primary }]}>
+                    View event details
+                  </Text>
+                  <Ionicons name="arrow-forward" size={11} color={colors.primary} />
                 </View>
               )}
             </View>
-            {!item.isRead && <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />}
+
+            {/* Read / Unread interactive dot */}
+            <Pressable
+              onPress={(e) => handleToggleRead(e, item)}
+              hitSlop={14}
+              style={styles.unreadDotTouch}
+              accessibilityRole="button"
+              accessibilityLabel={item.isRead ? "Mark as unread" : "Mark as read"}
+            >
+              {!item.isRead ? (
+                <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
+              ) : (
+                <View style={styles.readDotSpacer} />
+              )}
+            </Pressable>
           </Pressable>
         )}
         ListEmptyComponent={
@@ -298,40 +443,222 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: {
-    position: "absolute", top: 0, left: 0, right: 0, zIndex: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingBottom: 12,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
   },
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  backBtn: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  titleWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
-  headerTitle: { fontSize: 20, fontFamily: "Inter_700Bold" },
-  unreadBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
-  unreadBadgeText: { color: "#FFFFFF", fontSize: 11, fontFamily: "Inter_700Bold" },
-  headerRightActions: { minWidth: 70, alignItems: "flex-end" },
-  markReadBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
-  markReadText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  categoryRow: { flexDirection: "row", gap: 8 },
-  categoryPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
-  categoryPillText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  categoryCountBadge: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 8 },
-  categoryCountText: { fontSize: 10, fontFamily: "Inter_700Bold" },
-  listContent: { paddingHorizontal: 16, gap: 10 },
-  notifCard: { flexDirection: "row", alignItems: "flex-start", padding: 14, borderRadius: 16, borderWidth: 1, gap: 12 },
-  notifLeftWrap: { paddingTop: 2 },
-  notifIconWrap: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  notifActorAvatar: { width: 44, height: 44, borderRadius: 22 },
-  notifCenterCol: { flex: 1, gap: 4 },
-  notifTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  notifTitle: { fontSize: 14, flex: 1 },
-  notifTime: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  notifMessage: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
-  viewEventRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-  viewEventLink: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
-  emptyContainer: { alignItems: "center", paddingTop: 80, paddingHorizontal: 24, gap: 12 },
-  emptyIconCircle: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  emptyTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  emptySubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 19, maxWidth: 300 },
-  emptyCtaBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 999, marginTop: 10 },
-  emptyCtaBtnText: { color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  titleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+  },
+  unreadBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  unreadBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+  },
+  headerRightActions: {
+    minWidth: 95,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  markReadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  markReadText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: -0.1,
+  },
+  allReadIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  allReadText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  categoryRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  categoryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  categoryPillText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  categoryCountBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  categoryCountText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+  },
+  listContent: {
+    paddingTop: 0,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 74,
+    opacity: 0.6,
+  },
+  notifRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  notifLeftWrap: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  notifIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifActorAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+  },
+  notifCenterCol: {
+    flex: 1,
+    marginLeft: 13,
+    marginRight: 8,
+    gap: 2,
+  },
+  notifTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  notifTitle: {
+    fontSize: 14.5,
+    flex: 1,
+  },
+  notifTime: {
+    fontSize: 11.5,
+    fontFamily: "Inter_400Regular",
+  },
+  notifMessage: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+  },
+  viewEventRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 3,
+  },
+  viewEventLink: {
+    fontSize: 11.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  unreadDotTouch: {
+    padding: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 22,
+    minHeight: 22,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  readDotSpacer: {
+    width: 8,
+    height: 8,
+  },
+  emptyContainer: {
+    alignItems: "center",
+    paddingTop: 80,
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 19,
+    maxWidth: 300,
+  },
+  emptyCtaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 999,
+    marginTop: 10,
+  },
+  emptyCtaBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
 });

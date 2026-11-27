@@ -118,15 +118,16 @@ const DEMO_PLANS: SubscriptionPlan[] = [
     price: 2180,
     bundlePrices: { 2: 4180 },
     interval: "post",
-    description: "Want to post quickly? Post one or two events and you're done. No subscription and no organisation to set up.",
+    description: "Post a single event. No monthly commitment.",
     features: [
       "Pay only for the events you post",
       "Instant event activation",
       "Real-time attendee RSVP & tickets",
       "Live check-in & door QR scan",
     ],
+    recommended: false,
     durations: [1, 2],
-    badge: "No commitment",
+    badge: "Flexible",
   },
   {
     id: "organiser_monthly",
@@ -140,7 +141,9 @@ const DEMO_PLANS: SubscriptionPlan[] = [
       "Featured placement in Discover",
       "Comprehensive revenue & analytics",
     ],
+    recommended: true,
     durations: [1],
+    badge: "Recommended",
   },
   {
     id: "organiser_quarterly",
@@ -154,7 +157,7 @@ const DEMO_PLANS: SubscriptionPlan[] = [
       "Top priority discovery & push alerts",
       "Export guest lists & CSV reports",
     ],
-    recommended: true,
+    recommended: false,
     durations: [1],
     badge: "Popular",
   },
@@ -201,10 +204,10 @@ function normalizeRemotePlan(value: unknown): SubscriptionPlan | null {
     price: Number(BigInt(String(row.priceMinor ?? "0"))),
     interval,
     features: Array.isArray(row.features) ? row.features.map(String) : [],
-    recommended: Boolean(row.recommended),
+    recommended: Boolean(row.recommended) || interval === "month",
     // The real plan has one fixed term; the demo's multi-duration bundles don't apply.
     durations: [1],
-    badge: typeof row.badge === "string" && row.badge ? row.badge : undefined,
+    badge: typeof row.badge === "string" && row.badge ? row.badge : (interval === "month" ? "Recommended" : undefined),
   };
 }
 

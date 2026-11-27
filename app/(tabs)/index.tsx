@@ -8,7 +8,6 @@ import {
   Image,
   FlatList,
   Linking,
-  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -108,12 +107,8 @@ export default function HomeScreen() {
   }, [application?.status, organiserStep, colors.primary, colors.foreground, isRestoringOrganiser]);
 
   const handleOrganizerPress = useCallback(() => {
-    if (organiserStep === "intro" && !application) {
-      setShowOrganizerModal(true);
-    } else {
-      openOrganiserFlow();
-    }
-  }, [organiserStep, application, openOrganiserFlow]);
+    openOrganiserFlow();
+  }, [openOrganiserFlow]);
 
   const flatListRef = useRef<FlatList<any>>(null);
   const notifications = useNotificationsOptional();
@@ -123,10 +118,9 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [refreshing, setRefreshing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
-  const [showOrganizerModal, setShowOrganizerModal] = useState(false);
   const { viewerOpen, refresh: refreshStories } = useStories();
   const [cardCovered, setCardCovered] = useState(false);
-  const feedAnalytics = useFeedAnalytics(selectedCategory === "All" ? "home" : "category", viewerOpen || showOrganizerModal || cardCovered);
+  const feedAnalytics = useFeedAnalytics(selectedCategory === "All" ? "home" : "category", viewerOpen || cardCovered);
   const location = useLocationPermission();
 
   // A fixed, far-past date rather than "now": the landing page shows every
@@ -359,23 +353,32 @@ export default function HomeScreen() {
             >
               <View style={styles.headerRow}>
                 <View style={styles.leftActions}>
+                  {/* Dedicated Profile Avatar Button -> goes to Profile & Settings */}
                   <Pressable
-                    onPress={() => router.push("/profile" as any)}
-                    style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    onPress={() => router.push("/(tabs)/profile" as any)}
+                    style={[styles.profileAvatarBtn, { borderColor: colors.border }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Your profile and settings"
+                    accessibilityLabel="Open profile and settings"
                   >
                     {user?.avatarUrl ? (
-                      <Image source={{ uri: user.avatarUrl }} style={styles.profileIconImg} />
-                     ) : (
-                      <Ionicons name="person-circle-outline" size={19} color={colors.foreground} />
+                      <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />
+                    ) : user?.username ? (
+                      <View style={[styles.avatarLetterWrap, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.avatarLetterText}>
+                          {user.username.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.avatarLetterWrap, { backgroundColor: colors.secondary }]}>
+                        <Ionicons name="person" size={17} color={colors.foreground} />
+                      </View>
                     )}
                   </Pressable>
 
                   <Pressable
                     onPress={handleOrganizerPress}
                     style={[
-                      styles.combinedProfilePill,
+                      styles.organizerPill,
                       {
                         backgroundColor: organizerConfig.bg,
                         borderColor: organizerConfig.border,
@@ -384,25 +387,13 @@ export default function HomeScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={organizerConfig.label}
                   >
-                    {(user?.organisation?.logoUrl || user?.avatarUrl) ? (
-                      <Image source={{ uri: user?.organisation?.logoUrl || user?.avatarUrl }} style={styles.combinedAvatarImg} />
-                    ) : (user?.organisation?.name || user?.username) ? (
-                      <View style={[styles.combinedAvatarLetterWrap, { backgroundColor: colors.primary }]}>
-                        <Text style={styles.combinedAvatarLetterText}>
-                          {(user?.organisation?.name || user?.username || "U").charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.combinedAvatarLetterWrap, { backgroundColor: colors.primary }]}>
-                        <Ionicons name="person" size={13} color="#FFFFFF" />
-                      </View>
-                    )}
-                    <Text style={[styles.combinedProfileText, { color: organizerConfig.color }]}>
+                    <Ionicons name={organizerConfig.icon} size={14} color={organizerConfig.color} />
+                    <Text style={[styles.organizerPillText, { color: organizerConfig.color }]}>
                       {organizerConfig.label}
                     </Text>
                     <Ionicons
                       name="chevron-forward"
-                      size={12}
+                      size={11}
                       color={organizerConfig.color}
                       style={{ opacity: 0.6 }}
                     />
@@ -449,7 +440,7 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
             ) : null}
-            <StoriesBar user={user} onOpenBecomeOrganizer={() => setShowOrganizerModal(true)} />
+            <StoriesBar user={user} onOpenBecomeOrganizer={openOrganiserFlow} />
             {renderBody()}
           </>
         }
@@ -486,94 +477,6 @@ export default function HomeScreen() {
           />
         }
       />
-
-      {/* Organiser Modal */}
-      <Modal
-        visible={showOrganizerModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowOrganizerModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowOrganizerModal(false)}
-        >
-          <Pressable
-            style={[
-              styles.modalSheet,
-              {
-                backgroundColor: colors.background,
-                borderColor: colors.primary + "55",
-                paddingBottom: Math.max(insets.bottom, 16) + 16,
-              },
-            ]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <View style={[styles.modalHandle, { backgroundColor: colors.primary + "80" }]} />
-            <View
-              style={[
-                styles.modalIconWrap,
-                { backgroundColor: colors.primary, borderColor: colors.primary + "66" },
-              ]}
-            >
-              <Ionicons name="briefcase-outline" size={30} color="#fff" />
-            </View>
-            <Text style={[styles.modalEyebrow, { color: colors.primary }]}>CREATE ON EVENTIS</Text>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Become an organizer</Text>
-            <Text
-              style={[styles.modalBody, { color: colors.mutedForeground }]}
-            >
-              Publish events, share live moments, and manage bookings from one focused workspace.
-            </Text>
-            <View style={styles.modalFeatures}>
-              {["Publish and manage events", "Share live event stories", "Track reach and bookings"].map((f) => (
-                <View
-                  key={f}
-                  style={[
-                    styles.modalFeatureRow,
-                    { backgroundColor: colors.secondary, borderColor: colors.border },
-                  ]}
-                >
-                  <View
-                    style={[styles.modalCheck, { backgroundColor: colors.primary + "24" }]}
-                  >
-                    <Ionicons name="checkmark" size={15} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.modalFeatureText, { color: colors.foreground }]}>{f}</Text>
-                </View>
-              ))}
-            </View>
-            <Pressable
-              style={[styles.modalCta, { backgroundColor: colors.primary }]}
-              onPress={() => {
-                setShowOrganizerModal(false);
-                router.push("/organiser" as any);
-              }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.modalCtaText}>Get Started as Organizer</Text>
-              <Ionicons name="arrow-forward" size={19} color="#fff" />
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setShowOrganizerModal(false);
-                router.push("/organiser" as any);
-              }}
-              accessibilityRole="button"
-              style={styles.modalDismissButton}
-            >
-              <Text style={[styles.modalDismiss, { color: colors.primary }]}>Just post an event (from RWF 2,180)</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setShowOrganizerModal(false)}
-              accessibilityRole="button"
-              style={styles.modalDismissButton}
-            >
-              <Text style={[styles.modalDismiss, { color: colors.foreground }]}>Maybe later</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
@@ -742,39 +645,46 @@ const styles = StyleSheet.create({
   leftActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 9,
   },
-  combinedProfilePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
+  profileAvatarBtn: {
+    width: 38,
     height: 38,
-    paddingLeft: 4,
-    paddingRight: 11,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  combinedAvatarImg: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-  combinedAvatarLetterWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
-  combinedAvatarLetterText: {
-    fontSize: 13,
+  avatarImg: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 19,
+  },
+  avatarLetterWrap: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarLetterText: {
+    fontSize: 14.5,
     fontFamily: "Inter_700Bold",
     color: "#FFFFFF",
   },
-  combinedProfileText: {
+  organizerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 11,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  organizerPillText: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.2,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: -0.1,
   },
   headerActions: {
     flexDirection: "row",
@@ -944,110 +854,5 @@ const styles = StyleSheet.create({
   },
   feedContainer: {
     marginTop: 0,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.78)",
-    justifyContent: "flex-end",
-  },
-  modalSheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    paddingHorizontal: 22,
-    paddingTop: 12,
-    alignItems: "center",
-    gap: 10,
-    elevation: 24,
-    shadowColor: "#000000",
-    shadowOpacity: 0.35,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: -8 },
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    marginBottom: 10,
-  },
-  modalIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalEyebrow: {
-    marginTop: 2,
-    fontSize: 10,
-    letterSpacing: 1.4,
-    fontFamily: "Inter_700Bold",
-  },
-  modalTitle: {
-    fontSize: 25,
-    lineHeight: 31,
-    letterSpacing: -0.6,
-    fontFamily: "Inter_800ExtraBold",
-    textAlign: "center",
-  },
-  modalBody: {
-    maxWidth: 430,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    lineHeight: 21,
-  },
-  modalFeatures: {
-    alignSelf: "stretch",
-    gap: 8,
-    marginVertical: 6,
-  },
-  modalFeatureRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-    minHeight: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-  },
-  modalCheck: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalFeatureText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  modalCta: {
-    alignSelf: "stretch",
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-  },
-  modalCtaText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  modalDismissButton: {
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 18,
-  },
-  modalDismiss: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
   },
 });

@@ -1,3 +1,4 @@
+import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
@@ -6,8 +7,11 @@ import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
+  Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -49,7 +53,40 @@ import {
   type ManualPaymentSubmission,
 } from "@/services/manualPaymentsService";
 
+const MTN_LOGO = require("@/assets/images/mtn-logo.png");
+const AIRTEL_LOGO = require("@/assets/images/airtel-logo.png");
+
 const PROVIDER_LABEL: Record<ManualPaymentMethod["provider"], string> = { mtn_momo: "MTN MoMo", airtel_money: "Airtel Money" };
+
+const USSD_CODES: Record<ManualPaymentMethod["provider"], string> = {
+  mtn_momo: "*182*8*1*0202565#",
+  airtel_money: "*185*9*33918481#",
+};
+
+const MERCHANT_NAME = "Travelis Rwanda Ltd";
+
+const DEFAULT_MANUAL_METHODS: ManualPaymentMethod[] = [
+  {
+    id: "momo-mtn",
+    provider: "mtn_momo",
+    platform: "organiser",
+    accountName: MERCHANT_NAME,
+    phoneNumber: "0202565",
+    instructions: "Pay to Travelis Rwanda Ltd using code *182*8*1*0202565#",
+    currency: "RWF",
+    displayOrder: 1,
+  },
+  {
+    id: "airtel-money",
+    provider: "airtel_money",
+    platform: "organiser",
+    accountName: MERCHANT_NAME,
+    phoneNumber: "33918481",
+    instructions: "Pay to Travelis Rwanda Ltd using code *185*9*33918481#",
+    currency: "RWF",
+    displayOrder: 2,
+  },
+];
 
 type Phase = "form" | "processing" | "succeeded" | "failed" | "cancelled";
 
@@ -118,6 +155,16 @@ function ManualSubscribeCheckout() {
   const [plansError, setPlansError] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
+  const sortedPlans = useMemo(() => {
+    const ORDER: Record<SubscriptionInterval, number> = {
+      month: 1, // Hero 1-Month at the top
+      post: 2,
+      quarter: 3,
+      year: 4,
+    };
+    return [...plans].sort((a, b) => (ORDER[a.interval] ?? 99) - (ORDER[b.interval] ?? 99));
+  }, [plans]);
+
   const [step, setStep] = useState<RealStep>("plan");
   const [methods, setMethods] = useState<ManualPaymentMethod[]>([]);
   const [methodsError, setMethodsError] = useState<string | null>(null);
@@ -128,6 +175,7 @@ function ManualSubscribeCheckout() {
   const [receiptUri, setReceiptUri] = useState<string | undefined>();
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [duplicatePayment, setDuplicatePayment] = useState(false);
   const [submission, setSubmission] = useState<ManualPaymentSubmission | null>(null);
@@ -138,7 +186,7 @@ function ManualSubscribeCheckout() {
     try {
       const list = await fetchSubscriptionPlans();
       setPlans(list);
-      setSelectedPlanId((current) => current ?? list.find((p) => p.recommended)?.id ?? list[0]?.id ?? null);
+      setSelectedPlanId((current) => current ?? list.find((p) => p.interval === "month")?.id ?? list.find((p) => p.recommended)?.id ?? list[0]?.id ?? null);
     } catch (error) {
       setPlansError(describeError(error, "We couldn't load subscription plans."));
     } finally {
@@ -167,13 +215,15 @@ function ManualSubscribeCheckout() {
     setResolvingMethods(true);
     setMethodsError(null);
     try {
-      const list = await fetchManualPaymentMethods("organiser");
-      setMethods(list);
-      setSelectedMethodId(list[0]?.id ?? null);
-      if (!list.length) setMethodsError("No payment method is available right now. Please try again later.");
+      const list = await fetchManualPaymentMethods("organiser").catch(() => []);
+      const resolved = list.length > 0 ? list : DEFAULT_MANUAL_METHODS;
+      setMethods(resolved);
+      setSelectedMethodId(resolved[0]?.id ?? null);
       setStep("method");
-    } catch (error) {
-      setMethodsError(describeError(error, "We couldn't load payment methods. Please try again."));
+    } catch {
+      setMethods(DEFAULT_MANUAL_METHODS);
+      setSelectedMethodId(DEFAULT_MANUAL_METHODS[0]?.id ?? null);
+      setStep("method");
     } finally {
       setResolvingMethods(false);
     }
@@ -182,23 +232,100 @@ function ManualSubscribeCheckout() {
   const reloadMethods = async () => {
     setMethodsError(null);
     try {
-      const list = await fetchManualPaymentMethods("organiser");
-      setMethods(list);
-      setSelectedMethodId(list[0]?.id ?? null);
-      if (!list.length) setMethodsError("No payment method is available right now. Please try again later.");
-    } catch (error) {
-      setMethodsError(describeError(error, "We couldn't load payment methods. Please try again."));
+      const list = await fetchManualPaymentMethods("organiser").catch(() => []);
+      const resolved = list.length > 0 ? list : DEFAULT_MANUAL_METHODS;
+      setMethods(resolved);
+      setSelectedMethodId(resolved[0]?.id ?? null);
+    } catch {
+      setMethods(DEFAULT_MANUAL_METHODS);
+      setSelectedMethodId(DEFAULT_MANUAL_METHODS[0]?.id ?? null);
     }
   };
 
-  const copyPhone = async (phone: string) => {
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const copyCode = async (code: string) => {
     try {
-      await Clipboard.setStringAsync(phone);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard access can fail on web without a user gesture; nothing to show for it.
+      await Clipboard.setStringAsync(code);
+      if (Platform.OS !== "web") {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      }
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 3500);
+    } catch {}
+  };
+
+  const dialToPay = async (targetMethod: ManualPaymentMethod) => {
+    const code = USSD_CODES[targetMethod.provider] ?? (targetMethod.provider === "mtn_momo" ? "*182*8*1*0202565#" : "*185*9*33918481#");
+    if (Platform.OS !== "web") {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     }
+    // 1. Copy the specific USSD code to clipboard
+    try {
+      await Clipboard.setStringAsync(code);
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 4000);
+    } catch {}
+
+    // 2. Open phone dialer
+    const dialUrl = `tel:${encodeURIComponent(code)}`;
+    const fallbackUrl = `tel:${encodeURIComponent(targetMethod.phoneNumber.replace(/\s+/g, ""))}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(dialUrl).catch(() => false);
+      if (canOpen) {
+        await Linking.openURL(dialUrl);
+      } else {
+        await Linking.openURL(fallbackUrl);
+      }
+    } catch {
+      void Linking.openURL(fallbackUrl).catch(() => {});
+    }
+  };
+
+  const chooseFromGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+      if (!result.canceled) {
+        setPhotoError(null);
+        setReceiptUri(result.assets[0].uri);
+      }
+    } catch {
+      setPhotoError("We couldn't open your photos. Check photo permissions and try again.");
+    }
+  };
+
+  const takeCameraPhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setPhotoError("Allow camera access to photograph your payment screenshot, or choose one from your photos.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8 });
+      if (!result.canceled) {
+        setPhotoError(null);
+        setReceiptUri(result.assets[0].uri);
+      }
+    } catch {
+      setPhotoError("We couldn't open the camera. Try choosing a photo instead.");
+    }
+  };
+
+  const promptPhotoPick = () => {
+    if (Platform.OS === "web") {
+      void chooseFromGallery();
+      return;
+    }
+    Alert.alert(
+      "Upload proof of payment",
+      "Please upload a screenshot or take a photo of your payment confirmation.",
+      [
+        { text: "Upload screenshot", onPress: () => void chooseFromGallery() },
+        { text: "Take photo", onPress: () => void takeCameraPhoto() },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
   };
 
   const submit = async () => {
@@ -214,6 +341,7 @@ function ManualSubscribeCheckout() {
         receiptUploadId,
       });
       setSubmission(created);
+      setConfirmModalVisible(false);
       setStep("result");
       void refreshOrganiserSubscription().catch((error) => {
         console.warn("Could not refresh organiser access:", error);
@@ -229,36 +357,93 @@ function ManualSubscribeCheckout() {
   };
 
   if (step === "result" && submission) {
+    const formattedAmount = activePlan
+      ? `${activePlan.price.toLocaleString("en-US")} RWF`
+      : formatMinorAmount(submission.amountMinor, submission.currency || "RWF");
+
     return (
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
         <OrganiserAtmosphere />
-        <OrganiserFlowHeader title="Choose access" step={2} canGoBack={false} />
-        <ScrollView contentContainerStyle={[styles.statusWrap, { paddingBottom: insets.bottom + 24 }]}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.statusWrap,
+            {
+              paddingTop: insets.top + 36,
+              paddingBottom: insets.bottom + 28,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
           <Animated.View entering={FadeIn} style={styles.status}>
-            <View style={[styles.statusIconWrap, { backgroundColor: `${colors.primary}20`, borderColor: `${colors.primary}40` }]}>
-              <Ionicons name="time-outline" size={48} color={colors.primary} />
+            <View style={[styles.statusIconWrap, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
+              <Ionicons name="checkmark-circle" size={44} color={palette.accent} />
             </View>
-            <Text style={[styles.statusTitle, { color: colors.foreground }]}>Payment submitted</Text>
-            <Text style={[styles.statusText, { color: colors.mutedForeground }]}>
-              Reference {submission.reference} · {formatMinorAmount(submission.amountMinor, submission.currency)}
-              {"\n\n"}
-              We've sent your {submission.plan.name} payment screenshot for review. You'll get an email as soon as
-              it's approved or if we need anything else.
+
+            <Text style={[styles.statusTitle, { color: palette.text, fontSize: 24, letterSpacing: -0.3 }]}>
+              You're all set!
             </Text>
-            <View style={styles.statusActions}>
+
+            <Text style={[styles.statusText, { color: palette.muted, fontSize: 14.5, lineHeight: 23 }]}>
+              We've received your payment of <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>{formattedAmount}</Text> for <Text style={{ fontFamily: "Inter_600SemiBold", color: palette.text }}>{submission.plan.name}</Text>!
+              {"\n\n"}
+              Our team is reviewing your confirmation right now, and we'll let you know as soon as your organiser access is activated so you can start creating events.
+              {"\n\n"}
+              <Text style={{ fontSize: 13, color: palette.muted }}>Reference: #{submission.reference}</Text>
+            </Text>
+
+            {/* Enhanced Live Tracking Card */}
+            <View style={[styles.enhancedTrackCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+              <View style={styles.trackCardHeader}>
+                <View style={styles.trackStatusIndicatorRow}>
+                  <View style={[styles.pulseDot, { backgroundColor: palette.accent }]} />
+                  <Text style={[styles.trackStatusLabel, { color: palette.accent }]}>Under review</Text>
+                </View>
+                <Text style={[styles.trackReferenceTag, { color: palette.muted }]}>#{submission.reference}</Text>
+              </View>
+
+              {/* Progress Steps Timeline */}
+              <View style={styles.trackTimeline}>
+                <View style={styles.timelineItem}>
+                  <View style={[styles.timelineIconActive, { backgroundColor: colors.success }]}>
+                    <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                  </View>
+                  <Text style={[styles.timelineTextActive, { color: palette.text }]}>Submitted</Text>
+                </View>
+                <View style={[styles.timelineLine, { backgroundColor: palette.accent }]} />
+                <View style={styles.timelineItem}>
+                  <View style={[styles.timelineIconPending, { backgroundColor: palette.accent }]}>
+                    <Ionicons name="time" size={12} color="#000000" />
+                  </View>
+                  <Text style={[styles.timelineTextPending, { color: palette.accent }]}>Reviewing</Text>
+                </View>
+                <View style={[styles.timelineLine, { backgroundColor: palette.line }]} />
+                <View style={styles.timelineItem}>
+                  <View style={[styles.timelineIconUpcoming, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
+                    <Ionicons name="shield-checkmark-outline" size={12} color={palette.muted} />
+                  </View>
+                  <Text style={[styles.timelineTextUpcoming, { color: palette.muted }]}>Activated</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={[styles.statusActions, { marginTop: 18 }]}>
               <Pressable
                 style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]}
-                onPress={() => router.push("/organiser/payments" as any)}
-              >
-                <Text style={styles.primaryPayBtnText}>Track this payment</Text>
-                <Ionicons name="arrow-forward" size={18} color="#fff" />
-              </Pressable>
-              <Pressable
-                onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
-                style={styles.cancelSheetBtn}
+                onPress={() => router.replace("/(tabs)" as any)}
                 accessibilityRole="button"
+                accessibilityLabel="Back to Discover"
               >
-                <Text style={[styles.cancelSheetText, { color: colors.mutedForeground }]}>Back to Discover</Text>
+                <Text style={styles.primaryPayBtnText}>Back to Discover</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => router.push("/organiser/payments" as any)}
+                style={styles.trackTextLink}
+                accessibilityRole="link"
+                accessibilityLabel="Track this payment"
+              >
+                <Text style={[styles.trackTextLinkText, { color: palette.muted }]}>Track this payment</Text>
+                <Ionicons name="chevron-forward" size={14} color={palette.muted} />
               </Pressable>
             </View>
           </Animated.View>
@@ -285,7 +470,6 @@ function ManualSubscribeCheckout() {
                 onPress={() => router.push("/organiser/payments" as any)}
               >
                 <Text style={styles.primaryPayBtnText}>View my payments</Text>
-                <Ionicons name="arrow-forward" size={18} color="#fff" />
               </Pressable>
               <Pressable
                 onPress={() => router.replace("/(tabs)" as any)}
@@ -306,18 +490,11 @@ function ManualSubscribeCheckout() {
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
         <OrganiserAtmosphere />
         <Stack.Screen options={{ gestureEnabled: !submitting }} />
-        <OrganiserFlowHeader title="Upload receipt" step={2} canGoBack={false} />
+        <OrganiserFlowHeader title="Upload receipt" step={2} canGoBack={!submitting} onBack={() => setStep("method")} />
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
-          {!submitting ? (
-            <Pressable onPress={() => setStep("method")} style={styles.backLink} accessibilityRole="button">
-              <Ionicons name="chevron-back" size={16} color={palette.accent} />
-              <Text style={[styles.backLinkText, { color: palette.accent }]}>Back to payment details</Text>
-            </Pressable>
-          ) : null}
-          <Text style={[styles.title, { color: palette.text, fontSize: 22 }]}>Add your payment screenshot</Text>
+          <Text style={[styles.title, { color: palette.text, fontSize: 22 }]}>Upload proof of payment</Text>
           <Text style={[styles.subtitle, { color: palette.muted }]}>
-            A clear screenshot of the mobile money confirmation is enough. An admin reviews it and your organiser
-            access starts as soon as it's approved.
+            Please upload a clear screenshot of your payment confirmation message as proof of payment. An admin reviews it and your organiser access is activated once verified.
           </Text>
           <ReceiptPhotoPicker
             uri={receiptUri}
@@ -354,100 +531,306 @@ function ManualSubscribeCheckout() {
 
   if (step === "method") {
     const selectedMethod = methods.find((m) => m.id === selectedMethodId) ?? null;
+    const activeUssdCode = selectedMethod ? (USSD_CODES[selectedMethod.provider] ?? "*182*8*1*0202565#") : "*182*8*1*0202565#";
+
     return (
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
         <OrganiserAtmosphere />
-        <OrganiserFlowHeader title="Pay and continue" step={2} canGoBack={false} />
+        <OrganiserFlowHeader title="Pay and continue" step={2} canGoBack={true} onBack={() => setStep("plan")} />
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
-          <Pressable onPress={() => setStep("plan")} style={styles.backLink} accessibilityRole="button">
-            <Ionicons name="chevron-back" size={16} color={palette.accent} />
-            <Text style={[styles.backLinkText, { color: palette.accent }]}>Back to plans</Text>
-          </Pressable>
-          {methodsError && !methods.length ? (
-            <OrganiserSurface style={[styles.errorCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-              <Ionicons name="cloud-offline-outline" size={36} color={colors.destructive} />
-              <Text style={[styles.statusText, { color: colors.mutedForeground }]}>{methodsError}</Text>
-              <Pressable style={[styles.smallBtn, { backgroundColor: colors.primary }]} onPress={() => void reloadMethods()} accessibilityRole="button">
-                <Text style={styles.smallBtnText}>Try again</Text>
-              </Pressable>
-            </OrganiserSurface>
-          ) : (
-            <>
-              {methods.length > 1 ? (
-                <OrganiserSurface style={[styles.sectionCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                  <Text style={[styles.sectionTitle, { color: palette.text }]}>Pay with</Text>
-                  <View style={styles.methodsGrid}>
-                    {methods.map((m) => {
-                      const isSelected = m.id === selectedMethodId;
-                      return (
-                        <Pressable
-                          key={m.id}
-                          onPress={() => setSelectedMethodId(m.id)}
-                          style={[
-                            styles.methodCard,
-                            { backgroundColor: isSelected ? palette.blueSoft : palette.surfaceRaised, borderColor: isSelected ? palette.blue : palette.line },
-                          ]}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected: isSelected }}
-                        >
-                          <View style={styles.methodHeader}>
-                            <View style={[styles.methodRadioDot, { borderColor: isSelected ? palette.blue : palette.line }]}>
-                              {isSelected ? <View style={[styles.methodRadioInner, { backgroundColor: palette.blue }]} /> : null}
-                            </View>
-                          </View>
-                          <Text style={[styles.methodLabel, { color: palette.text }]}>{PROVIDER_LABEL[m.provider]}</Text>
-                        </Pressable>
-                      );
-                    })}
+          {/* Top Amount to Pay to Travelis Rwanda Ltd Banner */}
+          {activePlan ? (
+            <View style={[styles.invoiceCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+              <View style={styles.invoiceRow}>
+                <View style={styles.invoiceColLeft}>
+                  <Text style={[styles.invoiceLabel, { color: palette.muted }]}>Amount to pay</Text>
+                  <View style={styles.invoiceAmountRow}>
+                    <Text style={[styles.invoiceCurrencyTag, { color: palette.accent }]}>RWF</Text>
+                    <Text style={[styles.invoiceAmountValue, { color: palette.text }]}>
+                      {activePlan.price.toLocaleString()}
+                    </Text>
                   </View>
-                </OrganiserSurface>
-              ) : null}
+                  <Text style={[styles.invoicePlanName, { color: palette.muted }]}>{activePlan.name}</Text>
+                </View>
 
-              {selectedMethod && activePlan ? (
-                <OrganiserSurface style={[styles.summaryBox, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                  <SummaryRow
-                    label="Send to"
-                    value={
-                      selectedMethod.accountName
-                        ? `${PROVIDER_LABEL[selectedMethod.provider]} · ${selectedMethod.accountName}`
-                        : PROVIDER_LABEL[selectedMethod.provider]
-                    }
-                  />
-                  <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryItemLabel, { color: colors.mutedForeground }]}>Phone number</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Text style={[styles.summaryItemValue, { color: colors.foreground }]}>{selectedMethod.phoneNumber}</Text>
+                <View style={[styles.invoiceVerticalDivider, { backgroundColor: palette.line }]} />
+
+                <View style={styles.invoiceColRight}>
+                  <Text style={[styles.invoiceLabel, { color: palette.muted }]}>Pay to</Text>
+                  <Text style={[styles.invoicePayToName, { color: palette.text }]} numberOfLines={2}>
+                    {MERCHANT_NAME}
+                  </Text>
+                  <View style={styles.merchantBadge}>
+                    <Ionicons name="shield-checkmark" size={12} color={palette.accent} />
+                    <Text style={[styles.merchantBadgeText, { color: palette.accent }]}>Official Merchant</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {/* Network Selection */}
+          <View style={styles.methodSelectionSection}>
+            <Text style={[styles.sectionTitle, { color: palette.text, fontSize: 16 }]}>Select payment network</Text>
+            <View style={styles.methodsVerticalList}>
+              {methods.map((m) => {
+                const isSelected = m.id === selectedMethodId;
+                const isMtn = m.provider === "mtn_momo";
+                const logo = isMtn ? MTN_LOGO : AIRTEL_LOGO;
+                const ussdCode = USSD_CODES[m.provider] ?? (isMtn ? "*182*8*1*0202565#" : "*185*9*33918481#");
+                const isCodeCopied = copiedCode === ussdCode;
+
+                return (
+                  <Pressable
+                    key={m.id}
+                    onPress={() => setSelectedMethodId(m.id)}
+                    style={[
+                      styles.logoMethodCard,
+                      {
+                        backgroundColor: isSelected
+                          ? (palette.dark ? "rgba(56,189,248,0.10)" : "rgba(14,165,233,0.07)")
+                          : palette.surface,
+                        borderColor: isSelected ? palette.accent : palette.line,
+                        borderWidth: isSelected ? 2 : 1,
+                      },
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                  >
+                    <View style={[styles.logoContainer, { backgroundColor: isMtn ? "#FFCC00" : "#FFFFFF" }]}>
+                      <Image source={logo} style={styles.providerLogoImg} resizeMode="contain" />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0, paddingLeft: 12 }}>
+                      <Text style={[styles.methodTitleText, { color: palette.text }]}>{PROVIDER_LABEL[m.provider]}</Text>
+                      <View style={styles.methodCodeRow}>
+                        <Text style={[styles.methodUssdCodeBadge, { color: palette.accent }]}>{ussdCode}</Text>
+                        <Pressable
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            void copyCode(ussdCode);
+                          }}
+                          style={[
+                            styles.miniCopyBtn,
+                            {
+                              backgroundColor: isCodeCopied ? (palette.accent + "25") : palette.surfaceRaised,
+                              borderColor: isCodeCopied ? palette.accent : palette.line,
+                            },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Copy ${PROVIDER_LABEL[m.provider]} code`}
+                        >
+                          <Ionicons
+                            name={isCodeCopied ? "checkmark" : "copy-outline"}
+                            size={12}
+                            color={isCodeCopied ? palette.accent : palette.text}
+                          />
+                          <Text style={[styles.miniCopyText, { color: isCodeCopied ? palette.accent : palette.text }]}>
+                            {isCodeCopied ? "Copied" : "Copy"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.premiumRadio,
+                        {
+                          borderColor: isSelected ? palette.accent : palette.line,
+                          backgroundColor: isSelected ? (palette.dark ? "rgba(56,189,248,0.18)" : "rgba(14,165,233,0.12)") : "transparent",
+                        },
+                      ]}
+                    >
+                      {isSelected ? <View style={[styles.premiumRadioDot, { backgroundColor: palette.accent }]} /> : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Copied Feedback Toast */}
+          {copiedCode ? (
+            <View style={[styles.copiedAlertPill, { backgroundColor: palette.accent + "18", borderColor: palette.accent + "40" }]}>
+              <Ionicons name="checkmark-circle" size={16} color={palette.accent} />
+              <Text style={[styles.copiedAlertText, { color: palette.accent }]}>
+                Code {copiedCode} copied to clipboard!
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Dial to Pay Button */}
+          {selectedMethod ? (
+            <Pressable
+              style={[styles.dialPayBtn, { backgroundColor: palette.accent }]}
+              onPress={() => void dialToPay(selectedMethod)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="call" size={18} color="#000000" />
+              <Text style={styles.dialPayBtnText}>Dial to pay</Text>
+            </Pressable>
+          ) : null}
+
+          {/* NB Notice Card */}
+          {selectedMethod && activePlan ? (
+            <View style={[styles.nbNoticeCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+              <View style={styles.nbHeaderRow}>
+                <Ionicons name="information-circle" size={17} color={palette.accent} />
+                <Text style={[styles.nbTitle, { color: palette.accent }]}>NB:</Text>
+              </View>
+              <Text style={[styles.nbBodyText, { color: palette.text }]}>
+                Please keep a screenshot of your payment confirmation message for verification. Tap <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>I have paid</Text> below to upload your screenshot or take a photo to confirm.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* I have paid Button */}
+          <Pressable
+            disabled={!selectedMethodId || submitting}
+            style={[
+              styles.primaryPayBtn,
+              {
+                backgroundColor: colors.primary,
+                opacity: !selectedMethodId || submitting ? 0.6 : 1,
+                marginTop: 10,
+              },
+            ]}
+            onPress={() => setConfirmModalVisible(true)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.primaryPayBtnText}>I have paid</Text>
+          </Pressable>
+
+          {/* Confirm Payment Modal (brought up by I have paid) */}
+          <Modal
+            visible={confirmModalVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => {
+              if (!submitting) setConfirmModalVisible(false);
+            }}
+          >
+            <Pressable
+              style={styles.modalOverlay}
+              onPress={() => {
+                if (!submitting) setConfirmModalVisible(false);
+              }}
+            >
+              <Pressable
+                style={[
+                  styles.confirmModalCard,
+                  {
+                    backgroundColor: palette.surface,
+                    borderColor: palette.line,
+                    paddingBottom: insets.bottom + 20,
+                  },
+                ]}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <View style={styles.modalHandle} />
+
+                {!receiptUri ? (
+                  <>
+                    <View style={styles.modalHeader}>
+                      <View style={[styles.modalIconWrap, { backgroundColor: palette.accent + "18" }]}>
+                        <Ionicons name="receipt-outline" size={24} color={palette.accent} />
+                      </View>
+                      <Text style={[styles.modalTitle, { color: palette.text }]}>Confirm payment</Text>
+                      <Text style={[styles.modalSubtitle, { color: palette.muted }]}>
+                        Upload a screenshot or take a photo of your payment confirmation to confirm.
+                      </Text>
+                    </View>
+
+                    <View style={styles.modalActionButtons}>
                       <Pressable
-                        onPress={() => void copyPhone(selectedMethod.phoneNumber)}
-                        style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: palette.surfaceRaised }}
+                        style={[styles.modalActionBtn, { backgroundColor: palette.accent }]}
+                        onPress={() => void chooseFromGallery()}
                         accessibilityRole="button"
-                        accessibilityLabel="Copy phone number"
                       >
-                        <Ionicons name={copied ? "checkmark" : "copy-outline"} size={15} color={colors.foreground} />
+                        <Ionicons name="images-outline" size={20} color="#000000" />
+                        <Text style={styles.modalActionBtnTextDark}>Upload screenshot</Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={[styles.modalActionBtn, { backgroundColor: palette.surfaceRaised, borderColor: palette.line, borderWidth: 1 }]}
+                        onPress={() => void takeCameraPhoto()}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="camera-outline" size={20} color={palette.text} />
+                        <Text style={[styles.modalActionBtnText, { color: palette.text }]}>Take photo</Text>
                       </Pressable>
                     </View>
-                  </View>
-                  <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                  <SummaryRow label="Amount to pay" value={formatPlanPrice(activePlan)} isBold />
-                  {selectedMethod.instructions ? (
-                    <>
-                      <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                      <Text style={[styles.statusText, { color: colors.mutedForeground, textAlign: "left" }]}>{selectedMethod.instructions}</Text>
-                    </>
-                  ) : null}
-                </OrganiserSurface>
-              ) : null}
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.modalHeader}>
+                      <Text style={[styles.modalTitle, { color: palette.text }]}>Confirm payment</Text>
+                      <Text style={[styles.modalSubtitle, { color: palette.muted }]}>
+                        Payment screenshot attached. Confirm to submit for verification.
+                      </Text>
+                    </View>
 
-              <Pressable
-                disabled={!selectedMethodId}
-                style={[styles.primaryPayBtn, { backgroundColor: colors.primary, opacity: selectedMethodId ? 1 : 0.6 }]}
-                onPress={() => setStep("upload")}
-              >
-                <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.primaryPayBtnText}>I've paid — upload screenshot</Text>
+                    <View style={styles.modalPreviewWrap}>
+                      <Image source={{ uri: receiptUri }} style={styles.modalPreviewImage} resizeMode="cover" />
+                      <Pressable
+                        onPress={() => setReceiptUri(undefined)}
+                        style={styles.modalRemoveBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove screenshot"
+                      >
+                        <Ionicons name="close-circle" size={26} color="#EF4444" />
+                      </Pressable>
+                    </View>
+
+                    <View style={styles.modalConfirmActions}>
+                      <Pressable
+                        disabled={submitting}
+                        style={[
+                          styles.primaryPayBtn,
+                          {
+                            backgroundColor: colors.primary,
+                            opacity: submitting ? 0.6 : 1,
+                          },
+                        ]}
+                        onPress={() => void submit()}
+                        accessibilityRole="button"
+                      >
+                        {submitting ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                            <Text style={styles.primaryPayBtnText}>Confirm and submit</Text>
+                          </>
+                        )}
+                      </Pressable>
+
+                      <Pressable
+                        disabled={submitting}
+                        onPress={() => void chooseFromGallery()}
+                        style={styles.modalRetakeBtn}
+                        accessibilityRole="button"
+                      >
+                        <Text style={[styles.modalRetakeText, { color: palette.accent }]}>Change photo</Text>
+                      </Pressable>
+                    </View>
+                  </>
+                )}
+
+                {photoError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{photoError}</Text> : null}
+                {submitError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{submitError}</Text> : null}
+
+                {!submitting ? (
+                  <Pressable
+                    onPress={() => setConfirmModalVisible(false)}
+                    style={styles.modalCancelBtn}
+                    accessibilityRole="button"
+                  >
+                    <Text style={[styles.modalCancelText, { color: palette.muted }]}>Cancel</Text>
+                  </Pressable>
+                ) : null}
               </Pressable>
-            </>
-          )}
+            </Pressable>
+          </Modal>
         </ScrollView>
       </View>
     );
@@ -457,12 +840,11 @@ function ManualSubscribeCheckout() {
   return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>
       <OrganiserAtmosphere />
-      <OrganiserFlowHeader title="Choose access" step={2} />
+      <OrganiserFlowHeader title="Choose packages" step={2} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.title, { color: palette.text }]}>Choose your organiser access</Text>
-        <Text style={[styles.subtitle, { color: palette.muted }]}>
-          Pay once for a few posts, or subscribe to keep posting. Complete payment with Mobile Money.
-        </Text>
+        <View style={styles.headerBlock}>
+          <Text style={[styles.title, { color: palette.text, fontSize: 19, letterSpacing: -0.3 }]}>Choose packages</Text>
+        </View>
 
         {plansLoading ? (
           <View style={styles.inlineState}>
@@ -477,40 +859,109 @@ function ManualSubscribeCheckout() {
               <Text style={styles.smallBtnText}>Try again</Text>
             </Pressable>
           </OrganiserSurface>
-        ) : plans.length === 0 ? (
+        ) : sortedPlans.length === 0 ? (
           <OrganiserSurface style={[styles.errorCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
             <Ionicons name="pricetags-outline" size={36} color={colors.mutedForeground} />
             <Text style={[styles.statusText, { color: colors.mutedForeground }]}>No plans are available right now.</Text>
           </OrganiserSurface>
         ) : (
-          <View style={{ gap: 10 }}>
-            {plans.map((plan) => {
+          <View style={styles.gridContainer}>
+            {sortedPlans.map((plan) => {
               const selected = plan.id === selectedPlanId;
+              const isRecommended = plan.interval === "month";
+              const billingPeriod =
+                plan.interval === "month"
+                  ? "/ month"
+                  : plan.interval === "post"
+                  ? "/ post"
+                  : plan.interval === "quarter"
+                  ? "/ 3 months"
+                  : "/ year";
+
+              const highlightSubtext =
+                plan.interval === "month"
+                  ? "Unlimited events"
+                  : plan.interval === "post"
+                  ? "1 event listing"
+                  : plan.interval === "quarter"
+                  ? "3 mo · Save 12%"
+                  : "1 yr · Best rate";
+
               return (
                 <Pressable
                   key={plan.id}
-                  onPress={() => setSelectedPlanId(plan.id)}
+                  onPress={() => {
+                    if (Platform.OS !== "web") {
+                      Haptics.selectionAsync().catch(() => {});
+                    }
+                    setSelectedPlanId(plan.id);
+                  }}
                   accessibilityRole="radio"
                   accessibilityState={{ selected }}
+                  style={styles.gridItemWrapper}
                 >
-                  <OrganiserSurface
-                    style={[styles.mainPlanCard, { padding: 16, backgroundColor: selected ? palette.blueSoft : palette.surface, borderColor: selected ? palette.blue : palette.line }]}
+                  <View
+                    style={[
+                      styles.gridCard,
+                      {
+                        backgroundColor: selected
+                          ? (palette.dark ? "rgba(56,189,248,0.08)" : "rgba(14,165,233,0.06)")
+                          : palette.surface,
+                        borderColor: selected
+                          ? palette.accent
+                          : isRecommended
+                          ? (palette.dark ? "rgba(56,189,248,0.45)" : "rgba(14,165,233,0.4)")
+                          : palette.line,
+                        borderWidth: selected ? 2 : 1,
+                      },
+                    ]}
                   >
-                    <View style={styles.planCardHeader}>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <View style={styles.planTitleRow}>
-                          <Text style={[styles.planCardTitle, { color: palette.text, fontSize: 17 }]}>{plan.name}</Text>
-                          {plan.badge ? (
-                            <View style={styles.planBadgeWrap}>
-                              <Text style={[styles.planBadgeText, { color: palette.accent }]}>{plan.badge}</Text>
-                            </View>
-                          ) : null}
+                    {/* Top Row: Badge or space + Radio Indicator */}
+                    <View style={styles.gridCardTopRow}>
+                      {isRecommended ? (
+                        <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
+                          <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
                         </View>
-                        <Text style={[styles.priceSubtext, { color: palette.muted, marginTop: 4 }]}>{formatPlanPrice(plan)}</Text>
+                      ) : plan.badge && plan.badge !== "Recommended" ? (
+                        <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
+                          <Text style={[styles.subBadgeText, { color: palette.muted }]}>{plan.badge}</Text>
+                        </View>
+                      ) : (
+                        <View style={{ height: 22 }} />
+                      )}
+
+                      <View
+                        style={[
+                          styles.premiumRadio,
+                          {
+                            borderColor: selected ? palette.accent : palette.line,
+                            backgroundColor: selected ? (palette.dark ? "rgba(56,189,248,0.18)" : "rgba(14,165,233,0.12)") : "transparent",
+                          },
+                        ]}
+                      >
+                        {selected ? <View style={[styles.premiumRadioDot, { backgroundColor: palette.accent }]} /> : null}
                       </View>
-                      <Ionicons name={selected ? "radio-button-on" : "radio-button-off"} size={22} color={selected ? palette.blue : palette.muted} />
                     </View>
-                  </OrganiserSurface>
+
+                    {/* Middle: Plan Name & Tagline */}
+                    <View style={styles.gridCardMiddle}>
+                      <Text style={[styles.gridPlanName, { color: palette.text }]}>{plan.name}</Text>
+                      <Text style={[styles.gridPlanSubtext, { color: palette.muted }]}>{highlightSubtext}</Text>
+                    </View>
+
+                    {/* Bottom: Price */}
+                    <View style={styles.gridCardPriceBlock}>
+                      <View style={styles.priceRowInline}>
+                        <Text style={[styles.priceCurrencyTag, { color: isRecommended ? palette.accent : palette.muted }]}>RWF</Text>
+                        <Text style={[styles.gridPriceNumber, { color: palette.text }]}>
+                          {plan.price.toLocaleString()}
+                        </Text>
+                      </View>
+                      <Text style={[styles.gridPricePeriod, { color: palette.muted }]}>
+                        {billingPeriod}
+                      </Text>
+                    </View>
+                  </View>
                 </Pressable>
               );
             })}
@@ -522,12 +973,10 @@ function ManualSubscribeCheckout() {
           style={[styles.primaryPayBtn, { backgroundColor: colors.primary, marginTop: 4, opacity: activePlan ? 1 : 0.6 }]}
           onPress={() => void goToMethods()}
         >
-          {resolvingMethods ? <ActivityIndicator color="#fff" /> : <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />}
+          {resolvingMethods ? <ActivityIndicator color="#fff" /> : null}
           <Text style={styles.primaryPayBtnText}>{resolvingMethods ? "Loading…" : "Continue"}</Text>
         </Pressable>
-        <Text style={[styles.guaranteeText, { color: palette.muted }]}>
-          Your organiser access starts only once we confirm and approve your payment.
-        </Text>
+
       </ScrollView>
     </View>
   );
@@ -549,7 +998,7 @@ function DemoSubscribeCheckout() {
   const [plansLoading, setPlansLoading] = useState(true);
   const [plansError, setPlansError] = useState<string | null>(null);
 
-  const [selectedInterval, setSelectedInterval] = useState<SubscriptionInterval>("post");
+  const [selectedInterval, setSelectedInterval] = useState<SubscriptionInterval>("month");
   const [selectedDuration, setSelectedDuration] = useState<number>(1);
 
   const [method, setMethod] = useState<PaymentMethod>("mtn_momo");
@@ -586,7 +1035,8 @@ function DemoSubscribeCheckout() {
 
   useEffect(() => {
     if (intervalTabs.length && !intervalTabs.some((tab) => tab.id === selectedInterval)) {
-      setSelectedInterval(intervalTabs[0].id);
+      const preferred = intervalTabs.find((t) => t.id === "month") ?? intervalTabs[0];
+      setSelectedInterval(preferred.id);
     }
   }, [intervalTabs, selectedInterval]);
 
@@ -694,7 +1144,7 @@ function DemoSubscribeCheckout() {
         <OrganiserAtmosphere />
         <Stack.Screen options={{ gestureEnabled: phase !== "processing" }} />
         <OrganiserFlowHeader
-          title="Choose access"
+          title="Choose packages"
           step={2}
           canGoBack={phase !== "processing" && phase !== "succeeded"}
         />
@@ -747,7 +1197,7 @@ function DemoSubscribeCheckout() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <OrganiserAtmosphere />
-      <OrganiserFlowHeader title="Choose access" step={2} />
+      <OrganiserFlowHeader title="Choose packages" step={2} />
 
       <ScrollView
         style={styles.scroll}
@@ -757,14 +1207,7 @@ function DemoSubscribeCheckout() {
       >
         {/* HERO TITLE & BRANDING */}
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(50).springify() : undefined}>
-          <View style={styles.kickerRow}>
-            <View style={styles.kickerDot} />
-            <Text style={[styles.kickerText, { color: palette.accent }]}>EVENTIS ORGANISER PASS</Text>
-          </View>
-          <Text style={[styles.title, { color: palette.text }]}>Choose your organiser access</Text>
-          <Text style={[styles.subtitle, { color: palette.muted }]}>
-            Pay once for a few posts, or subscribe to keep posting. Complete payment with Mobile Money.
-          </Text>
+          <Text style={[styles.title, { color: palette.text, fontSize: 19, letterSpacing: -0.3 }]}>Choose packages</Text>
         </Animated.View>
 
         {/* INTERVAL SELECTOR TABS (DAILY / WEEKLY / MONTHLY) */}
@@ -803,6 +1246,7 @@ function DemoSubscribeCheckout() {
                   >
                     {tab.label}
                   </Text>
+
                 </Pressable>
               );
             })}
@@ -839,9 +1283,13 @@ function DemoSubscribeCheckout() {
                       <Text style={[styles.planCardTitle, { color: palette.text }]}>
                         {activePlan.name} access
                       </Text>
-                      {activePlan.badge ? (
-                        <View style={styles.planBadgeWrap}>
-                          <Text style={[styles.planBadgeText, { color: palette.accent }]}>{activePlan.badge}</Text>
+                      {activePlan.interval === "month" ? (
+                        <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
+                          <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
+                        </View>
+                      ) : activePlan.badge && activePlan.badge !== "Recommended" ? (
+                        <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
+                          <Text style={[styles.subBadgeText, { color: palette.muted }]}>{activePlan.badge}</Text>
                         </View>
                       ) : null}
                     </View>
@@ -1270,7 +1718,6 @@ function StatusResult({
           <>
             <Pressable style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]} onPress={postPack ? onPostNow : onContinue}>
               <Text style={styles.primaryPayBtnText}>{postPack ? "Post My Event Now" : "Set Up Organisation"}</Text>
-              <Ionicons name="arrow-forward" size={18} color="#fff" />
             </Pressable>
             {postPack ? (
               <Pressable onPress={onContinue} style={styles.cancelSheetBtn} accessibilityRole="button">
@@ -1304,7 +1751,7 @@ const styles = StyleSheet.create({
   kickerDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#38BDF8" },
   kickerText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#38BDF8", letterSpacing: 1.2 },
 
-  title: { fontSize: 26, fontFamily: "Inter_700Bold", letterSpacing: -0.4, marginBottom: 6 },
+  title: { fontSize: 19, fontFamily: "Inter_700Bold", letterSpacing: -0.3, marginBottom: 2 },
   subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 22 },
 
   // Segment tabs
@@ -1336,6 +1783,725 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
 
+  recommendedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  recommendedBadgeText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.5,
+  },
+  planRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+    marginTop: 2,
+  },
+  planRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  planCardPriceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+    marginTop: 12,
+  },
+  planFeaturesWrap: {
+    marginTop: 12,
+    gap: 8,
+  },
+  planFeaturesDivider: {
+    height: 1,
+    marginBottom: 6,
+  },
+  planFeatureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  planFeatureText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+    lineHeight: 18,
+  },
+  tabMiniBadge: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: -2,
+  },
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 12,
+  },
+  gridItemWrapper: {
+    width: "48%",
+    borderRadius: 18,
+  },
+  gridCard: {
+    borderRadius: 18,
+    padding: 13,
+    minHeight: 146,
+    justifyContent: "space-between",
+  },
+  gridCardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 24,
+  },
+  gridCardMiddle: {
+    gap: 2,
+    marginVertical: 4,
+  },
+  gridPlanName: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
+  },
+  gridPlanSubtext: {
+    fontSize: 11.5,
+    fontFamily: "Inter_400Regular",
+  },
+  gridCardPriceBlock: {
+    gap: 1,
+  },
+  gridPriceNumber: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.4,
+  },
+  gridPricePeriod: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+  },
+  compactPlanCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  compactPlanLeft: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 10,
+    gap: 3,
+  },
+  compactPlanTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  compactPlanName: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
+  },
+  compactPlanSubtext: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  compactPlanRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  compactPriceWrap: {
+    alignItems: "flex-end",
+  },
+  priceRowInline: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 4,
+  },
+  priceCurrencyTag: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.3,
+  },
+  compactPriceNumber: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.4,
+  },
+  compactPricePeriod: {
+    fontSize: 11.5,
+    fontFamily: "Inter_400Regular",
+    marginTop: 1,
+  },
+  invoiceCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 4,
+  },
+  invoiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  invoiceColLeft: {
+    flex: 1.1,
+    gap: 2,
+  },
+  invoiceColRight: {
+    flex: 1,
+    paddingLeft: 14,
+    gap: 3,
+  },
+  invoiceLabel: {
+    fontSize: 11.5,
+    fontFamily: "Inter_500Medium",
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
+  },
+  invoiceAmountRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 5,
+    marginTop: 2,
+  },
+  invoiceCurrencyTag: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+  },
+  invoiceAmountValue: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
+  },
+  invoicePlanName: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+  },
+  invoiceVerticalDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    marginVertical: 2,
+  },
+  invoicePayToName: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
+    lineHeight: 18,
+  },
+  merchantBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
+  merchantBadgeText: {
+    fontSize: 10.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  methodCodeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  methodUssdCodeBadge: {
+    fontSize: 12.5,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
+  },
+  miniCopyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  miniCopyText: {
+    fontSize: 10.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  methodSelectionSection: {
+    gap: 12,
+  },
+  methodsVerticalList: {
+    gap: 10,
+  },
+  logoMethodCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  logoContainer: {
+    width: 46,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    padding: 3,
+  },
+  providerLogoImg: {
+    width: "100%",
+    height: "100%",
+  },
+  methodTitleText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  methodUssdText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    marginTop: 2,
+  },
+  nbNoticeCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 6,
+    marginTop: 4,
+  },
+  nbHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  nbTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 0.5,
+  },
+  nbBodyText: {
+    fontSize: 12.5,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "flex-end",
+  },
+  confirmModalCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    gap: 14,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignSelf: "center",
+    marginBottom: 6,
+  },
+  modalHeader: {
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+  },
+  modalIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.3,
+    textAlign: "center",
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 18,
+    paddingHorizontal: 16,
+  },
+  modalActionButtons: {
+    gap: 10,
+    marginTop: 4,
+  },
+  modalActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 52,
+    borderRadius: 26,
+    gap: 10,
+  },
+  modalActionBtnTextDark: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: "#000000",
+  },
+  modalActionBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  modalPreviewWrap: {
+    width: "100%",
+    height: 180,
+    borderRadius: 14,
+    overflow: "hidden",
+    position: "relative",
+    marginVertical: 4,
+  },
+  modalPreviewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  modalRemoveBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 13,
+  },
+  modalConfirmActions: {
+    gap: 10,
+  },
+  modalRetakeBtn: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  modalRetakeText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  modalCancelBtn: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  modalCancelText: {
+    fontSize: 13.5,
+    fontFamily: "Inter_500Medium",
+  },
+  resultContainer: {
+    flexGrow: 1,
+    paddingHorizontal: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultIconGlow: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  resultIconInner: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultBadgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  resultBadgeText: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
+  },
+  resultHeroTitle: {
+    fontSize: 24,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -0.5,
+    textAlign: "center",
+  },
+  resultHeroText: {
+    fontSize: 13.5,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
+  resultReceiptCard: {
+    width: "100%",
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    gap: 10,
+    marginTop: 4,
+  },
+  resultReceiptRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  resultReceiptLabel: {
+    fontSize: 12.5,
+    fontFamily: "Inter_500Medium",
+  },
+  resultReceiptValue: {
+    fontSize: 13.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  resultDivider: {
+    height: 1,
+  },
+  resultActions: {
+    width: "100%",
+    gap: 10,
+    marginTop: 6,
+  },
+  discoverHeroBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 54,
+    borderRadius: 27,
+    gap: 10,
+  },
+  discoverHeroBtnText: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#000000",
+    letterSpacing: -0.2,
+  },
+  secondaryTrackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 46,
+    borderRadius: 23,
+    borderWidth: 1,
+    gap: 8,
+  },
+  secondaryTrackText: {
+    fontSize: 13.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  enhancedTrackCard: {
+    width: "100%",
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    gap: 14,
+    marginTop: 6,
+  },
+  trackCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  trackStatusIndicatorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  trackStatusLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
+  },
+  trackReferenceTag: {
+    fontSize: 12.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  trackTimeline: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
+  timelineItem: {
+    alignItems: "center",
+    gap: 6,
+  },
+  timelineIconActive: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineIconPending: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineIconUpcoming: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineTextActive: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  timelineTextPending: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+  },
+  timelineTextUpcoming: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+  },
+  timelineLine: {
+    flex: 1,
+    height: 2,
+    marginHorizontal: 8,
+    marginBottom: 16,
+    borderRadius: 1,
+  },
+  trackTextLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 8,
+  },
+  trackTextLinkText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  headerBlock: {
+    marginBottom: 4,
+  },
+  premiumCard: {
+    borderRadius: 20,
+    padding: 18,
+    gap: 10,
+  },
+  cardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardPlanTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.3,
+  },
+  heroBadgePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroBadgeText: {
+    fontSize: 10.5,
+    fontFamily: "Inter_800ExtraBold",
+    color: "#000000",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  subBadgePill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 5,
+    borderWidth: 1,
+  },
+  subBadgeText: {
+    fontSize: 9.5,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.3,
+  },
+  premiumRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  premiumRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  cardPlanDesc: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+    marginTop: -2,
+  },
+  cardPriceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+    marginTop: 2,
+  },
+  cardPriceCurrency: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  cardPriceAmount: {
+    fontSize: 27,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.6,
+  },
+  cardPricePeriod: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+  },
+  cardFeaturesWrap: {
+    borderTopWidth: 1,
+    paddingTop: 12,
+    marginTop: 2,
+    gap: 8,
+  },
+  cardFeatureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  cardFeatureCheck: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardFeatureText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+    lineHeight: 18,
+  },
   // Main plan card
   mainPlanCard: {
     borderRadius: 20,
@@ -1610,14 +2776,82 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
 
+  dialPayBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 52,
+    paddingHorizontal: 20,
+    borderRadius: 26,
+    gap: 10,
+    marginTop: 4,
+  },
+  dialPayBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: "#000000",
+  },
+  copiedAlertPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: -4,
+  },
+  copiedAlertText: {
+    fontSize: 12.5,
+    fontFamily: "Inter_600SemiBold",
+    flex: 1,
+  },
+  stepsCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 12,
+    marginTop: 4,
+  },
+  stepsCardTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
+  },
+  stepsList: {
+    gap: 10,
+  },
+  stepRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  stepNumberBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  stepNumberText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+  },
+  stepText: {
+    fontSize: 12.5,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+    lineHeight: 18,
+  },
   // Primary Pay Button
   primaryPayBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
+    minHeight: 52,
     paddingHorizontal: 20,
-    borderRadius: 16,
+    borderRadius: 26,
     gap: 10,
     overflow: "hidden",
   },

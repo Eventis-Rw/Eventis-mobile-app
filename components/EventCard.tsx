@@ -229,7 +229,6 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
                   : "rgba(255, 255, 255, 0.75)",
             },
           ]}
-          onPress={(e) => e.stopPropagation()}
         >
           {Platform.OS !== "web" ? (
             <BlurView
@@ -511,7 +510,6 @@ export function EventCard({ event, variant = "standard", inset = 20, source = "h
                   : "rgba(255, 255, 255, 0.75)",
             },
           ]}
-          onPress={(e) => e.stopPropagation()}
         >
           {Platform.OS !== "web" ? (
             <BlurView
@@ -1140,13 +1138,16 @@ function EventShareSheet({ event, source, onClose, handleCopyLink, copyFeedback,
       visible
       transparent
       animationType="slide"
+      statusBarTranslucent
       onRequestClose={() => onClose()}
     >
-      <Pressable
-        style={styles.shareOverlay}
-        onPress={() => onClose()}
-      >
+      <View style={styles.shareOverlay}>
         <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => onClose()}
+          accessibilityLabel="Dismiss share"
+        />
+        <View
           style={[
             styles.shareCard,
             Platform.OS === "web"
@@ -1166,7 +1167,6 @@ function EventShareSheet({ event, source, onClose, handleCopyLink, copyFeedback,
                   : "rgba(255, 255, 255, 0.75)",
             },
           ]}
-          onPress={(e) => e.stopPropagation()}
         >
           {Platform.OS !== "web" ? (
             <BlurView
@@ -1379,8 +1379,8 @@ function EventShareSheet({ event, source, onClose, handleCopyLink, copyFeedback,
               </Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 

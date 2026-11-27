@@ -21,6 +21,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { useChat } from "@/context/ChatContext";
 import { FIND_LOVE_ENABLED } from "@/services/findLoveService";
+import { useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 
 const USE_NATIVE_DRIVER = Platform.OS !== "web";
 
@@ -289,6 +290,7 @@ const HIDDEN_TAB_OPTIONS = {
 function TabLayout() {
   const router = useRouter();
   const { user, isRestoringOrganiser } = useAuth();
+  const { hasOrganiserAccess, openOrganiserFlow } = useOrganiserAccess();
   const postsLeft = user?.organiserSubscription?.postsRemaining ?? 0;
   const { conversations } = useChat();
   const [showOrganizerSheet, setShowOrganizerSheet] = useState(false);
@@ -392,7 +394,11 @@ function TabLayout() {
           listeners={{
             tabPress: (event) => {
               event.preventDefault();
-              setShowOrganizerSheet(true);
+              if (user?.isBusinessAccount || hasOrganiserAccess) {
+                setShowOrganizerSheet(true);
+              } else {
+                openOrganiserFlow();
+              }
             },
           }}
           options={{
@@ -471,28 +477,29 @@ function TabLayout() {
         visible={showOrganizerSheet}
         transparent
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={() => setShowOrganizerSheet(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowOrganizerSheet(false)}
-        >
+        <View style={styles.modalOverlay}>
           <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowOrganizerSheet(false)}
+            accessibilityLabel="Dismiss modal"
+          />
+          <View
             style={[
               styles.modalSheet,
               {
                 backgroundColor: colors.background,
                 borderColor: `${colors.primary}55`,
                 paddingBottom: Math.max(insets.bottom, 16) + 16,
-                overflow: "hidden",
               },
             ]}
-            onPress={(e) => e.stopPropagation()}
           >
             <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
             {isRestoringOrganiser ? (
               <Text accessibilityLiveRegion="polite" style={[styles.modalTitle, { color: colors.foreground }]}>Checking organiser access…</Text>
-            ) : user?.isBusinessAccount ? (
+            ) : user?.isBusinessAccount || hasOrganiserAccess ? (
               <>
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>Create something worth sharing</Text>
                 <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>Publish an event or share a story with your audience.</Text>
@@ -510,89 +517,67 @@ function TabLayout() {
                 ))}
                 <Pressable onPress={() => setShowOrganizerSheet(false)} accessibilityRole="button" style={styles.modalDismissButton}><Text style={[styles.modalDismiss, { color: colors.foreground }]}>Cancel</Text></Pressable>
               </>
-            ) : <>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Quick create</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={postsLeft > 0 ? "Post an event now" : "Pay for a quick post"}
-              onPress={() => {
-                setShowOrganizerSheet(false);
-                router.push((postsLeft > 0 ? "/business/create-event" : "/organiser/subscribe") as any);
-              }}
-              style={({ pressed }) => [styles.modalFeatureRow, { marginTop: 12, padding: 18, backgroundColor: colors.card, borderColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}
-            >
-              <Ionicons name="flash-outline" size={24} color={colors.primary} />
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={[styles.modalFeatureText, { color: colors.foreground }]}>
-                  {postsLeft > 0 ? `Post an event (${postsLeft} ${postsLeft === 1 ? "post" : "posts"} left)` : "Post an event quickly"}
-                </Text>
-                <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>
-                  {postsLeft > 0
-                    ? "No organisation needed."
-                    : "Pay RWF 2,180 for one post or RWF 4,180 for two. No organisation needed."}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-            </Pressable>
-            <View style={[styles.modalOr, { borderColor: colors.border }]} />
-            <View
-              style={[
-                styles.modalIconWrap,
-                { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` },
-              ]}
-            >
-              <Ionicons name="briefcase-outline" size={28} color={colors.primary} />
-            </View>
-            <Text style={[styles.modalEyebrow, { color: colors.primary }]}>ORGANIZER EXCLUSIVE</Text>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-              Become an organiser
-            </Text>
-            <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>
-              Create an organiser workspace to publish events and share stories with your audience.
-            </Text>
-            <View style={styles.modalFeatures}>
-              {[
-                "Publish events with dates, photos and details",
-                "Share photos and updates through stories",
-                "Reach attendees directly across Rwanda",
-              ].map((f) => (
+            ) : (
+              <>
                 <View
-                  key={f}
                   style={[
-                    styles.modalFeatureRow,
-                    { backgroundColor: colors.card, borderColor: colors.border },
+                    styles.modalIconWrap,
+                    { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` },
                   ]}
                 >
-                  <View
-                    style={[styles.modalCheck, { backgroundColor: `${colors.primary}24` }]}
-                  >
-                    <Ionicons name="checkmark" size={14} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.modalFeatureText, { color: colors.foreground }]}>{f}</Text>
+                  <Ionicons name="briefcase-outline" size={28} color={colors.primary} />
                 </View>
-              ))}
-            </View>
-            <Pressable
-              style={[styles.modalCta, { backgroundColor: colors.primary }]}
-              onPress={() => {
-                setShowOrganizerSheet(false);
-                router.push("/organiser" as any);
-              }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.modalCtaText}>Become an Organizer</Text>
-              <Ionicons name="arrow-forward" size={18} color="#fff" />
-            </Pressable>
-            <Pressable
-              onPress={() => setShowOrganizerSheet(false)}
-              accessibilityRole="button"
-              style={styles.modalDismissButton}
-            >
-              <Text style={[styles.modalDismiss, { color: colors.foreground }]}>Maybe later</Text>
-            </Pressable>
-            </>}
-          </Pressable>
-        </Pressable>
+                <Text style={[styles.modalEyebrow, { color: colors.primary }]}>ORGANISER ONBOARDING</Text>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  Become an organiser
+                </Text>
+                <Text style={[styles.modalBody, { color: colors.mutedForeground }]}>
+                  Set up your organiser workspace to publish events, sell tickets, and share stories with attendees across Rwanda.
+                </Text>
+                <View style={styles.modalFeatures}>
+                  {[
+                    "1. Submit your organiser application",
+                    "2. Choose your subscription package",
+                    "3. Set up your organisation profile",
+                  ].map((f) => (
+                    <View
+                      key={f}
+                      style={[
+                        styles.modalFeatureRow,
+                        { backgroundColor: colors.card, borderColor: colors.border },
+                      ]}
+                    >
+                      <View
+                        style={[styles.modalCheck, { backgroundColor: `${colors.primary}24` }]}
+                      >
+                        <Ionicons name="checkmark" size={14} color={colors.primary} />
+                      </View>
+                      <Text style={[styles.modalFeatureText, { color: colors.foreground }]}>{f}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Pressable
+                  style={[styles.modalCta, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    setShowOrganizerSheet(false);
+                    openOrganiserFlow();
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.modalCtaText}>Start application</Text>
+                  <Ionicons name="arrow-forward" size={18} color="#fff" />
+                </Pressable>
+                <Pressable
+                  onPress={() => setShowOrganizerSheet(false)}
+                  accessibilityRole="button"
+                  style={styles.modalDismissButton}
+                >
+                  <Text style={[styles.modalDismiss, { color: colors.foreground }]}>Maybe later</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
       </Modal>
     </>
   );
@@ -806,7 +791,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: 26,
     marginTop: 6,
   },
   modalCtaText: {

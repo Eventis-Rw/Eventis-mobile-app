@@ -21,15 +21,12 @@ export function getOrganiserDestination(user: User | null, useApi: boolean): str
   const step = getOrganiserStep(user);
   if (step === "ready") return "/business/dashboard";
   if (step === "setup") return "/organiser/setup";
-  if (useApi && !user?.isDemo) {
-    const application = user?.organiserApplication;
-    if (application?.status === "IN_REVIEW") return null;
-    if (application?.status === "PENDING_PAYMENT") {
-      return application.manualPaymentId ? "/organiser/payments" : "/organiser/subscribe";
-    }
-    return "/organiser/application";
+  const application = user?.organiserApplication;
+  if (application?.status === "IN_REVIEW") return null;
+  if (application?.status === "PENDING_PAYMENT") {
+    return application.manualPaymentId ? "/organiser/payments" : "/organiser/subscribe";
   }
-  return "/organiser/subscribe";
+  return "/organiser/application";
 }
 
 /**

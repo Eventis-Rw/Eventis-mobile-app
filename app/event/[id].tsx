@@ -73,8 +73,8 @@ export default function EventDetailScreen() {
     const others = events.filter((e) => e.id !== event.id);
     const sameCategory = others.filter((e) => e.category === event.category);
     const otherCategories = others.filter((e) => e.category !== event.category);
-    // 2 per row x up to 3 rows (4 to 6 events)
-    return [...sameCategory, ...otherCategories].slice(0, 6);
+    // 3 events in a clean single row
+    return [...sameCategory, ...otherCategories].slice(0, 3);
   }, [events, event]);
   useEffect(() => {
     if (!event || !focused || !foreground || showShareModal || showOptionsModal) return;
@@ -646,13 +646,7 @@ export default function EventDetailScreen() {
                         style={styles.featuredGridImage}
                         imageStyle={styles.featuredGridImageInner}
                         resizeMode="cover"
-                      >
-                        <View style={styles.featuredTagPill}>
-                          <Text style={styles.featuredTagText}>
-                            {item.isPaid && item.price ? `${item.currency || "RWF"} ${item.price.toLocaleString()}` : "Free"}
-                          </Text>
-                        </View>
-                      </ImageBackground>
+                      />
                     </View>
 
                     {/* Event Info */}

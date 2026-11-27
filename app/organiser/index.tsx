@@ -2,40 +2,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
-import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
-import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { getOrganiserDestination, useOrganiserAccess } from "@/hooks/useOrganiserAccess";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { USE_ORGANISER_API } from "@/services/organiserService";
 
-const TOOLS = [
-  {
-    icon: "calendar-outline" as const,
-    title: "Publish event pages",
-    text: "Give every event one clear place for the date, venue, details and booking action.",
-  },
-  {
-    icon: "megaphone-outline" as const,
-    title: "Promote every moment",
-    text: "Use stories to keep your audience interested.",
-  },
-  {
-    icon: "analytics-outline" as const,
-    title: "Manage from one workspace",
-    text: "Create content, update event details and review performance without another login.",
-  },
-];
-
-const JOURNEY = [
-  { title: "Choose access", text: "Pick a pass that matches how often you publish." },
-  { title: "Create your profile", text: "Add the organiser name, identity and public details." },
-  { title: "Launch your event", text: "Create an event first, then promote it with stories." },
-];
+const heroArt = require("@/assets/images/organiser-onboarding.jpg");
 
 const enter = (delay: number) =>
   Platform.OS !== "web" ? FadeInDown.delay(delay).springify() : undefined;
@@ -49,9 +25,14 @@ export default function BecomeOrganiserScreen() {
 
   const { user, isRestoringOrganiser } = useAuth();
   const application = user?.organiserApplication;
-  const postsLeft = user?.organiserSubscription?.postsRemaining ?? 0;
-  const quickPost = () =>
-    router.push((postsLeft > 0 ? "/business/create-event" : "/organiser/subscribe") as any);
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(tabs)" as any);
+    }
+  };
 
   const continueFlow = () => {
     const destination = getOrganiserDestination(user, USE_ORGANISER_API);
@@ -60,235 +41,300 @@ export default function BecomeOrganiserScreen() {
     else router.push({ pathname: destination as any, params: from ? { from } : {} });
   };
 
-  const ctaLabel = isRestoringOrganiser ? "Checking access…" : application?.status === "IN_REVIEW" ? "Application in review"
-    : application?.status === "PENDING_PAYMENT" ? application.manualPaymentId ? "Track payment verification" : "Continue to payment"
-    : application?.status === "REJECTED" ? "Apply again"
+  const ctaLabel = isRestoringOrganiser
+    ? "Checking access…"
+    : application?.status === "IN_REVIEW"
+    ? "Application in review"
+    : application?.status === "PENDING_PAYMENT"
+    ? application.manualPaymentId
+      ? "Track payment verification"
+      : "Continue to payment"
+    : application?.status === "REJECTED"
+    ? "Apply again"
     : step === "ready"
     ? "Open organiser workspace"
     : step === "setup"
-      ? "Continue profile setup"
-      : "See plans and pricing";
+    ? "Continue profile setup"
+    : "Get started";
 
   return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>
-      <OrganiserAtmosphere />
-      <OrganiserFlowHeader title="Become an organiser" step={1} />
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 36 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {from === "create-post" && step !== "ready" ? (
-          <View style={[styles.contextCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-            <View style={[styles.contextIcon, { backgroundColor: palette.blueSoft }]}>
-              <Ionicons name="lock-closed-outline" size={18} color={palette.accent} />
-            </View>
-            <View style={styles.flex}>
-              <Text style={[styles.contextTitle, { color: palette.text }]}>Organiser access required</Text>
-              <Text style={[styles.contextText, { color: palette.muted }]}>Complete this flow to publish events and stories.</Text>
-            </View>
-          </View>
-        ) : null}
+      {/* Hero Visual Area with Vintage Partnership Illustration */}
+      <View style={styles.heroWrapper}>
+        <Image
+          source={heroArt}
+          style={styles.heroImage}
+          resizeMode="cover"
+          accessibilityLabel="Eventis organiser collaboration visual"
+        />
 
-        {step === "setup" ? (
-          <View style={[styles.resumeCard, { backgroundColor: palette.blueSoft, borderColor: palette.blue }]}>
-            <Ionicons name="checkmark-circle" size={23} color={palette.accent} />
-            <View style={styles.flex}>
-              <Text style={[styles.resumeTitle, { color: palette.text }]}>Your pass is active</Text>
-              <Text style={[styles.resumeText, { color: palette.muted }]}>Your payment step is complete. Finish your public organiser profile to open the workspace.</Text>
-            </View>
-          </View>
-        ) : null}
-        {application?.status === "IN_REVIEW" ? (
-          <View style={[styles.resumeCard, { backgroundColor: palette.blueSoft, borderColor: palette.blue }]}>
-            <Text style={{ color: palette.text }}>Your payment was successful, and your organizer application has been submitted successfully. Our administration team is currently reviewing your application. You will receive a notification once a decision has been made.</Text>
-          </View>
-        ) : application?.status === "REJECTED" ? (
-          <View style={[styles.resumeCard, { backgroundColor: palette.blueSoft, borderColor: palette.blue }]}>
-            <Text style={{ color: palette.text }}>Application rejected: {application.rejectionReason}. You may apply again with a new payment.</Text>
-          </View>
-        ) : null}
+        {/* Ambient Overlay & Seamless Fade into Canvas Background (Dark or Light) */}
+        <LinearGradient
+          colors={
+            palette.dark
+              ? [
+                  "rgba(0, 0, 0, 0.45)",
+                  "rgba(0, 0, 0, 0.15)",
+                  "rgba(0, 0, 0, 0.6)",
+                  "rgba(0, 0, 0, 0.92)",
+                  palette.canvas,
+                ]
+              : [
+                  "rgba(255, 255, 255, 0.15)",
+                  "rgba(255, 255, 255, 0.05)",
+                  "rgba(255, 255, 255, 0.55)",
+                  "rgba(255, 255, 255, 0.9)",
+                  palette.canvas,
+                ]
+          }
+          locations={[0, 0.35, 0.65, 0.88, 1]}
+          style={StyleSheet.absoluteFill}
+        />
 
-        <Animated.View entering={enter(40)}>
-          <LinearGradient
-            colors={palette.dark ? ["#0B74B8", "#09467D", "#10213B"] : ["#0788CE", "#0867A8", "#17477B"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.hero}
-          >
-            <View style={styles.heroRing} />
-            <View style={styles.heroTop}>
-              <View style={styles.heroMark}><Ionicons name="briefcase-outline" size={22} color="#FFFFFF" /></View>
-              <Text style={styles.heroLabel}>EVENTIS FOR ORGANISERS</Text>
-            </View>
-            <Text style={styles.heroTitle}>Give every event a place to grow.</Text>
-            <Text style={styles.heroText}>
-              Build the event page, share the story and manage what your audience sees from one focused workspace.
-            </Text>
-            <Pressable
-              onPress={continueFlow}
-              disabled={isRestoringOrganiser || application?.status === "IN_REVIEW"}
-              style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.heroButtonText, { color: palette.blue }]}>{ctaLabel}</Text>
-              <Ionicons name="arrow-forward" size={18} color={palette.blue} />
-            </Pressable>
-          </LinearGradient>
-        </Animated.View>
-
-        <Animated.View entering={enter(90)} style={styles.section}>
-          <View style={styles.sectionHeading}>
-            <Text style={[styles.sectionTitle, { color: palette.text }]}>What the workspace gives you</Text>
-            <Text style={[styles.sectionText, { color: palette.muted }]}>The essentials for publishing and promoting events.</Text>
-          </View>
-          <View style={styles.tools}>
-            {TOOLS.map((tool) => (
-              <View key={tool.title} style={[styles.toolCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                <View style={[styles.toolIcon, { backgroundColor: palette.blueSoft }]}>
-                  <Ionicons name={tool.icon} size={21} color={palette.accent} />
-                </View>
-                <View style={styles.flex}>
-                  <Text style={[styles.toolTitle, { color: palette.text }]}>{tool.title}</Text>
-                  <Text style={[styles.toolText, { color: palette.muted }]}>{tool.text}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </Animated.View>
-
-        <Animated.View entering={enter(140)} style={styles.section}>
-          <View style={styles.sectionHeading}>
-            <Text style={[styles.sectionTitle, { color: palette.text }]}>From account to first event</Text>
-            <Text style={[styles.sectionText, { color: palette.muted }]}>A short setup, then everything lives in your organiser workspace.</Text>
-          </View>
-          <View style={[styles.journey, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-            {JOURNEY.map((item, index) => (
-              <View key={item.title} style={styles.journeyRow}>
-                <View style={styles.journeyRail}>
-                  <View style={[styles.journeyNumber, { backgroundColor: index === 0 ? palette.blue : palette.surfaceRaised, borderColor: index === 0 ? palette.blue : palette.line }]}>
-                    <Text style={[styles.journeyNumberText, { color: index === 0 ? palette.onBlue : palette.muted }]}>{index + 1}</Text>
-                  </View>
-                  {index < JOURNEY.length - 1 ? <View style={[styles.journeyLine, { backgroundColor: palette.line }]} /> : null}
-                </View>
-                <View style={styles.journeyCopy}>
-                  <Text style={[styles.journeyTitle, { color: palette.text }]}>{item.title}</Text>
-                  <Text style={[styles.journeyText, { color: palette.muted }]}>{item.text}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </Animated.View>
-
-        {step === "intro" || (step === "setup" && postsLeft > 0) ? (
+        {/* Top Floating Navigation Bar with Chevron Back (No Steps) */}
+        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
           <Pressable
-            disabled={isRestoringOrganiser}
-            onPress={quickPost}
-            style={({ pressed }) => [styles.note, { backgroundColor: palette.surfaceRaised, borderColor: palette.blue }, pressed && styles.pressed]}
+            onPress={handleBack}
+            style={({ pressed }) => [
+              styles.backBtn,
+              {
+                backgroundColor: palette.dark
+                  ? "rgba(0, 0, 0, 0.55)"
+                  : "rgba(255, 255, 255, 0.88)",
+                borderColor: palette.dark
+                  ? "rgba(255, 255, 255, 0.2)"
+                  : "rgba(0, 0, 0, 0.12)",
+              },
+              pressed && {
+                backgroundColor: palette.dark
+                  ? "rgba(255, 255, 255, 0.15)"
+                  : "rgba(0, 0, 0, 0.08)",
+              },
+            ]}
             accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={12}
           >
-            <Ionicons name="flash-outline" size={20} color={palette.accent} />
-            <View style={styles.flex}>
-              <Text style={[styles.noteText, { color: palette.text, fontFamily: "Inter_700Bold" }]}>
-                {postsLeft > 0 ? "Post an event now" : "Just want to post? Skip the organisation"}
-              </Text>
-              <Text style={[styles.noteText, { color: palette.muted }]}>
-                {postsLeft > 0
-                  ? `You have ${postsLeft} ${postsLeft === 1 ? "post" : "posts"} left. No organisation needed.`
-                  : "Pay RWF 2,180 for one event or RWF 4,180 for two, then post straight away."}
-              </Text>
-            </View>
-            <Ionicons name="arrow-forward" size={18} color={palette.accent} />
+            <Ionicons
+              name="chevron-back"
+              size={22}
+              color={palette.dark ? "#FFFFFF" : "#111827"}
+            />
           </Pressable>
-        ) : null}
-
-        <View style={[styles.note, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
-          <Ionicons name="swap-horizontal-outline" size={20} color={palette.accent} />
-          <Text style={[styles.noteText, { color: palette.muted }]}>Your personal Eventis account stays available. Switch between personal and organiser without signing out.</Text>
         </View>
+      </View>
 
-        {USE_ORGANISER_API ? (
-          <Pressable
-            onPress={() => router.push("/organiser/payments" as any)}
-            style={({ pressed }) => [styles.note, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }, pressed && styles.pressed]}
-            accessibilityRole="button"
+      {/* Main Bottom Content (Onboarding Layout - No Scrolling) */}
+      <View
+        style={[
+          styles.contentWrapper,
+          {
+            backgroundColor: palette.canvas,
+            paddingBottom: Math.max(insets.bottom, 16) + 16,
+          },
+        ]}
+      >
+        {/* Status Callout if Application is In-Review or Rejected */}
+        {application?.status === "IN_REVIEW" ? (
+          <Animated.View
+            entering={enter(30)}
+            style={[
+              styles.statusPill,
+              {
+                backgroundColor: palette.dark
+                  ? "rgba(245, 158, 11, 0.14)"
+                  : "rgba(245, 158, 11, 0.1)",
+                borderColor: "rgba(245, 158, 11, 0.35)",
+              },
+            ]}
           >
-            <Ionicons name="receipt-outline" size={20} color={palette.accent} />
-            <View style={styles.flex}>
-              <Text style={[styles.noteText, { color: palette.text, fontFamily: "Inter_700Bold" }]}>Payment history</Text>
-              <Text style={[styles.noteText, { color: palette.muted }]}>Track a plan payment you submitted for review.</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={palette.muted} />
-          </Pressable>
+            <Ionicons name="time-outline" size={15} color="#F59E0B" />
+            <Text style={styles.statusPillText}>Application under review</Text>
+          </Animated.View>
+        ) : application?.status === "REJECTED" ? (
+          <Animated.View
+            entering={enter(30)}
+            style={[
+              styles.statusPill,
+              {
+                borderColor: "rgba(239, 68, 68, 0.4)",
+                backgroundColor: palette.dark
+                  ? "rgba(239, 68, 68, 0.14)"
+                  : "rgba(239, 68, 68, 0.08)",
+              },
+            ]}
+          >
+            <Ionicons name="alert-circle-outline" size={15} color={palette.danger} />
+            <Text style={[styles.statusPillText, { color: palette.danger }]}>
+              Application not approved · Tap to reapply
+            </Text>
+          </Animated.View>
+        ) : from === "create-post" ? (
+          <Animated.View
+            entering={enter(30)}
+            style={[
+              styles.statusPill,
+              {
+                backgroundColor: palette.blueSoft,
+                borderColor: `${palette.blue}40`,
+              },
+            ]}
+          >
+            <Ionicons name="lock-closed-outline" size={14} color={palette.blue} />
+            <Text style={[styles.statusPillText, { color: palette.blue }]}>
+              Organiser pass required to publish
+            </Text>
+          </Animated.View>
         ) : null}
 
-        <Pressable
-          onPress={continueFlow}
-          disabled={isRestoringOrganiser || application?.status === "IN_REVIEW"}
-          style={({ pressed }) => [styles.primaryButton, { backgroundColor: palette.blue }, pressed && styles.pressed]}
-          accessibilityRole="button"
-        >
-          <Text style={[styles.primaryButtonText, { color: palette.onBlue }]}>{ctaLabel}</Text>
-          <Ionicons name="arrow-forward" size={18} color={palette.onBlue} />
-        </Pressable>
-        {step !== "ready" ? (
+        {/* Text Block */}
+        <Animated.View entering={enter(60)} style={styles.textBlock}>
+          <Text style={[styles.title, { color: palette.text }]}>
+            Give every event a place to grow.
+          </Text>
+          <Text style={[styles.subtitle, { color: palette.muted }]}>
+            Publish event pages, share live stories, and manage attendees from one focused workspace.
+          </Text>
+        </Animated.View>
+
+        {/* Actions Section */}
+        <Animated.View entering={enter(100)} style={styles.actionSection}>
           <Pressable
-            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
-            style={styles.later}
+            onPress={continueFlow}
+            disabled={isRestoringOrganiser || application?.status === "IN_REVIEW"}
+            style={({ pressed }) => [
+              styles.primaryBtn,
+              {
+                backgroundColor:
+                  isRestoringOrganiser || application?.status === "IN_REVIEW"
+                    ? palette.surfaceRaised
+                    : palette.blue,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
             accessibilityRole="button"
           >
-            <Text style={[styles.laterText, { color: palette.muted }]}>Not now</Text>
+            <Text
+              style={[
+                styles.primaryBtnText,
+                {
+                  color:
+                    isRestoringOrganiser || application?.status === "IN_REVIEW"
+                      ? palette.muted
+                      : palette.onBlue,
+                },
+              ]}
+            >
+              {ctaLabel}
+            </Text>
           </Pressable>
-        ) : null}
-      </ScrollView>
+
+          {step !== "ready" ? (
+            <Pressable
+              onPress={handleBack}
+              style={styles.secondaryBtn}
+              accessibilityRole="button"
+              hitSlop={8}
+            >
+              <Text style={[styles.secondaryBtnText, { color: palette.muted }]}>
+                Maybe later
+              </Text>
+            </Pressable>
+          ) : null}
+        </Animated.View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  flex: { flex: 1 },
-  scroll: { flex: 1 },
-  content: { padding: 18, gap: 22 },
-  contextCard: { flexDirection: "row", alignItems: "center", gap: 11, padding: 13, borderRadius: 17, borderWidth: 1 },
-  contextIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  contextTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  contextText: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginTop: 2 },
-  resumeCard: { flexDirection: "row", alignItems: "flex-start", gap: 11, padding: 14, borderRadius: 17, borderWidth: 1 },
-  resumeTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  resumeText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 2 },
-  hero: { borderRadius: 28, padding: 22, overflow: "hidden" },
-  heroRing: { position: "absolute", width: 260, height: 260, borderRadius: 130, right: -95, top: -90, borderWidth: 42, borderColor: "rgba(255,255,255,0.07)" },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 36 },
-  heroMark: { width: 42, height: 42, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  heroLabel: { flex: 1, color: "rgba(255,255,255,0.88)", fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 1.25 },
-  heroTitle: { color: "#FFFFFF", fontSize: 34, lineHeight: 40, fontFamily: "Inter_700Bold", letterSpacing: -0.9 },
-  heroText: { color: "rgba(255,255,255,0.76)", fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: 10 },
-  heroButton: { minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 16, paddingHorizontal: 16, marginTop: 22 },
-  heroButtonText: { flexShrink: 1, paddingVertical: 14, color: "#087EC1", fontSize: 14, fontFamily: "Inter_700Bold" },
-  section: { gap: 13 },
-  sectionHeading: { gap: 4 },
-  sectionTitle: { fontSize: 21, lineHeight: 26, fontFamily: "Inter_700Bold", letterSpacing: -0.35 },
-  sectionText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
-  tools: { gap: 10 },
-  toolCard: { flexDirection: "row", alignItems: "flex-start", gap: 13, padding: 15, borderRadius: 19, borderWidth: 1 },
-  toolIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  toolTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  toolText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 3 },
-  journey: { padding: 17, borderRadius: 21, borderWidth: 1, gap: 2 },
-  journeyRow: { flexDirection: "row", gap: 12 },
-  journeyRail: { width: 32, alignItems: "center" },
-  journeyNumber: { width: 30, height: 30, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  journeyNumberText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  journeyLine: { width: 1, flex: 1, minHeight: 28, marginVertical: 5 },
-  journeyCopy: { flex: 1, paddingBottom: 18 },
-  journeyTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  journeyText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 3 },
-  note: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 14, borderRadius: 17, borderWidth: 1 },
-  noteText: { flex: 1, fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
-  primaryButton: { minHeight: 54, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, borderRadius: 17 },
-  primaryButtonText: { flexShrink: 1, paddingVertical: 14, textAlign: "center", color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
-  later: { minHeight: 44, alignItems: "center", justifyContent: "center", marginTop: -10 },
-  laterText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  pressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
+  root: {
+    flex: 1,
+  },
+  heroWrapper: {
+    flex: 1,
+    width: "100%",
+    position: "relative",
+    overflow: "hidden",
+  },
+  heroImage: {
+    width: "100%",
+    height: "100%",
+  },
+  topBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    zIndex: 10,
+  },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  contentWrapper: {
+    paddingHorizontal: 24,
+    gap: 24,
+  },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  statusPillText: {
+    color: "#F59E0B",
+    fontSize: 12.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  textBlock: {
+    gap: 12,
+  },
+  title: {
+    fontSize: 32,
+    lineHeight: 38,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -0.8,
+  },
+  subtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontFamily: "Inter_400Regular",
+  },
+  actionSection: {
+    gap: 12,
+    marginTop: 6,
+  },
+  primaryBtn: {
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  primaryBtnText: {
+    fontSize: 15.5,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  secondaryBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+  },
+  secondaryBtnText: {
+    fontSize: 13.5,
+    fontFamily: "Inter_600SemiBold",
+  },
 });
