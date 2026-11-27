@@ -357,6 +357,10 @@ function ManualSubscribeCheckout() {
   };
 
   if (step === "result" && submission) {
+    const formattedAmount = activePlan
+      ? `${activePlan.price.toLocaleString("en-US")} RWF`
+      : formatMinorAmount(submission.amountMinor, submission.currency || "RWF");
+
     return (
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
         <OrganiserAtmosphere />
@@ -376,37 +380,35 @@ function ManualSubscribeCheckout() {
             </View>
 
             <Text style={[styles.statusTitle, { color: palette.text, fontSize: 24, letterSpacing: -0.3 }]}>
-              Payment under review
+              Payment submitted
             </Text>
 
             <Text style={[styles.statusText, { color: palette.muted, fontSize: 14.5, lineHeight: 23 }]}>
-              Thank you for choosing the <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>{submission.plan.name}</Text> package.
+              Your payment of <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>{formattedAmount}</Text> for the <Text style={{ fontFamily: "Inter_600SemiBold", color: palette.text }}>{submission.plan.name}</Text> package has been received.
               {"\n\n"}
-              Our admin team has received your proof of payment (Ref: <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>#{submission.reference}</Text> · {formatMinorAmount(submission.amountMinor, submission.currency)}) and is verifying the transfer.
+              Our team is reviewing it. You will be notified once review is done.
               {"\n\n"}
-              Once verified, your organiser privileges will be activated automatically so you can start creating and publishing events. You will receive an email confirmation as soon as it is approved.
+              <Text style={{ fontSize: 13, color: palette.muted }}>Reference: #{submission.reference}</Text>
             </Text>
 
             <View style={[styles.statusActions, { marginTop: 24 }]}>
               <Pressable
-                style={[styles.primaryPayBtn, { backgroundColor: palette.accent }]}
-                onPress={() => router.replace("/(tabs)" as any)}
-                accessibilityRole="button"
-                accessibilityLabel="Back to Discover"
-              >
-                <Text style={[styles.primaryPayBtnText, { color: "#000000", fontFamily: "Inter_700Bold", fontSize: 16 }]}>
-                  Back to Discover
-                </Text>
-              </Pressable>
-
-              <Pressable
+                style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]}
                 onPress={() => router.push("/organiser/payments" as any)}
-                style={styles.cancelSheetBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Track this payment"
               >
-                <Text style={[styles.cancelSheetText, { color: palette.muted, fontSize: 14 }]}>
-                  Track this payment
+                <Text style={styles.primaryPayBtnText}>Track this payment</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => router.replace("/(tabs)" as any)}
+                style={styles.cancelSheetBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Back to Discover"
+              >
+                <Text style={[styles.cancelSheetText, { color: palette.accent, fontSize: 15, fontFamily: "Inter_600SemiBold" }]}>
+                  Back to Discover
                 </Text>
               </Pressable>
             </View>
