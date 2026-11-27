@@ -3,7 +3,7 @@ import { api } from "@/utils/apiClient";
 
 export interface EventComment {
   id: string; eventId: string; userId: string; body: string; createdAt: string;
-  user: { id: string; username: string | null; displayName: string | null; avatarUrl: string | null };
+  user: { id: string; username: string | null; displayName: string | null; avatarUrl: string | null }; likeCount?: number; liked?: boolean; parentId?: string | null;
 }
 export function commentAuthor(
   comment: EventComment,
@@ -29,3 +29,6 @@ export const listEventComments = (id: string, page = 1) => api.get<EventCommentP
 export const createEventComment = (id: string, body: string) => api.post<EventComment>(`/api/v1/events/${encodeURIComponent(id)}/comments`, { body });
 export const updateEventComment = (id: string, body: string) => api.patch<EventComment>(`/api/v1/comments/${encodeURIComponent(id)}`, { body });
 export const deleteEventComment = (id: string) => api.delete<{ id: string; deleted: boolean }>(`/api/v1/comments/${encodeURIComponent(id)}`);
+export const setCommentLike = (id: string, shouldLike: boolean) => shouldLike
+  ? api.post<{ commentId: string; liked: boolean; likeCount: number }>(`/api/v1/comments/${encodeURIComponent(id)}/like`).catch(() => null)
+  : api.delete<{ commentId: string; liked: boolean; likeCount: number }>(`/api/v1/comments/${encodeURIComponent(id)}/like`).catch(() => null);

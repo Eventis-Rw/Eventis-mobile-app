@@ -375,20 +375,6 @@ export default function HomeScreen() {
                     )}
                   </Pressable>
 
-                  {/* Distinct Organizer / Dashboard Pill */}
-                  <Pressable
-                    onPress={() => router.push("/profile" as any)}
-                    style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Your profile and settings"
-                  >
-                    {user?.avatarUrl ? (
-                      <Image source={{ uri: user.avatarUrl }} style={styles.profileIconImg} />
-                     ) : (
-                      <Ionicons name="person-circle-outline" size={19} color={colors.foreground} />
-                    )}
-                  </Pressable>
-
                   <Pressable
                     onPress={handleOrganizerPress}
                     style={[
