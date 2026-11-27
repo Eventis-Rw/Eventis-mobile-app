@@ -175,6 +175,7 @@ function ManualSubscribeCheckout() {
   const [receiptUri, setReceiptUri] = useState<string | undefined>();
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [duplicatePayment, setDuplicatePayment] = useState(false);
   const [submission, setSubmission] = useState<ManualPaymentSubmission | null>(null);
@@ -340,6 +341,7 @@ function ManualSubscribeCheckout() {
         receiptUploadId,
       });
       setSubmission(created);
+      setConfirmModalVisible(false);
       setStep("result");
       void refreshOrganiserSubscription().catch((error) => {
         console.warn("Could not refresh organiser access:", error);
@@ -617,102 +619,160 @@ function ManualSubscribeCheckout() {
                 <Text style={[styles.nbTitle, { color: palette.accent }]}>NB:</Text>
               </View>
               <Text style={[styles.nbBodyText, { color: palette.text }]}>
-                Please keep a screenshot of your payment confirmation message for verification. Tap <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>I have paid</Text> below to upload your screenshot or take a photo as proof of payment.
+                Please keep a screenshot of your payment confirmation message for verification. Tap <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>I have paid</Text> below to upload your screenshot or take a photo to confirm.
               </Text>
             </View>
           ) : null}
 
-          {/* I have paid Button & Screenshot Upload Area */}
-          {!receiptUri ? (
-            <View style={styles.iHavePaidArea}>
+          {/* I have paid Button */}
+          <Pressable
+            disabled={!selectedMethodId || submitting}
+            style={[
+              styles.primaryPayBtn,
+              {
+                backgroundColor: colors.primary,
+                opacity: !selectedMethodId || submitting ? 0.6 : 1,
+                marginTop: 10,
+              },
+            ]}
+            onPress={() => setConfirmModalVisible(true)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.primaryPayBtnText}>I have paid</Text>
+          </Pressable>
+
+          {/* Confirm Payment Modal (brought up by I have paid) */}
+          <Modal
+            visible={confirmModalVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => {
+              if (!submitting) setConfirmModalVisible(false);
+            }}
+          >
+            <Pressable
+              style={styles.modalOverlay}
+              onPress={() => {
+                if (!submitting) setConfirmModalVisible(false);
+              }}
+            >
               <Pressable
-                disabled={!selectedMethodId || submitting}
                 style={[
-                  styles.primaryPayBtn,
+                  styles.confirmModalCard,
                   {
-                    backgroundColor: colors.primary,
-                    opacity: !selectedMethodId || submitting ? 0.6 : 1,
+                    backgroundColor: palette.surface,
+                    borderColor: palette.line,
+                    paddingBottom: insets.bottom + 20,
                   },
                 ]}
-                onPress={() => promptPhotoPick()}
-                accessibilityRole="button"
+                onPress={(e) => e.stopPropagation()}
               >
-                <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.primaryPayBtnText}>I have paid</Text>
-              </Pressable>
+                <View style={styles.modalHandle} />
 
-              <View style={styles.photoPickerSubRow}>
-                <Pressable
-                  onPress={() => void chooseFromGallery()}
-                  style={styles.photoPickerSubBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel="Upload screenshot"
-                >
-                  <Ionicons name="images-outline" size={15} color={palette.accent} />
-                  <Text style={[styles.photoPickerSubText, { color: palette.accent }]}>Upload screenshot</Text>
-                </Pressable>
-                <Text style={[styles.photoPickerSubDot, { color: palette.muted }]}>•</Text>
-                <Pressable
-                  onPress={() => void takeCameraPhoto()}
-                  style={styles.photoPickerSubBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel="Take photo"
-                >
-                  <Ionicons name="camera-outline" size={15} color={palette.accent} />
-                  <Text style={[styles.photoPickerSubText, { color: palette.accent }]}>Take photo</Text>
-                </Pressable>
-              </View>
+                {!receiptUri ? (
+                  <>
+                    <View style={styles.modalHeader}>
+                      <View style={[styles.modalIconWrap, { backgroundColor: palette.accent + "18" }]}>
+                        <Ionicons name="receipt-outline" size={24} color={palette.accent} />
+                      </View>
+                      <Text style={[styles.modalTitle, { color: palette.text }]}>Confirm payment</Text>
+                      <Text style={[styles.modalSubtitle, { color: palette.muted }]}>
+                        Upload a screenshot or take a photo of your payment confirmation to confirm.
+                      </Text>
+                    </View>
 
-              {photoError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{photoError}</Text> : null}
-              {submitError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{submitError}</Text> : null}
-            </View>
-          ) : (
-            <View style={styles.iHavePaidArea}>
-              {/* Attached screenshot preview bar */}
-              <View style={[styles.attachedScreenshotBar, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                <Image source={{ uri: receiptUri }} style={styles.attachedThumbnail} resizeMode="cover" />
-                <View style={{ flex: 1, paddingLeft: 10 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                    <Ionicons name="checkmark-circle" size={15} color={colors.success} />
-                    <Text style={[styles.attachedTitle, { color: palette.text }]}>Screenshot attached</Text>
-                  </View>
-                  <Text style={[styles.attachedSub, { color: palette.muted }]}>Tap submit below</Text>
-                </View>
-                <Pressable onPress={() => promptPhotoPick()} style={styles.changePhotoBtn} accessibilityRole="button">
-                  <Text style={[styles.changePhotoText, { color: palette.accent }]}>Change</Text>
-                </Pressable>
-                <Pressable onPress={() => setReceiptUri(undefined)} style={styles.removePhotoSmallBtn} accessibilityRole="button">
-                  <Ionicons name="close" size={18} color={palette.muted} />
-                </Pressable>
-              </View>
+                    <View style={styles.modalActionButtons}>
+                      <Pressable
+                        style={[styles.modalActionBtn, { backgroundColor: palette.accent }]}
+                        onPress={() => void chooseFromGallery()}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="images-outline" size={20} color="#000000" />
+                        <Text style={styles.modalActionBtnTextDark}>Upload screenshot</Text>
+                      </Pressable>
 
-              <Pressable
-                disabled={!selectedMethodId || submitting}
-                style={[
-                  styles.primaryPayBtn,
-                  {
-                    backgroundColor: colors.primary,
-                    opacity: !selectedMethodId || submitting ? 0.6 : 1,
-                    marginTop: 4,
-                  },
-                ]}
-                onPress={() => void submit()}
-                accessibilityRole="button"
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" />
+                      <Pressable
+                        style={[styles.modalActionBtn, { backgroundColor: palette.surfaceRaised, borderColor: palette.line, borderWidth: 1 }]}
+                        onPress={() => void takeCameraPhoto()}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="camera-outline" size={20} color={palette.text} />
+                        <Text style={[styles.modalActionBtnText, { color: palette.text }]}>Take photo</Text>
+                      </Pressable>
+                    </View>
+                  </>
                 ) : (
                   <>
-                    <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
-                    <Text style={styles.primaryPayBtnText}>Submit payment for review</Text>
+                    <View style={styles.modalHeader}>
+                      <Text style={[styles.modalTitle, { color: palette.text }]}>Confirm payment</Text>
+                      <Text style={[styles.modalSubtitle, { color: palette.muted }]}>
+                        Payment screenshot attached. Confirm to submit for verification.
+                      </Text>
+                    </View>
+
+                    <View style={styles.modalPreviewWrap}>
+                      <Image source={{ uri: receiptUri }} style={styles.modalPreviewImage} resizeMode="cover" />
+                      <Pressable
+                        onPress={() => setReceiptUri(undefined)}
+                        style={styles.modalRemoveBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove screenshot"
+                      >
+                        <Ionicons name="close-circle" size={26} color="#EF4444" />
+                      </Pressable>
+                    </View>
+
+                    <View style={styles.modalConfirmActions}>
+                      <Pressable
+                        disabled={submitting}
+                        style={[
+                          styles.primaryPayBtn,
+                          {
+                            backgroundColor: colors.primary,
+                            opacity: submitting ? 0.6 : 1,
+                          },
+                        ]}
+                        onPress={() => void submit()}
+                        accessibilityRole="button"
+                      >
+                        {submitting ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                            <Text style={styles.primaryPayBtnText}>Confirm and submit</Text>
+                          </>
+                        )}
+                      </Pressable>
+
+                      <Pressable
+                        disabled={submitting}
+                        onPress={() => void chooseFromGallery()}
+                        style={styles.modalRetakeBtn}
+                        accessibilityRole="button"
+                      >
+                        <Text style={[styles.modalRetakeText, { color: palette.accent }]}>Change photo</Text>
+                      </Pressable>
+                    </View>
                   </>
                 )}
-              </Pressable>
 
-              {photoError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{photoError}</Text> : null}
-              {submitError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{submitError}</Text> : null}
-            </View>
-          )}
+                {photoError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{photoError}</Text> : null}
+                {submitError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{submitError}</Text> : null}
+
+                {!submitting ? (
+                  <Pressable
+                    onPress={() => setConfirmModalVisible(false)}
+                    style={styles.modalCancelBtn}
+                    accessibilityRole="button"
+                  >
+                    <Text style={[styles.modalCancelText, { color: palette.muted }]}>Cancel</Text>
+                  </Pressable>
+                ) : null}
+              </Pressable>
+            </Pressable>
+          </Modal>
         </ScrollView>
       </View>
     );
@@ -1975,61 +2035,111 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 18,
   },
-  iHavePaidArea: {
-    marginTop: 10,
-    gap: 8,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "flex-end",
   },
-  photoPickerSubRow: {
+  confirmModalCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    gap: 14,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignSelf: "center",
+    marginBottom: 6,
+  },
+  modalHeader: {
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+  },
+  modalIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.3,
+    textAlign: "center",
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 18,
+    paddingHorizontal: 16,
+  },
+  modalActionButtons: {
+    gap: 10,
+    marginTop: 4,
+  },
+  modalActionBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 4,
+    minHeight: 52,
+    borderRadius: 26,
+    gap: 10,
   },
-  photoPickerSubBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-  },
-  photoPickerSubText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  photoPickerSubDot: {
-    fontSize: 12,
-  },
-  attachedScreenshotBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  attachedThumbnail: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-  },
-  attachedTitle: {
-    fontSize: 13,
+  modalActionBtnTextDark: {
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
+    color: "#000000",
   },
-  attachedSub: {
-    fontSize: 11.5,
-    fontFamily: "Inter_400Regular",
-  },
-  changePhotoBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  changePhotoText: {
-    fontSize: 12.5,
+  modalActionBtnText: {
+    fontSize: 15,
     fontFamily: "Inter_600SemiBold",
   },
-  removePhotoSmallBtn: {
-    padding: 6,
+  modalPreviewWrap: {
+    width: "100%",
+    height: 180,
+    borderRadius: 14,
+    overflow: "hidden",
+    position: "relative",
+    marginVertical: 4,
+  },
+  modalPreviewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  modalRemoveBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 13,
+  },
+  modalConfirmActions: {
+    gap: 10,
+  },
+  modalRetakeBtn: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  modalRetakeText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  modalCancelBtn: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  modalCancelText: {
+    fontSize: 13.5,
+    fontFamily: "Inter_500Medium",
   },
   headerBlock: {
     marginBottom: 4,
