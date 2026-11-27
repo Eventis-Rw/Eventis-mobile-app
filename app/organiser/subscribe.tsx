@@ -680,9 +680,7 @@ function ManualSubscribeCheckout() {
           {resolvingMethods ? <ActivityIndicator color="#fff" /> : null}
           <Text style={styles.primaryPayBtnText}>{resolvingMethods ? "Loading…" : "Continue"}</Text>
         </Pressable>
-        <Text style={[styles.guaranteeText, { color: palette.muted }]}>
-          Your organiser access starts only once we confirm and approve your payment.
-        </Text>
+
       </ScrollView>
     </View>
   );
