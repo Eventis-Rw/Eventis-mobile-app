@@ -56,6 +56,36 @@ const AIRTEL_LOGO = require("@/assets/images/airtel-logo.png");
 
 const PROVIDER_LABEL: Record<ManualPaymentMethod["provider"], string> = { mtn_momo: "MTN MoMo", airtel_money: "Airtel Money" };
 
+const USSD_CODES: Record<ManualPaymentMethod["provider"], string> = {
+  mtn_momo: "*182*8*1*0202565#",
+  airtel_money: "*185*9*33918481#",
+};
+
+const MERCHANT_NAME = "Travelis Rwanda Ltd";
+
+const DEFAULT_MANUAL_METHODS: ManualPaymentMethod[] = [
+  {
+    id: "momo-mtn",
+    provider: "mtn_momo",
+    platform: "organiser",
+    accountName: MERCHANT_NAME,
+    phoneNumber: "0202565",
+    instructions: "Pay to Travelis Rwanda Ltd using code *182*8*1*0202565#",
+    currency: "RWF",
+    displayOrder: 1,
+  },
+  {
+    id: "airtel-money",
+    provider: "airtel_money",
+    platform: "organiser",
+    accountName: MERCHANT_NAME,
+    phoneNumber: "33918481",
+    instructions: "Pay to Travelis Rwanda Ltd using code *185*9*33918481#",
+    currency: "RWF",
+    displayOrder: 2,
+  },
+];
+
 type Phase = "form" | "processing" | "succeeded" | "failed" | "cancelled";
 
 const METHODS: { id: PaymentMethod; label: string; badge: string; color: string; bg: string }[] = [
@@ -182,13 +212,15 @@ function ManualSubscribeCheckout() {
     setResolvingMethods(true);
     setMethodsError(null);
     try {
-      const list = await fetchManualPaymentMethods("organiser");
-      setMethods(list);
-      setSelectedMethodId(list[0]?.id ?? null);
-      if (!list.length) setMethodsError("No payment method is available right now. Please try again later.");
+      const list = await fetchManualPaymentMethods("organiser").catch(() => []);
+      const resolved = list.length > 0 ? list : DEFAULT_MANUAL_METHODS;
+      setMethods(resolved);
+      setSelectedMethodId(resolved[0]?.id ?? null);
       setStep("method");
-    } catch (error) {
-      setMethodsError(describeError(error, "We couldn't load payment methods. Please try again."));
+    } catch {
+      setMethods(DEFAULT_MANUAL_METHODS);
+      setSelectedMethodId(DEFAULT_MANUAL_METHODS[0]?.id ?? null);
+      setStep("method");
     } finally {
       setResolvingMethods(false);
     }
@@ -197,40 +229,44 @@ function ManualSubscribeCheckout() {
   const reloadMethods = async () => {
     setMethodsError(null);
     try {
-      const list = await fetchManualPaymentMethods("organiser");
-      setMethods(list);
-      setSelectedMethodId(list[0]?.id ?? null);
-      if (!list.length) setMethodsError("No payment method is available right now. Please try again later.");
-    } catch (error) {
-      setMethodsError(describeError(error, "We couldn't load payment methods. Please try again."));
+      const list = await fetchManualPaymentMethods("organiser").catch(() => []);
+      const resolved = list.length > 0 ? list : DEFAULT_MANUAL_METHODS;
+      setMethods(resolved);
+      setSelectedMethodId(resolved[0]?.id ?? null);
+    } catch {
+      setMethods(DEFAULT_MANUAL_METHODS);
+      setSelectedMethodId(DEFAULT_MANUAL_METHODS[0]?.id ?? null);
     }
   };
 
-  const copyPhone = async (phone: string) => {
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const copyCode = async (code: string) => {
     try {
-      await Clipboard.setStringAsync(phone);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    } catch {
-      // Clipboard access can fail on web without a user gesture; nothing to show for it.
-    }
+      await Clipboard.setStringAsync(code);
+      if (Platform.OS !== "web") {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      }
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 3500);
+    } catch {}
   };
 
   const dialToPay = async (targetMethod: ManualPaymentMethod) => {
+    const code = USSD_CODES[targetMethod.provider] ?? (targetMethod.provider === "mtn_momo" ? "*182*8*1*0202565#" : "*185*9*33918481#");
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     }
-    // 1. Copy recipient phone number to clipboard
+    // 1. Copy the specific USSD code to clipboard
     try {
-      await Clipboard.setStringAsync(targetMethod.phoneNumber);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 4000);
+      await Clipboard.setStringAsync(code);
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 4000);
     } catch {}
 
-    // 2. Open phone app to dial USSD (*182# for MTN, *500# for Airtel)
-    const ussd = targetMethod.provider === "mtn_momo" ? "*182#" : "*500#";
-    const dialUrl = `tel:${encodeURIComponent(ussd)}`;
-    const fallbackUrl = `tel:${targetMethod.phoneNumber.replace(/\s+/g, "")}`;
+    // 2. Open phone dialer
+    const dialUrl = `tel:${encodeURIComponent(code)}`;
+    const fallbackUrl = `tel:${encodeURIComponent(targetMethod.phoneNumber.replace(/\s+/g, ""))}`;
 
     try {
       const canOpen = await Linking.canOpenURL(dialUrl).catch(() => false);
@@ -389,156 +425,170 @@ function ManualSubscribeCheckout() {
 
   if (step === "method") {
     const selectedMethod = methods.find((m) => m.id === selectedMethodId) ?? null;
+    const activeUssdCode = selectedMethod ? (USSD_CODES[selectedMethod.provider] ?? "*182*8*1*0202565#") : "*182*8*1*0202565#";
+
     return (
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
         <OrganiserAtmosphere />
         <OrganiserFlowHeader title="Pay and continue" step={2} canGoBack={true} onBack={() => setStep("plan")} />
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
-          {methodsError && !methods.length ? (
-            <OrganiserSurface style={[styles.errorCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-              <Ionicons name="cloud-offline-outline" size={36} color={colors.destructive} />
-              <Text style={[styles.statusText, { color: colors.mutedForeground }]}>{methodsError}</Text>
-              <Pressable style={[styles.smallBtn, { backgroundColor: colors.primary }]} onPress={() => void reloadMethods()} accessibilityRole="button">
-                <Text style={styles.smallBtnText}>Try again</Text>
-              </Pressable>
-            </OrganiserSurface>
-          ) : (
-            <>
-              <View style={styles.methodSelectionSection}>
-                <Text style={[styles.sectionTitle, { color: palette.text, fontSize: 16 }]}>Select payment network</Text>
-                <View style={styles.methodsVerticalList}>
-                  {methods.map((m) => {
-                    const isSelected = m.id === selectedMethodId;
-                    const isMtn = m.provider === "mtn_momo";
-                    const logo = isMtn ? MTN_LOGO : AIRTEL_LOGO;
-                    return (
-                      <Pressable
-                        key={m.id}
-                        onPress={() => {
-                          setSelectedMethodId(m.id);
-                          void dialToPay(m);
-                        }}
-                        style={[
-                          styles.logoMethodCard,
-                          {
-                            backgroundColor: isSelected
-                              ? (palette.dark ? "rgba(56,189,248,0.10)" : "rgba(14,165,233,0.07)")
-                              : palette.surface,
-                            borderColor: isSelected ? palette.accent : palette.line,
-                            borderWidth: isSelected ? 2 : 1,
-                          },
-                        ]}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: isSelected }}
-                      >
-                        <View style={[styles.logoContainer, { backgroundColor: isMtn ? "#FFCC00" : "#FFFFFF" }]}>
-                          <Image source={logo} style={styles.providerLogoImg} resizeMode="contain" />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0, paddingLeft: 12 }}>
-                          <Text style={[styles.methodTitleText, { color: palette.text }]}>{PROVIDER_LABEL[m.provider]}</Text>
-                          <Text style={[styles.methodUssdText, { color: palette.muted }]}>
-                            {isMtn ? "Tap to dial *182#" : "Tap to dial *500#"}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.premiumRadio,
-                            {
-                              borderColor: isSelected ? palette.accent : palette.line,
-                              backgroundColor: isSelected ? (palette.dark ? "rgba(56,189,248,0.18)" : "rgba(14,165,233,0.12)") : "transparent",
-                            },
-                          ]}
-                        >
-                          {isSelected ? <View style={[styles.premiumRadioDot, { backgroundColor: palette.accent }]} /> : null}
-                        </View>
-                      </Pressable>
-                    );
-                  })}
+          {/* Top Amount to Pay to Travelis Rwanda Ltd Banner */}
+          {activePlan ? (
+            <View style={[styles.invoiceCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+              <View style={styles.invoiceRow}>
+                <View style={styles.invoiceColLeft}>
+                  <Text style={[styles.invoiceLabel, { color: palette.muted }]}>Amount to pay</Text>
+                  <View style={styles.invoiceAmountRow}>
+                    <Text style={[styles.invoiceCurrencyTag, { color: palette.accent }]}>RWF</Text>
+                    <Text style={[styles.invoiceAmountValue, { color: palette.text }]}>
+                      {activePlan.price.toLocaleString()}
+                    </Text>
+                  </View>
+                  <Text style={[styles.invoicePlanName, { color: palette.muted }]}>{activePlan.name}</Text>
+                </View>
+
+                <View style={[styles.invoiceVerticalDivider, { backgroundColor: palette.line }]} />
+
+                <View style={styles.invoiceColRight}>
+                  <Text style={[styles.invoiceLabel, { color: palette.muted }]}>Pay to</Text>
+                  <Text style={[styles.invoicePayToName, { color: palette.text }]} numberOfLines={2}>
+                    {MERCHANT_NAME}
+                  </Text>
+                  <View style={styles.merchantBadge}>
+                    <Ionicons name="shield-checkmark" size={12} color={palette.accent} />
+                    <Text style={[styles.merchantBadgeText, { color: palette.accent }]}>Official Merchant</Text>
+                  </View>
                 </View>
               </View>
+            </View>
+          ) : null}
 
-              {selectedMethod && activePlan ? (
-                <OrganiserSurface style={[styles.summaryBox, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                  <SummaryRow
-                    label="Send to"
-                    value={
-                      selectedMethod.accountName
-                        ? `${PROVIDER_LABEL[selectedMethod.provider]} · ${selectedMethod.accountName}`
-                        : PROVIDER_LABEL[selectedMethod.provider]
-                    }
-                  />
-                  <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryItemLabel, { color: colors.mutedForeground }]}>Phone number</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Text style={[styles.summaryItemValue, { color: colors.foreground }]}>{selectedMethod.phoneNumber}</Text>
-                      <Pressable
-                        onPress={() => void copyPhone(selectedMethod.phoneNumber)}
-                        style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: palette.surfaceRaised }}
-                        accessibilityRole="button"
-                        accessibilityLabel="Copy phone number"
-                      >
-                        <Ionicons name={copied ? "checkmark" : "copy-outline"} size={15} color={colors.foreground} />
-                      </Pressable>
+          {/* Network Selection */}
+          <View style={styles.methodSelectionSection}>
+            <Text style={[styles.sectionTitle, { color: palette.text, fontSize: 16 }]}>Select payment network</Text>
+            <View style={styles.methodsVerticalList}>
+              {methods.map((m) => {
+                const isSelected = m.id === selectedMethodId;
+                const isMtn = m.provider === "mtn_momo";
+                const logo = isMtn ? MTN_LOGO : AIRTEL_LOGO;
+                const ussdCode = USSD_CODES[m.provider] ?? (isMtn ? "*182*8*1*0202565#" : "*185*9*33918481#");
+                const isCodeCopied = copiedCode === ussdCode;
+
+                return (
+                  <Pressable
+                    key={m.id}
+                    onPress={() => setSelectedMethodId(m.id)}
+                    style={[
+                      styles.logoMethodCard,
+                      {
+                        backgroundColor: isSelected
+                          ? (palette.dark ? "rgba(56,189,248,0.10)" : "rgba(14,165,233,0.07)")
+                          : palette.surface,
+                        borderColor: isSelected ? palette.accent : palette.line,
+                        borderWidth: isSelected ? 2 : 1,
+                      },
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                  >
+                    <View style={[styles.logoContainer, { backgroundColor: isMtn ? "#FFCC00" : "#FFFFFF" }]}>
+                      <Image source={logo} style={styles.providerLogoImg} resizeMode="contain" />
                     </View>
-                  </View>
-                  <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                  <SummaryRow label="Amount to pay" value={formatPlanPrice(activePlan)} isBold />
-                  {selectedMethod.instructions ? (
-                    <>
-                      <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-                      <Text style={[styles.statusText, { color: colors.mutedForeground, textAlign: "left" }]}>{selectedMethod.instructions}</Text>
-                    </>
-                  ) : null}
-                </OrganiserSurface>
-              ) : null}
+                    <View style={{ flex: 1, minWidth: 0, paddingLeft: 12 }}>
+                      <Text style={[styles.methodTitleText, { color: palette.text }]}>{PROVIDER_LABEL[m.provider]}</Text>
+                      <View style={styles.methodCodeRow}>
+                        <Text style={[styles.methodUssdCodeBadge, { color: palette.accent }]}>{ussdCode}</Text>
+                        <Pressable
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            void copyCode(ussdCode);
+                          }}
+                          style={[
+                            styles.miniCopyBtn,
+                            {
+                              backgroundColor: isCodeCopied ? (palette.accent + "25") : palette.surfaceRaised,
+                              borderColor: isCodeCopied ? palette.accent : palette.line,
+                            },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Copy ${PROVIDER_LABEL[m.provider]} code`}
+                        >
+                          <Ionicons
+                            name={isCodeCopied ? "checkmark" : "copy-outline"}
+                            size={12}
+                            color={isCodeCopied ? palette.accent : palette.text}
+                          />
+                          <Text style={[styles.miniCopyText, { color: isCodeCopied ? palette.accent : palette.text }]}>
+                            {isCodeCopied ? "Copied" : "Copy"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.premiumRadio,
+                        {
+                          borderColor: isSelected ? palette.accent : palette.line,
+                          backgroundColor: isSelected ? (palette.dark ? "rgba(56,189,248,0.18)" : "rgba(14,165,233,0.12)") : "transparent",
+                        },
+                      ]}
+                    >
+                      {isSelected ? <View style={[styles.premiumRadioDot, { backgroundColor: palette.accent }]} /> : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
 
-              {copied && selectedMethod ? (
-                <View style={[styles.copiedAlertPill, { backgroundColor: palette.accent + "18", borderColor: palette.accent + "40" }]}>
-                  <Ionicons name="checkmark-circle" size={16} color={palette.accent} />
-                  <Text style={[styles.copiedAlertText, { color: palette.accent }]}>
-                    Phone number copied! Dial and paste it in MoMo.
-                  </Text>
-                </View>
-              ) : null}
+          {/* Copied Feedback Toast */}
+          {copiedCode ? (
+            <View style={[styles.copiedAlertPill, { backgroundColor: palette.accent + "18", borderColor: palette.accent + "40" }]}>
+              <Ionicons name="checkmark-circle" size={16} color={palette.accent} />
+              <Text style={[styles.copiedAlertText, { color: palette.accent }]}>
+                Code {copiedCode} copied to clipboard!
+              </Text>
+            </View>
+          ) : null}
 
-              {selectedMethod ? (
-                <Pressable
-                  style={[styles.dialPayBtn, { backgroundColor: palette.accent }]}
-                  onPress={() => void dialToPay(selectedMethod)}
-                  accessibilityRole="button"
-                >
-                  <Ionicons name="call" size={18} color="#000000" />
-                  <Text style={styles.dialPayBtnText}>
-                    Open Phone App ({selectedMethod.provider === "mtn_momo" ? "*182#" : "*500#"})
-                  </Text>
-                </Pressable>
-              ) : null}
+          {/* Dial to Pay Button */}
+          {selectedMethod ? (
+            <Pressable
+              style={[styles.dialPayBtn, { backgroundColor: palette.accent }]}
+              onPress={() => void dialToPay(selectedMethod)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="call" size={18} color="#000000" />
+              <Text style={styles.dialPayBtnText}>Dial to pay</Text>
+            </Pressable>
+          ) : null}
 
-              {selectedMethod && activePlan ? (
-                <View style={[styles.simpleGuideCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-                  <Text style={[styles.simpleGuideTitle, { color: palette.text }]}>Quick steps:</Text>
-                  <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
-                    <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>1.</Text> Tap <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>Open Phone App</Text> to dial {selectedMethod.provider === "mtn_momo" ? "*182#" : "*500#"}.
-                  </Text>
-                  <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
-                    <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>2.</Text> Send <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>{formatPlanPrice(activePlan)}</Text> to <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>{selectedMethod.phoneNumber}</Text> & confirm with PIN.
-                  </Text>
-                  <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
-                    <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>3.</Text> Screenshot confirmation SMS and tap <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>I've paid</Text> below.
-                  </Text>
-                </View>
-              ) : null}
+          {/* Quick Steps Guide */}
+          {selectedMethod && activePlan ? (
+            <View style={[styles.simpleGuideCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+              <Text style={[styles.simpleGuideTitle, { color: palette.text }]}>Quick steps:</Text>
+              <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
+                <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>1.</Text> Tap <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>Dial to pay</Text> (or copy code <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>{activeUssdCode}</Text>).
+              </Text>
+              <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
+                <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>2.</Text> Pay <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>{formatPlanPrice(activePlan)}</Text> to <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>{MERCHANT_NAME}</Text> with PIN.
+              </Text>
+              <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
+                <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>3.</Text> Screenshot the confirmation SMS and tap <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>I have paid</Text> below.
+              </Text>
+            </View>
+          ) : null}
 
-              <Pressable
-                disabled={!selectedMethodId}
-                style={[styles.primaryPayBtn, { backgroundColor: colors.primary, opacity: selectedMethodId ? 1 : 0.6, marginTop: 4 }]}
-                onPress={() => setStep("upload")}
-              >
-                <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.primaryPayBtnText}>I've paid — upload screenshot</Text>
-              </Pressable>
-            </>
-          )}
+          {/* I have paid Button */}
+          <Pressable
+            disabled={!selectedMethodId}
+            style={[styles.primaryPayBtn, { backgroundColor: colors.primary, opacity: selectedMethodId ? 1 : 0.6, marginTop: 4 }]}
+            onPress={() => setStep("upload")}
+            accessibilityRole="button"
+          >
+            <Ionicons name="checkmark-circle-outline" size={19} color="#FFFFFF" />
+            <Text style={styles.primaryPayBtnText}>I have paid</Text>
+          </Pressable>
         </ScrollView>
       </View>
     );
@@ -1654,6 +1704,95 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontFamily: "Inter_400Regular",
     marginTop: 1,
+  },
+  invoiceCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 4,
+  },
+  invoiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  invoiceColLeft: {
+    flex: 1.1,
+    gap: 2,
+  },
+  invoiceColRight: {
+    flex: 1,
+    paddingLeft: 14,
+    gap: 3,
+  },
+  invoiceLabel: {
+    fontSize: 11.5,
+    fontFamily: "Inter_500Medium",
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
+  },
+  invoiceAmountRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 5,
+    marginTop: 2,
+  },
+  invoiceCurrencyTag: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+  },
+  invoiceAmountValue: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
+  },
+  invoicePlanName: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+  },
+  invoiceVerticalDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    marginVertical: 2,
+  },
+  invoicePayToName: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
+    lineHeight: 18,
+  },
+  merchantBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
+  merchantBadgeText: {
+    fontSize: 10.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  methodCodeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  methodUssdCodeBadge: {
+    fontSize: 12.5,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
+  },
+  miniCopyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  miniCopyText: {
+    fontSize: 10.5,
+    fontFamily: "Inter_600SemiBold",
   },
   methodSelectionSection: {
     gap: 12,
