@@ -6,15 +6,17 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 
 /**
- * Iconic Instagram Sunset Gradient:
- * Yellow-Orange (#FBAA47) -> Coral-Red (#D91A46) -> Fuchsia-Purple (#A60F93) -> Royal Magenta (#8A3AB9)
+ * Eventis Signature Blue Story Ring Gradient:
+ * Bright Sky Cyan (#38BDF8) -> Eventis Primary Blue (#0284C7) -> Vivid Electric (#2563EB) -> Royal Cobalt (#1D4ED8)
  */
-export const INSTAGRAM_STORY_GRADIENT = [
-  "#FBAA47",
-  "#D91A46",
-  "#A60F93",
-  "#8A3AB9",
+export const EVENTIS_STORY_GRADIENT = [
+  "#38BDF8",
+  "#0284C7",
+  "#2563EB",
+  "#1D4ED8",
 ] as const;
+
+export const INSTAGRAM_STORY_GRADIENT = EVENTIS_STORY_GRADIENT;
 
 export function StoryAvatar({
   name,
@@ -35,7 +37,7 @@ export function StoryAvatar({
   const [failedUri, setFailedUri] = useState<string>();
   const separatorColor = surfaceColor ?? colors.background;
 
-  // Proportions matching Instagram: 2.5px gradient ring + 2.5px gap to avatar
+  // Proportions: 2.5px gradient ring + 2.5px gap to avatar
   const hasRing = !!ring;
   const outerSize = size + (hasRing ? 10 : 0);
   const separatorSize = size + (hasRing ? 5 : 0);
@@ -44,10 +46,10 @@ export function StoryAvatar({
   return (
     <View style={{ width: outerSize, height: outerSize }}>
       <View style={[styles.ring, { width: outerSize, height: outerSize }]}>
-        {/* Unwatched Story Ring (Vibrant Instagram Gradient) */}
+        {/* Unwatched Story Ring (Vibrant Eventis Brand Blue Gradient) */}
         {ring === "new" ? (
           <LinearGradient
-            colors={INSTAGRAM_STORY_GRADIENT}
+            colors={EVENTIS_STORY_GRADIENT}
             start={{ x: 0, y: 1 }}
             end={{ x: 1, y: 0 }}
             style={[StyleSheet.absoluteFill, { borderRadius: outerSize / 2 }]}
@@ -148,7 +150,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 0,
     right: 0,
-    backgroundColor: "#0095F6", // Instagram electric blue
+    backgroundColor: "#0284C7", // Eventis brand primary blue
     borderWidth: 2.5,
     alignItems: "center",
     justifyContent: "center",

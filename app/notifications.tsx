@@ -199,6 +199,20 @@ export default function NotificationsScreen() {
     setDemoNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   }, [apiMode, apiNotifications.length, ctx]);
 
+  const handleToggleRead = useCallback(
+    (e: any, item: AppNotification) => {
+      e?.stopPropagation?.();
+      if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+      if (apiMode && apiNotifications.length > 0) {
+        void ctx?.markRead(item.id);
+      }
+      setDemoNotifications((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, isRead: !n.isRead } : n))
+      );
+    },
+    [apiMode, apiNotifications.length, ctx]
+  );
+
   const handlePressNotification = useCallback(
     (item: AppNotification) => {
       if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -257,14 +271,26 @@ export default function NotificationsScreen() {
             {unreadCount > 0 ? (
               <Pressable
                 onPress={handleMarkAllRead}
-                style={[styles.markReadBtn, { backgroundColor: `${colors.primary}18`, borderColor: colors.primary }]}
+                style={({ pressed }) => [
+                  styles.markReadBtn,
+                  {
+                    backgroundColor: pressed ? `${colors.primary}24` : `${colors.primary}14`,
+                    borderColor: `${colors.primary}35`,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel="Mark all as read"
               >
                 <Ionicons name="checkmark-done" size={15} color={colors.primary} />
-                <Text style={[styles.markReadText, { color: colors.primary }]}>Mark read</Text>
+                <Text style={[styles.markReadText, { color: colors.primary }]}>Mark all read</Text>
               </Pressable>
-            ) : null}
+            ) : (
+              <View style={styles.allReadIndicator}>
+                <Ionicons name="checkmark-circle-outline" size={15} color={colors.mutedForeground} style={{ opacity: 0.65 }} />
+                <Text style={[styles.allReadText, { color: colors.mutedForeground }]}>All read</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -376,10 +402,20 @@ export default function NotificationsScreen() {
               )}
             </View>
 
-            {/* Unread indicator dot */}
-            {!item.isRead && (
-              <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
-            )}
+            {/* Read / Unread interactive dot */}
+            <Pressable
+              onPress={(e) => handleToggleRead(e, item)}
+              hitSlop={14}
+              style={styles.unreadDotTouch}
+              accessibilityRole="button"
+              accessibilityLabel={item.isRead ? "Mark as unread" : "Mark as read"}
+            >
+              {!item.isRead ? (
+                <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
+              ) : (
+                <View style={styles.readDotSpacer} />
+              )}
+            </Pressable>
           </Pressable>
         )}
         ListEmptyComponent={
@@ -450,21 +486,34 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
   headerRightActions: {
-    minWidth: 70,
+    minWidth: 95,
     alignItems: "flex-end",
+    justifyContent: "center",
   },
   markReadBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
+    gap: 5,
+    paddingHorizontal: 11,
     paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   markReadText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
+    letterSpacing: -0.1,
+  },
+  allReadIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  allReadText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
   },
   categoryRow: {
     flexDirection: "row",
@@ -557,10 +606,21 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontFamily: "Inter_600SemiBold",
   },
+  unreadDotTouch: {
+    padding: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 22,
+    minHeight: 22,
+  },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  readDotSpacer: {
+    width: 8,
+    height: 8,
   },
   emptyContainer: {
     alignItems: "center",
