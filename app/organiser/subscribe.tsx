@@ -583,18 +583,27 @@ function ManualSubscribeCheckout() {
             <Text style={[styles.statusText, { color: colors.mutedForeground }]}>No plans are available right now.</Text>
           </OrganiserSurface>
         ) : (
-          <View style={{ gap: 10 }}>
+          <View style={styles.gridContainer}>
             {sortedPlans.map((plan) => {
               const selected = plan.id === selectedPlanId;
               const isRecommended = plan.interval === "month";
-              const billingSubtext =
+              const billingPeriod =
                 plan.interval === "month"
-                  ? "Unlimited hosting · 30 days"
+                  ? "/ month"
                   : plan.interval === "post"
-                  ? "1 event listing · No commitment"
+                  ? "/ post"
                   : plan.interval === "quarter"
-                  ? "3 months unlimited · Save 12%"
-                  : "1 year unlimited · Best rate";
+                  ? "/ 3 months"
+                  : "/ year";
+
+              const highlightSubtext =
+                plan.interval === "month"
+                  ? "Unlimited events"
+                  : plan.interval === "post"
+                  ? "1 event listing"
+                  : plan.interval === "quarter"
+                  ? "3 mo · Save 12%"
+                  : "1 yr · Best rate";
 
               return (
                 <Pressable
@@ -607,11 +616,11 @@ function ManualSubscribeCheckout() {
                   }}
                   accessibilityRole="radio"
                   accessibilityState={{ selected }}
-                  style={{ borderRadius: 16 }}
+                  style={styles.gridItemWrapper}
                 >
                   <View
                     style={[
-                      styles.compactPlanCard,
+                      styles.gridCard,
                       {
                         backgroundColor: selected
                           ? (palette.dark ? "rgba(56,189,248,0.08)" : "rgba(14,165,233,0.06)")
@@ -619,40 +628,26 @@ function ManualSubscribeCheckout() {
                         borderColor: selected
                           ? palette.accent
                           : isRecommended
-                          ? (palette.dark ? "rgba(56,189,248,0.4)" : "rgba(14,165,233,0.35)")
+                          ? (palette.dark ? "rgba(56,189,248,0.45)" : "rgba(14,165,233,0.4)")
                           : palette.line,
                         borderWidth: selected ? 2 : 1,
                       },
                     ]}
                   >
-                    <View style={styles.compactPlanLeft}>
-                      <View style={styles.compactPlanTitleRow}>
-                        <Text style={[styles.compactPlanName, { color: palette.text }]}>{plan.name}</Text>
-                        {isRecommended ? (
-                          <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
-                            <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
-                          </View>
-                        ) : plan.badge && plan.badge !== "Recommended" ? (
-                          <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
-                            <Text style={[styles.subBadgeText, { color: palette.muted }]}>{plan.badge}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <Text style={[styles.compactPlanSubtext, { color: palette.muted }]}>{billingSubtext}</Text>
-                    </View>
-
-                    <View style={styles.compactPlanRight}>
-                      <View style={styles.compactPriceWrap}>
-                        <View style={styles.priceRowInline}>
-                          <Text style={[styles.priceCurrencyTag, { color: isRecommended ? palette.accent : palette.muted }]}>RWF</Text>
-                          <Text style={[styles.compactPriceNumber, { color: palette.text }]}>
-                            {plan.price.toLocaleString()}
-                          </Text>
+                    {/* Top Row: Badge or space + Radio Indicator */}
+                    <View style={styles.gridCardTopRow}>
+                      {isRecommended ? (
+                        <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
+                          <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
                         </View>
-                        <Text style={[styles.compactPricePeriod, { color: palette.muted }]}>
-                          {plan.interval === "post" ? "per post" : plan.interval === "month" ? "/ month" : plan.interval === "quarter" ? "/ 3 months" : "/ year"}
-                        </Text>
-                      </View>
+                      ) : plan.badge && plan.badge !== "Recommended" ? (
+                        <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
+                          <Text style={[styles.subBadgeText, { color: palette.muted }]}>{plan.badge}</Text>
+                        </View>
+                      ) : (
+                        <View style={{ height: 22 }} />
+                      )}
+
                       <View
                         style={[
                           styles.premiumRadio,
@@ -664,6 +659,25 @@ function ManualSubscribeCheckout() {
                       >
                         {selected ? <View style={[styles.premiumRadioDot, { backgroundColor: palette.accent }]} /> : null}
                       </View>
+                    </View>
+
+                    {/* Middle: Plan Name & Tagline */}
+                    <View style={styles.gridCardMiddle}>
+                      <Text style={[styles.gridPlanName, { color: palette.text }]}>{plan.name}</Text>
+                      <Text style={[styles.gridPlanSubtext, { color: palette.muted }]}>{highlightSubtext}</Text>
+                    </View>
+
+                    {/* Bottom: Price */}
+                    <View style={styles.gridCardPriceBlock}>
+                      <View style={styles.priceRowInline}>
+                        <Text style={[styles.priceCurrencyTag, { color: isRecommended ? palette.accent : palette.muted }]}>RWF</Text>
+                        <Text style={[styles.gridPriceNumber, { color: palette.text }]}>
+                          {plan.price.toLocaleString()}
+                        </Text>
+                      </View>
+                      <Text style={[styles.gridPricePeriod, { color: palette.muted }]}>
+                        {billingPeriod}
+                      </Text>
                     </View>
                   </View>
                 </Pressable>
@@ -1546,6 +1560,53 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     marginLeft: -2,
+  },
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 12,
+  },
+  gridItemWrapper: {
+    width: "48%",
+    borderRadius: 18,
+  },
+  gridCard: {
+    borderRadius: 18,
+    padding: 13,
+    minHeight: 146,
+    justifyContent: "space-between",
+  },
+  gridCardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 24,
+  },
+  gridCardMiddle: {
+    gap: 2,
+    marginVertical: 4,
+  },
+  gridPlanName: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
+  },
+  gridPlanSubtext: {
+    fontSize: 11.5,
+    fontFamily: "Inter_400Regular",
+  },
+  gridCardPriceBlock: {
+    gap: 1,
+  },
+  gridPriceNumber: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.4,
+  },
+  gridPricePeriod: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
   },
   compactPlanCard: {
     flexDirection: "row",
