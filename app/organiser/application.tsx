@@ -111,7 +111,7 @@ export default function OrganiserApplicationScreen() {
   return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>
       <OrganiserAtmosphere />
-      <OrganiserFlowHeader title="Organiser application" step={1} />
+      <OrganiserFlowHeader title="Application" step={1} />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -120,326 +120,252 @@ export default function OrganiserApplicationScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: Math.max(insets.bottom, 16) + 40 },
+            { paddingBottom: Math.max(insets.bottom, 16) + 24 },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Natural human-crafted intro header */}
+          {/* Streamlined human intro */}
           <View style={styles.introHeader}>
             <Text style={[styles.heading, { color: palette.text }]}>
               Tell us about your organization
             </Text>
             <Text style={[styles.subheading, { color: palette.muted }]}>
-              This information will be displayed on your official organizer profile and event pages across Eventis.
+              Basic details to set up your organizer profile and event pages.
             </Text>
           </View>
 
-          {/* Form Groups */}
-          <View style={styles.formFlow}>
-            {/* Group 1: Identity */}
-            <View
-              style={[
-                styles.groupCard,
-                { backgroundColor: palette.surface, borderColor: palette.line },
-              ]}
-            >
-              <View style={styles.groupHeader}>
-                <View style={[styles.groupIconWrap, { backgroundColor: palette.blueSoft }]}>
-                  <Ionicons name="business" size={17} color={palette.blue} />
-                </View>
-                <Text style={[styles.groupTitle, { color: palette.text }]}>
-                  Organization profile
-                </Text>
-              </View>
-
-              {/* Field: Name */}
-              <View style={styles.fieldItem}>
-                <Text style={[styles.fieldLabel, { color: palette.text }]}>
-                  Organization name <Text style={{ color: palette.blue }}>*</Text>
-                </Text>
-                <Text style={[styles.fieldHint, { color: palette.muted }]}>
-                  The public name attendees will see on your event pages.
-                </Text>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    {
-                      backgroundColor: palette.surfaceRaised,
-                      borderColor:
-                        submitted && errors.name
-                          ? palette.danger
-                          : focusedField === "name"
-                          ? palette.blue
-                          : palette.line,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="text-outline"
-                    size={18}
-                    color={focusedField === "name" ? palette.blue : palette.muted}
-                    style={styles.fieldLeadingIcon}
-                  />
-                  <TextInput
-                    value={values.name}
-                    onChangeText={(t) => updateField("name", t)}
-                    onFocus={() => setFocusedField("name")}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder="e.g. Kigali Jazz Collective"
-                    placeholderTextColor={palette.muted}
-                    maxLength={LIMITS.name}
-                    style={[styles.textInput, { color: palette.text }]}
-                    accessibilityLabel="Organization name"
-                  />
-                </View>
-                {submitted && errors.name ? (
-                  <Text style={[styles.fieldError, { color: palette.danger }]}>
-                    {errors.name}
-                  </Text>
-                ) : null}
-              </View>
-
-              {/* Field: Activities */}
-              <View style={styles.fieldItem}>
-                <Text style={[styles.fieldLabel, { color: palette.text }]}>
-                  What kind of events do you host? <Text style={{ color: palette.blue }}>*</Text>
-                </Text>
-                <Text style={[styles.fieldHint, { color: palette.muted }]}>
-                  A brief summary of the experiences you curate for attendees.
-                </Text>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    {
-                      backgroundColor: palette.surfaceRaised,
-                      borderColor:
-                        submitted && errors.activities
-                          ? palette.danger
-                          : focusedField === "activities"
-                          ? palette.blue
-                          : palette.line,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="sparkles-outline"
-                    size={18}
-                    color={focusedField === "activities" ? palette.blue : palette.muted}
-                    style={styles.fieldLeadingIcon}
-                  />
-                  <TextInput
-                    value={values.activities}
-                    onChangeText={(t) => updateField("activities", t)}
-                    onFocus={() => setFocusedField("activities")}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder="e.g. Live music concerts, art exhibitions, tech conferences"
-                    placeholderTextColor={palette.muted}
-                    maxLength={LIMITS.activities}
-                    style={[styles.textInput, { color: palette.text }]}
-                    accessibilityLabel="What kind of events do you host"
-                  />
-                </View>
-                {submitted && errors.activities ? (
-                  <Text style={[styles.fieldError, { color: palette.danger }]}>
-                    {errors.activities}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-
-            {/* Group 2: Bio & Description */}
-            <View
-              style={[
-                styles.groupCard,
-                { backgroundColor: palette.surface, borderColor: palette.line },
-              ]}
-            >
-              <View style={styles.groupHeader}>
-                <View style={[styles.groupIconWrap, { backgroundColor: palette.blueSoft }]}>
-                  <Ionicons name="document-text-outline" size={17} color={palette.blue} />
-                </View>
-                <Text style={[styles.groupTitle, { color: palette.text }]}>
-                  About your brand
-                </Text>
-              </View>
-
-              <View style={styles.fieldItem}>
-                <View style={styles.labelWithCounter}>
-                  <Text style={[styles.fieldLabel, { color: palette.text }]}>
-                    Bio & description <Text style={{ color: palette.blue }}>*</Text>
-                  </Text>
-                  <Text style={[styles.counterText, { color: palette.muted }]}>
-                    {values.description.length}/{LIMITS.description}
-                  </Text>
-                </View>
-                <Text style={[styles.fieldHint, { color: palette.muted }]}>
-                  Share who you are, what inspires your events, and what attendees can expect.
-                </Text>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    styles.textAreaContainer,
-                    {
-                      backgroundColor: palette.surfaceRaised,
-                      borderColor:
-                        submitted && errors.description
-                          ? palette.danger
-                          : focusedField === "description"
-                          ? palette.blue
-                          : palette.line,
-                    },
-                  ]}
-                >
-                  <TextInput
-                    value={values.description}
-                    onChangeText={(t) => updateField("description", t)}
-                    onFocus={() => setFocusedField("description")}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder="Tell attendees about your journey, the experiences you create, and the community you build..."
-                    placeholderTextColor={palette.muted}
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                    maxLength={LIMITS.description}
-                    style={[styles.textInput, styles.textArea, { color: palette.text }]}
-                    accessibilityLabel="Bio and description"
-                  />
-                </View>
-                {submitted && errors.description ? (
-                  <Text style={[styles.fieldError, { color: palette.danger }]}>
-                    {errors.description}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-
-            {/* Group 3: Location & Web Links */}
-            <View
-              style={[
-                styles.groupCard,
-                { backgroundColor: palette.surface, borderColor: palette.line },
-              ]}
-            >
-              <View style={styles.groupHeader}>
-                <View style={[styles.groupIconWrap, { backgroundColor: palette.blueSoft }]}>
-                  <Ionicons name="map-outline" size={17} color={palette.blue} />
-                </View>
-                <Text style={[styles.groupTitle, { color: palette.text }]}>
-                  Location & online presence
-                </Text>
-              </View>
-
-              {/* Field: Location */}
-              <View style={styles.fieldItem}>
-                <Text style={[styles.fieldLabel, { color: palette.text }]}>
-                  Where are you based? <Text style={{ color: palette.blue }}>*</Text>
-                </Text>
-                <Text style={[styles.fieldHint, { color: palette.muted }]}>
-                  City or region where your events primarily happen.
-                </Text>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    {
-                      backgroundColor: palette.surfaceRaised,
-                      borderColor:
-                        submitted && errors.location
-                          ? palette.danger
-                          : focusedField === "location"
-                          ? palette.blue
-                          : palette.line,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="location-outline"
-                    size={18}
-                    color={focusedField === "location" ? palette.blue : palette.muted}
-                    style={styles.fieldLeadingIcon}
-                  />
-                  <TextInput
-                    value={values.location}
-                    onChangeText={(t) => updateField("location", t)}
-                    onFocus={() => setFocusedField("location")}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder="e.g. Kigali, Rwanda"
-                    placeholderTextColor={palette.muted}
-                    maxLength={LIMITS.location}
-                    style={[styles.textInput, { color: palette.text }]}
-                    accessibilityLabel="Location"
-                  />
-                </View>
-                {submitted && errors.location ? (
-                  <Text style={[styles.fieldError, { color: palette.danger }]}>
-                    {errors.location}
-                  </Text>
-                ) : null}
-              </View>
-
-              {/* Field: Website */}
-              <View style={styles.fieldItem}>
-                <Text style={[styles.fieldLabel, { color: palette.text }]}>
-                  Website or social profile{" "}
-                  <Text style={{ color: palette.muted, fontFamily: "Inter_400Regular" }}>(optional)</Text>
-                </Text>
-                <Text style={[styles.fieldHint, { color: palette.muted }]}>
-                  Your official site, Instagram, or social link for attendees.
-                </Text>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    {
-                      backgroundColor: palette.surfaceRaised,
-                      borderColor:
-                        submitted && errors.website
-                          ? palette.danger
-                          : focusedField === "website"
-                          ? palette.blue
-                          : palette.line,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="globe-outline"
-                    size={18}
-                    color={focusedField === "website" ? palette.blue : palette.muted}
-                    style={styles.fieldLeadingIcon}
-                  />
-                  <TextInput
-                    value={values.website}
-                    onChangeText={(t) => updateField("website", t)}
-                    onFocus={() => setFocusedField("website")}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder="https://instagram.com/yourhandle"
-                    placeholderTextColor={palette.muted}
-                    keyboardType="url"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={[styles.textInput, { color: palette.text }]}
-                    accessibilityLabel="Website or social profile"
-                  />
-                </View>
-                {submitted && errors.website ? (
-                  <Text style={[styles.fieldError, { color: palette.danger }]}>
-                    {errors.website}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          </View>
-
-          {/* Reassurance Note */}
+          {/* Unified Compact Form Card */}
           <View
             style={[
-              styles.infoCallout,
+              styles.formCard,
               { backgroundColor: palette.surface, borderColor: palette.line },
             ]}
           >
-            <Ionicons name="information-circle-outline" size={20} color={palette.blue} />
-            <Text style={[styles.infoCalloutText, { color: palette.muted }]}>
-              You can update your organization details, upload your logo, and add your team members anytime from your organizer settings.
-            </Text>
+            {/* Organization Name */}
+            <View style={styles.fieldItem}>
+              <Text style={[styles.fieldLabel, { color: palette.text }]}>
+                Organization name <Text style={{ color: palette.blue }}>*</Text>
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: palette.surfaceRaised,
+                    borderColor:
+                      submitted && errors.name
+                        ? palette.danger
+                        : focusedField === "name"
+                        ? palette.blue
+                        : palette.line,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="business-outline"
+                  size={17}
+                  color={focusedField === "name" ? palette.blue : palette.muted}
+                  style={styles.fieldLeadingIcon}
+                />
+                <TextInput
+                  value={values.name}
+                  onChangeText={(t) => updateField("name", t)}
+                  onFocus={() => setFocusedField("name")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="e.g. Kigali Jazz Collective"
+                  placeholderTextColor={palette.muted}
+                  maxLength={LIMITS.name}
+                  style={[styles.textInput, { color: palette.text }]}
+                  accessibilityLabel="Organization name"
+                />
+              </View>
+              {submitted && errors.name ? (
+                <Text style={[styles.fieldError, { color: palette.danger }]}>
+                  {errors.name}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Event Focus */}
+            <View style={styles.fieldItem}>
+              <Text style={[styles.fieldLabel, { color: palette.text }]}>
+                What kind of events do you host? <Text style={{ color: palette.blue }}>*</Text>
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: palette.surfaceRaised,
+                    borderColor:
+                      submitted && errors.activities
+                        ? palette.danger
+                        : focusedField === "activities"
+                        ? palette.blue
+                        : palette.line,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="sparkles-outline"
+                  size={17}
+                  color={focusedField === "activities" ? palette.blue : palette.muted}
+                  style={styles.fieldLeadingIcon}
+                />
+                <TextInput
+                  value={values.activities}
+                  onChangeText={(t) => updateField("activities", t)}
+                  onFocus={() => setFocusedField("activities")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="e.g. Live music concerts, festivals, conferences"
+                  placeholderTextColor={palette.muted}
+                  maxLength={LIMITS.activities}
+                  style={[styles.textInput, { color: palette.text }]}
+                  accessibilityLabel="What kind of events do you host"
+                />
+              </View>
+              {submitted && errors.activities ? (
+                <Text style={[styles.fieldError, { color: palette.danger }]}>
+                  {errors.activities}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Description */}
+            <View style={styles.fieldItem}>
+              <View style={styles.labelWithCounter}>
+                <Text style={[styles.fieldLabel, { color: palette.text }]}>
+                  About your organization <Text style={{ color: palette.blue }}>*</Text>
+                </Text>
+                <Text style={[styles.counterText, { color: palette.muted }]}>
+                  {values.description.length}/{LIMITS.description}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.inputContainer,
+                  styles.textAreaContainer,
+                  {
+                    backgroundColor: palette.surfaceRaised,
+                    borderColor:
+                      submitted && errors.description
+                        ? palette.danger
+                        : focusedField === "description"
+                        ? palette.blue
+                        : palette.line,
+                  },
+                ]}
+              >
+                <TextInput
+                  value={values.description}
+                  onChangeText={(t) => updateField("description", t)}
+                  onFocus={() => setFocusedField("description")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="A brief bio of who you are and what attendees can expect..."
+                  placeholderTextColor={palette.muted}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                  maxLength={LIMITS.description}
+                  style={[styles.textInput, styles.textArea, { color: palette.text }]}
+                  accessibilityLabel="About your organization"
+                />
+              </View>
+              {submitted && errors.description ? (
+                <Text style={[styles.fieldError, { color: palette.danger }]}>
+                  {errors.description}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Location & Website in clean unified layout */}
+            <View style={styles.fieldItem}>
+              <Text style={[styles.fieldLabel, { color: palette.text }]}>
+                Location <Text style={{ color: palette.blue }}>*</Text>
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: palette.surfaceRaised,
+                    borderColor:
+                      submitted && errors.location
+                        ? palette.danger
+                        : focusedField === "location"
+                        ? palette.blue
+                        : palette.line,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="location-outline"
+                  size={17}
+                  color={focusedField === "location" ? palette.blue : palette.muted}
+                  style={styles.fieldLeadingIcon}
+                />
+                <TextInput
+                  value={values.location}
+                  onChangeText={(t) => updateField("location", t)}
+                  onFocus={() => setFocusedField("location")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="e.g. Kigali, Rwanda"
+                  placeholderTextColor={palette.muted}
+                  maxLength={LIMITS.location}
+                  style={[styles.textInput, { color: palette.text }]}
+                  accessibilityLabel="Location"
+                />
+              </View>
+              {submitted && errors.location ? (
+                <Text style={[styles.fieldError, { color: palette.danger }]}>
+                  {errors.location}
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.fieldItem}>
+              <Text style={[styles.fieldLabel, { color: palette.text }]}>
+                Website or social{" "}
+                <Text style={{ color: palette.muted, fontFamily: "Inter_400Regular" }}>(optional)</Text>
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: palette.surfaceRaised,
+                    borderColor:
+                      submitted && errors.website
+                        ? palette.danger
+                        : focusedField === "website"
+                        ? palette.blue
+                        : palette.line,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="globe-outline"
+                  size={17}
+                  color={focusedField === "website" ? palette.blue : palette.muted}
+                  style={styles.fieldLeadingIcon}
+                />
+                <TextInput
+                  value={values.website}
+                  onChangeText={(t) => updateField("website", t)}
+                  onFocus={() => setFocusedField("website")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="https://instagram.com/yourhandle"
+                  placeholderTextColor={palette.muted}
+                  keyboardType="url"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={[styles.textInput, { color: palette.text }]}
+                  accessibilityLabel="Website or social"
+                />
+              </View>
+              {submitted && errors.website ? (
+                <Text style={[styles.fieldError, { color: palette.danger }]}>
+                  {errors.website}
+                </Text>
+              ) : null}
+            </View>
           </View>
 
           {/* Error Banner */}
@@ -450,7 +376,7 @@ export default function OrganiserApplicationScreen() {
                 { backgroundColor: `${palette.danger}18`, borderColor: palette.danger },
               ]}
             >
-              <Ionicons name="alert-circle-outline" size={18} color={palette.danger} />
+              <Ionicons name="alert-circle-outline" size={17} color={palette.danger} />
               <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text>
             </View>
           ) : null}
@@ -470,7 +396,7 @@ export default function OrganiserApplicationScreen() {
               <ActivityIndicator color={palette.onBlue} />
             ) : (
               <Text style={[styles.buttonText, { color: palette.onBlue }]}>
-                {created ? "Retry and continue" : "Continue to plan selection"}
+                {created ? "Retry and continue" : "Continue to plans"}
               </Text>
             )}
           </Pressable>
@@ -492,64 +418,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   scrollContent: {
-    padding: 20,
-    gap: 20,
-  },
-  introHeader: {
-    gap: 8,
-    marginTop: 4,
-  },
-  heading: {
-    fontSize: 26,
-    lineHeight: 32,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -0.6,
-  },
-  subheading: {
-    fontSize: 14.5,
-    lineHeight: 22,
-    fontFamily: "Inter_400Regular",
-  },
-  formFlow: {
+    padding: 18,
     gap: 16,
   },
-  groupCard: {
-    padding: 18,
-    borderRadius: 20,
+  introHeader: {
+    gap: 4,
+    marginTop: 2,
+  },
+  heading: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -0.4,
+  },
+  subheading: {
+    fontSize: 13.5,
+    lineHeight: 19,
+    fontFamily: "Inter_400Regular",
+  },
+  formCard: {
+    padding: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    gap: 18,
-  },
-  groupHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingBottom: 2,
-  },
-  groupIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  groupTitle: {
-    fontSize: 15.5,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.2,
+    gap: 14,
   },
   fieldItem: {
     gap: 6,
   },
   fieldLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
-  },
-  fieldHint: {
-    fontSize: 12.5,
-    lineHeight: 17,
-    fontFamily: "Inter_400Regular",
-    marginTop: -2,
-    marginBottom: 4,
   },
   labelWithCounter: {
     flexDirection: "row",
@@ -557,80 +455,66 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   counterText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontFamily: "Inter_500Medium",
   },
   inputContainer: {
-    minHeight: 50,
-    borderRadius: 14,
+    minHeight: 46,
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   textAreaContainer: {
-    minHeight: 112,
+    minHeight: 84,
     alignItems: "flex-start",
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   fieldLeadingIcon: {
-    marginRight: 10,
+    marginRight: 9,
   },
   textInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Inter_500Medium",
     paddingVertical: 0,
   },
   textArea: {
-    minHeight: 88,
-    lineHeight: 22,
+    minHeight: 64,
+    lineHeight: 20,
     paddingTop: 0,
   },
   fieldError: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11.5,
+    lineHeight: 15,
     fontFamily: "Inter_500Medium",
-    marginTop: 2,
-  },
-  infoCallout: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  infoCalloutText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 19,
-    fontFamily: "Inter_400Regular",
+    marginTop: 1,
   },
   errorCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    padding: 14,
-    borderRadius: 14,
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
   },
   errorText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12.5,
     fontFamily: "Inter_500Medium",
-    lineHeight: 18,
+    lineHeight: 17,
   },
   button: {
-    minHeight: 52,
-    borderRadius: 26,
+    minHeight: 50,
+    borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 20,
-    marginTop: 4,
+    marginTop: 2,
   },
   buttonText: {
-    fontSize: 15.5,
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
     textAlign: "center",
   },
