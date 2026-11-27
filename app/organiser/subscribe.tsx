@@ -561,10 +561,7 @@ function ManualSubscribeCheckout() {
       <OrganiserFlowHeader title="Choose access" step={2} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.headerBlock}>
-          <Text style={[styles.title, { color: palette.text, fontSize: 24 }]}>Choose your access</Text>
-          <Text style={[styles.subtitle, { color: palette.muted, marginTop: 2 }]}>
-            Select a plan to unlock unlimited event hosting and organiser verification.
-          </Text>
+          <Text style={[styles.title, { color: palette.text, fontSize: 19, letterSpacing: -0.3 }]}>Choose your organiser access</Text>
         </View>
 
         {plansLoading ? (
@@ -914,14 +911,7 @@ function DemoSubscribeCheckout() {
       >
         {/* HERO TITLE & BRANDING */}
         <Animated.View entering={Platform.OS !== "web" ? FadeInDown.delay(50).springify() : undefined}>
-          <View style={styles.kickerRow}>
-            <View style={styles.kickerDot} />
-            <Text style={[styles.kickerText, { color: palette.accent }]}>EVENTIS ORGANISER PASS</Text>
-          </View>
-          <Text style={[styles.title, { color: palette.text }]}>Choose your organiser access</Text>
-          <Text style={[styles.subtitle, { color: palette.muted }]}>
-            Pay once for a few posts, or subscribe to keep posting. Complete payment with Mobile Money.
-          </Text>
+          <Text style={[styles.title, { color: palette.text, fontSize: 19, letterSpacing: -0.3 }]}>Choose your organiser access</Text>
         </Animated.View>
 
         {/* INTERVAL SELECTOR TABS (DAILY / WEEKLY / MONTHLY) */}
@@ -1470,7 +1460,7 @@ const styles = StyleSheet.create({
   kickerDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#38BDF8" },
   kickerText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#38BDF8", letterSpacing: 1.2 },
 
-  title: { fontSize: 26, fontFamily: "Inter_700Bold", letterSpacing: -0.4, marginBottom: 6 },
+  title: { fontSize: 19, fontFamily: "Inter_700Bold", letterSpacing: -0.3, marginBottom: 2 },
   subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 22 },
 
   // Segment tabs
