@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 
-const STEPS = ["Discover", "Choose plan", "Create profile"];
+const STEPS = ["Application", "Choose plan", "Create profile"];
 
 export function OrganiserFlowHeader({
   title,
