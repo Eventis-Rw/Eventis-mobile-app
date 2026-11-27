@@ -630,7 +630,7 @@ function ManualSubscribeCheckout() {
                         <Text style={[styles.compactPlanName, { color: palette.text }]}>{plan.name}</Text>
                         {isRecommended ? (
                           <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
-                            <Text style={styles.heroBadgeText}>Recommended</Text>
+                            <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
                           </View>
                         ) : plan.badge && plan.badge !== "Recommended" ? (
                           <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
@@ -643,11 +643,14 @@ function ManualSubscribeCheckout() {
 
                     <View style={styles.compactPlanRight}>
                       <View style={styles.compactPriceWrap}>
-                        <Text style={[styles.compactPriceNumber, { color: palette.text }]}>
-                          RWF {plan.price.toLocaleString()}
-                        </Text>
+                        <View style={styles.priceRowInline}>
+                          <Text style={[styles.priceCurrencyTag, { color: isRecommended ? palette.accent : palette.muted }]}>RWF</Text>
+                          <Text style={[styles.compactPriceNumber, { color: palette.text }]}>
+                            {plan.price.toLocaleString()}
+                          </Text>
+                        </View>
                         <Text style={[styles.compactPricePeriod, { color: palette.muted }]}>
-                          {plan.interval === "post" ? "/post" : plan.interval === "month" ? "/mo" : plan.interval === "quarter" ? "/3 mo" : "/yr"}
+                          {plan.interval === "post" ? "per post" : plan.interval === "month" ? "/ month" : plan.interval === "quarter" ? "/ 3 months" : "/ year"}
                         </Text>
                       </View>
                       <View
@@ -988,7 +991,7 @@ function DemoSubscribeCheckout() {
                       </Text>
                       {activePlan.interval === "month" ? (
                         <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
-                          <Text style={styles.heroBadgeText}>Recommended</Text>
+                          <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
                         </View>
                       ) : activePlan.badge && activePlan.badge !== "Recommended" ? (
                         <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
@@ -1583,14 +1586,25 @@ const styles = StyleSheet.create({
   compactPriceWrap: {
     alignItems: "flex-end",
   },
-  compactPriceNumber: {
-    fontSize: 15,
+  priceRowInline: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 4,
+  },
+  priceCurrencyTag: {
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
-    letterSpacing: -0.3,
+    letterSpacing: 0.3,
+  },
+  compactPriceNumber: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.4,
   },
   compactPricePeriod: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontFamily: "Inter_400Regular",
+    marginTop: 1,
   },
   methodSelectionSection: {
     gap: 12,
@@ -1664,17 +1678,18 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   heroBadgePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-    borderRadius: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
   },
   heroBadgeText: {
-    fontSize: 10,
-    fontFamily: "Inter_700Bold",
+    fontSize: 10.5,
+    fontFamily: "Inter_800ExtraBold",
     color: "#000000",
-    letterSpacing: 0.2,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   subBadgePill: {
     paddingHorizontal: 7,
