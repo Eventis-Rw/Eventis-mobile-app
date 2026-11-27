@@ -64,9 +64,6 @@ export default function BecomeOrganiserScreen() {
 
   const { user, isRestoringOrganiser } = useAuth();
   const application = user?.organiserApplication;
-  const postsLeft = user?.organiserSubscription?.postsRemaining ?? 0;
-  const quickPost = () =>
-    router.push((postsLeft > 0 ? "/business/create-event" : "/organiser/subscribe") as any);
 
   const continueFlow = () => {
     const destination = getOrganiserDestination(user, USE_ORGANISER_API);
@@ -89,7 +86,7 @@ export default function BecomeOrganiserScreen() {
     ? "Open organiser workspace"
     : step === "setup"
     ? "Continue profile setup"
-    : "See plans and pricing";
+    : "Get started";
 
   return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>
@@ -170,10 +167,7 @@ export default function BecomeOrganiserScreen() {
           >
             <View style={styles.heroRing} />
             <View style={styles.heroTop}>
-              <View style={styles.heroMark}>
-                <Ionicons name="briefcase-outline" size={20} color="#FFFFFF" />
-              </View>
-              <Text style={styles.heroLabel}>EVENTIS FOR ORGANISERS</Text>
+              <Text style={styles.heroLabel}>CREATE ON EVENTIS</Text>
             </View>
             <Text style={styles.heroTitle}>Give every event a place to grow.</Text>
             <Text style={styles.heroText}>
@@ -186,7 +180,6 @@ export default function BecomeOrganiserScreen() {
               accessibilityRole="button"
             >
               <Text style={styles.heroButtonText}>{ctaLabel}</Text>
-              <Ionicons name="arrow-forward" size={17} color="#0284C7" />
             </Pressable>
           </LinearGradient>
         </Animated.View>
@@ -263,40 +256,6 @@ export default function BecomeOrganiserScreen() {
           </View>
         </Animated.View>
 
-        {/* Quick Post Card */}
-        {step === "intro" || (step === "setup" && postsLeft > 0) ? (
-          <Pressable
-            disabled={isRestoringOrganiser}
-            onPress={quickPost}
-            style={({ pressed }) => [
-              styles.quickPostCard,
-              { backgroundColor: palette.surface, borderColor: `${palette.blue}40` },
-              pressed && styles.pressed,
-            ]}
-            accessibilityRole="button"
-          >
-            <View style={[styles.quickPostIconWrap, { backgroundColor: palette.blueSoft }]}>
-              <Ionicons name="flash" size={20} color={palette.accent} />
-            </View>
-            <View style={styles.flex}>
-              <View style={styles.quickPostHeader}>
-                <Text style={[styles.quickPostTitle, { color: palette.text }]}>
-                  {postsLeft > 0 ? "Post an event now" : "Just want to post? Skip setup"}
-                </Text>
-                <View style={[styles.quickBadge, { backgroundColor: palette.blueSoft }]}>
-                  <Text style={[styles.quickBadgeText, { color: palette.accent }]}>QUICK</Text>
-                </View>
-              </View>
-              <Text style={[styles.quickPostSub, { color: palette.muted }]}>
-                {postsLeft > 0
-                  ? `You have ${postsLeft} ${postsLeft === 1 ? "post" : "posts"} remaining. Post straight away.`
-                  : "Pay RWF 2,180 for one event or RWF 4,180 for two. No organisation profile needed."}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={palette.muted} />
-          </Pressable>
-        ) : null}
-
         {/* Dual Mode Note */}
         <View style={[styles.note, { backgroundColor: palette.surface, borderColor: palette.line }]}>
           <Ionicons name="swap-horizontal-outline" size={20} color={palette.accent} />
@@ -358,15 +317,6 @@ export default function BecomeOrganiserScreen() {
           >
             {ctaLabel}
           </Text>
-          <Ionicons
-            name="arrow-forward"
-            size={18}
-            color={
-              isRestoringOrganiser || application?.status === "IN_REVIEW"
-                ? palette.muted
-                : palette.onBlue
-            }
-          />
         </Pressable>
 
         {step !== "ready" ? (
@@ -439,21 +389,12 @@ const styles = StyleSheet.create({
     borderWidth: 42,
     borderColor: "rgba(255,255,255,0.06)",
   },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 28 },
-  heroMark: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  heroTop: { flexDirection: "row", alignItems: "center", marginBottom: 18 },
   heroLabel: {
-    flex: 1,
     color: "rgba(255,255,255,0.9)",
-    fontSize: 10.5,
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
-    letterSpacing: 1.2,
+    letterSpacing: 1.4,
   },
   heroTitle: {
     color: "#FFFFFF",
@@ -473,15 +414,15 @@ const styles = StyleSheet.create({
     minHeight: 50,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    paddingHorizontal: 18,
+    borderRadius: 25,
+    paddingHorizontal: 20,
     marginTop: 22,
   },
   heroButtonText: {
     color: "#0284C7",
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
   },
   section: { gap: 12 },
@@ -522,39 +463,6 @@ const styles = StyleSheet.create({
   journeyCopy: { flex: 1, paddingBottom: 16 },
   journeyTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
   journeyText: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 3 },
-  quickPostCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 16,
-    borderRadius: 18,
-    borderWidth: 1,
-  },
-  quickPostIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quickPostHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  quickPostTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  quickBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  quickBadgeText: {
-    fontSize: 9.5,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 0.5,
-  },
-  quickPostSub: {
-    fontSize: 11.5,
-    lineHeight: 16,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
   note: {
     flexDirection: "row",
     alignItems: "flex-start",
