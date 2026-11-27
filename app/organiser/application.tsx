@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { Redirect, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -26,6 +27,12 @@ import { getOrganiserStep } from "@/hooks/useOrganiserAccess";
 import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { createOrganiserApplication } from "@/services/organiserApplicationService";
 import { describeError, USE_ORGANISER_API } from "@/services/organiserService";
+import {
+  fetchPlaceSuggestions,
+  formatPlaceSuggestion,
+  placeSuggestionIcon,
+  type PlaceSuggestion,
+} from "@/services/placeSuggestions";
 
 const LIMITS = { name: 80, description: 1000, activities: 140, location: 100 };
 
@@ -39,6 +46,15 @@ const EVENT_CATEGORIES = [
   "Sports",
   "Community",
   "Other",
+];
+
+const QUICK_LOCATIONS = [
+  "Kigali, Rwanda",
+  "Gasabo, Kigali",
+  "Kicukiro, Kigali",
+  "Nyarugenge, Kigali",
+  "Musanze, Rwanda",
+  "Rubavu, Rwanda",
 ];
 
 export default function OrganiserApplicationScreen() {
@@ -72,6 +88,14 @@ export default function OrganiserApplicationScreen() {
     const unknown = parts.filter((p) => !EVENT_CATEGORIES.includes(p));
     return unknown.join(", ");
   });
+
+  // Location suggestions state
+  const [locationSuggestions, setLocationSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [searchingLocation, setSearchingLocation] = useState(false);
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const locationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const locationAbortRef = useRef<AbortController | null>(null);
 
   const mutedPlaceholder = palette.dark
     ? "rgba(255, 255, 255, 0.32)"
@@ -113,6 +137,74 @@ export default function OrganiserApplicationScreen() {
   const handleOtherCategoryChange = (text: string) => {
     setOtherCategory(text);
     syncActivities(selectedCategories, text);
+  };
+
+  const handleLocationChange = (text: string) => {
+    updateField("location", text);
+    if (locationDebounceRef.current) clearTimeout(locationDebounceRef.current);
+    locationAbortRef.current?.abort();
+
+    const query = text.trim();
+    if (query.length < 2) {
+      setLocationSuggestions([]);
+      setSearchingLocation(false);
+      return;
+    }
+    setSearchingLocation(true);
+    locationDebounceRef.current = setTimeout(() => {
+      const controller = new AbortController();
+      locationAbortRef.current = controller;
+      fetchPlaceSuggestions(query, controller.signal)
+        .then((res) => {
+          setLocationSuggestions(res);
+          setShowLocationDropdown(res.length > 0);
+        })
+        .catch(() => {})
+        .finally(() => setSearchingLocation(false));
+    }, 300);
+  };
+
+  const selectLocation = (locStr: string) => {
+    updateField("location", locStr);
+    setLocationSuggestions([]);
+    setShowLocationDropdown(false);
+  };
+
+  const detectCurrentLocation = async () => {
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const geocode = await Location.reverseGeocodeAsync({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+      if (geocode && geocode.length > 0) {
+        const place = geocode[0];
+        const parts = [
+          place.district || place.street || place.name,
+          place.city || place.subregion,
+          place.country || "Rwanda",
+        ].filter((p): p is string => Boolean(p && !p.match(/^[0-9]+$/)));
+        const resolved = Array.from(new Set(parts)).join(", ");
+        if (resolved) {
+          updateField("location", resolved);
+          setShowLocationDropdown(false);
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          }
+        }
+      }
+    } catch {
+      // Graceful fallback
+    } finally {
+      setLocating(false);
+    }
   };
 
   const submit = async () => {
@@ -414,11 +506,33 @@ export default function OrganiserApplicationScreen() {
               ) : null}
             </View>
 
-            {/* Location */}
+            {/* Location with Real-time Suggestions & Current Location Detection */}
             <View style={styles.fieldItem}>
-              <Text style={[styles.fieldLabel, { color: palette.text }]}>
-                Location <Text style={{ color: palette.blue }}>*</Text>
-              </Text>
+              <View style={styles.labelWithAction}>
+                <Text style={[styles.fieldLabel, { color: palette.text }]}>
+                  Location <Text style={{ color: palette.blue }}>*</Text>
+                </Text>
+                <Pressable
+                  onPress={detectCurrentLocation}
+                  disabled={locating}
+                  style={styles.gpsActionBtn}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Use current location"
+                >
+                  {locating ? (
+                    <ActivityIndicator size="small" color={palette.blue} />
+                  ) : (
+                    <>
+                      <Ionicons name="navigate-outline" size={13} color={palette.blue} />
+                      <Text style={[styles.gpsActionText, { color: palette.blue }]}>
+                        Use current location
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+
               <View
                 style={[
                   styles.inputContainer,
@@ -441,16 +555,111 @@ export default function OrganiserApplicationScreen() {
                 />
                 <TextInput
                   value={values.location}
-                  onChangeText={(t) => updateField("location", t)}
-                  onFocus={() => setFocusedField("location")}
-                  onBlur={() => setFocusedField(null)}
-                  placeholder="e.g. Kigali, Rwanda"
+                  onChangeText={handleLocationChange}
+                  onFocus={() => {
+                    setFocusedField("location");
+                    setShowLocationDropdown(true);
+                  }}
+                  onBlur={() => {
+                    setFocusedField(null);
+                    setTimeout(() => setShowLocationDropdown(false), 200);
+                  }}
+                  placeholder="Search city, district, or venue..."
                   placeholderTextColor={mutedPlaceholder}
                   maxLength={LIMITS.location}
                   style={[styles.textInput, { color: palette.text }]}
                   accessibilityLabel="Location"
                 />
+                {searchingLocation ? (
+                  <ActivityIndicator size="small" color={palette.blue} />
+                ) : values.location ? (
+                  <Pressable
+                    onPress={() => updateField("location", "")}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear location"
+                  >
+                    <Ionicons name="close-circle" size={16} color={palette.muted} />
+                  </Pressable>
+                ) : null}
               </View>
+
+              {/* Quick suggestion chips (when input is short/focused) */}
+              {focusedField === "location" && (!values.location || values.location.length < 3) ? (
+                <View style={styles.quickLocationsWrap}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.quickLocationsRow}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {QUICK_LOCATIONS.map((loc) => (
+                      <Pressable
+                        key={loc}
+                        onPress={() => selectLocation(loc)}
+                        style={({ pressed }) => [
+                          styles.quickLocPill,
+                          {
+                            backgroundColor: palette.surface,
+                            borderColor: palette.line,
+                            opacity: pressed ? 0.75 : 1,
+                          },
+                        ]}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="location-sharp" size={11} color={palette.blue} />
+                        <Text style={[styles.quickLocText, { color: palette.text }]}>{loc}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              {/* Real-time place suggestions dropdown */}
+              {showLocationDropdown && locationSuggestions.length > 0 ? (
+                <View
+                  style={[
+                    styles.suggestionsDropdown,
+                    { backgroundColor: palette.surface, borderColor: palette.line },
+                  ]}
+                >
+                  {locationSuggestions.map((item, idx) => (
+                    <Pressable
+                      key={item.id}
+                      onPress={() => selectLocation(formatPlaceSuggestion(item))}
+                      style={({ pressed }) => [
+                        styles.suggestionItem,
+                        {
+                          borderBottomColor:
+                            idx < locationSuggestions.length - 1 ? palette.line : "transparent",
+                          backgroundColor: pressed ? palette.surfaceRaised : "transparent",
+                        },
+                      ]}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons
+                        name={placeSuggestionIcon(item.category) as any}
+                        size={16}
+                        color={palette.blue}
+                      />
+                      <View style={styles.suggestionTextCol}>
+                        <Text style={[styles.suggestionTitle, { color: palette.text }]} numberOfLines={1}>
+                          {item.label}
+                        </Text>
+                        {item.secondaryLabel ? (
+                          <Text
+                            style={[styles.suggestionSubtitle, { color: palette.muted }]}
+                            numberOfLines={1}
+                          >
+                            {item.secondaryLabel}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+
               {submitted && errors.location ? (
                 <Text style={[styles.fieldError, { color: palette.danger }]}>
                   {errors.location}
@@ -609,6 +818,69 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
+  },
+  labelWithAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  gpsActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  gpsActionText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  quickLocationsWrap: {
+    marginTop: 4,
+  },
+  quickLocationsRow: {
+    flexDirection: "row",
+    gap: 6,
+    paddingVertical: 2,
+  },
+  quickLocPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  quickLocText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  suggestionsDropdown: {
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+    marginTop: 4,
+  },
+  suggestionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  suggestionTextCol: {
+    flex: 1,
+  },
+  suggestionTitle: {
+    fontSize: 13.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  suggestionSubtitle: {
+    fontSize: 11.5,
+    fontFamily: "Inter_400Regular",
+    marginTop: 1,
   },
   categoryWrap: {
     flexDirection: "row",
