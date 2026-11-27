@@ -1,3 +1,4 @@
+import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
@@ -6,6 +7,7 @@ import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
   Image,
   KeyboardAvoidingView,
@@ -278,6 +280,51 @@ function ManualSubscribeCheckout() {
     } catch {
       void Linking.openURL(fallbackUrl).catch(() => {});
     }
+  };
+
+  const chooseFromGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+      if (!result.canceled) {
+        setPhotoError(null);
+        setReceiptUri(result.assets[0].uri);
+      }
+    } catch {
+      setPhotoError("We couldn't open your photos. Check photo permissions and try again.");
+    }
+  };
+
+  const takeCameraPhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setPhotoError("Allow camera access to photograph your payment screenshot, or choose one from your photos.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8 });
+      if (!result.canceled) {
+        setPhotoError(null);
+        setReceiptUri(result.assets[0].uri);
+      }
+    } catch {
+      setPhotoError("We couldn't open the camera. Try choosing a photo instead.");
+    }
+  };
+
+  const promptPhotoPick = () => {
+    if (Platform.OS === "web") {
+      void chooseFromGallery();
+      return;
+    }
+    Alert.alert(
+      "Upload proof of payment",
+      "Please upload a screenshot or take a photo of your payment confirmation.",
+      [
+        { text: "Upload screenshot", onPress: () => void chooseFromGallery() },
+        { text: "Take photo", onPress: () => void takeCameraPhoto() },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
   };
 
   const submit = async () => {
@@ -570,20 +617,108 @@ function ManualSubscribeCheckout() {
                 <Text style={[styles.nbTitle, { color: palette.accent }]}>NB:</Text>
               </View>
               <Text style={[styles.nbBodyText, { color: palette.text }]}>
-                Please keep a screenshot of your payment confirmation message for verification. Once you complete the payment, tap <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>I have paid</Text> below to upload your screenshot as proof of payment.
+                Please keep a screenshot of your payment confirmation message for verification. Upload your screenshot below as proof of payment to activate your package.
               </Text>
+            </View>
+          ) : null}
+
+          {/* Proof of Payment Upload Card */}
+          {selectedMethod && activePlan ? (
+            <View style={[styles.proofCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+              <View style={styles.proofHeaderRow}>
+                <View style={styles.proofTitleBlock}>
+                  <Ionicons name="document-attach-outline" size={18} color={palette.accent} />
+                  <Text style={[styles.proofTitle, { color: palette.text }]}>Proof of payment</Text>
+                </View>
+                {receiptUri ? (
+                  <View style={[styles.attachedBadge, { backgroundColor: colors.success + "20", borderColor: colors.success + "50" }]}>
+                    <Ionicons name="checkmark-circle" size={13} color={colors.success} />
+                    <Text style={[styles.attachedBadgeText, { color: colors.success }]}>Attached</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {receiptUri ? (
+                <View style={styles.previewContainer}>
+                  <Image source={{ uri: receiptUri }} style={styles.previewImage} resizeMode="cover" />
+                  <Pressable
+                    onPress={() => setReceiptUri(undefined)}
+                    style={styles.removePhotoBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove photo"
+                  >
+                    <Ionicons name="close-circle" size={24} color="#EF4444" />
+                  </Pressable>
+                </View>
+              ) : null}
+
+              <View style={styles.uploadActionsRow}>
+                <Pressable
+                  onPress={() => void chooseFromGallery()}
+                  style={[
+                    styles.uploadActionBtn,
+                    {
+                      backgroundColor: receiptUri ? palette.surfaceRaised : palette.accent,
+                      borderColor: palette.line,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="images-outline" size={16} color={receiptUri ? palette.text : "#000000"} />
+                  <Text style={[styles.uploadActionBtnText, { color: receiptUri ? palette.text : "#000000" }]}>
+                    {receiptUri ? "Change photo" : "Upload screenshot"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => void takeCameraPhoto()}
+                  style={[
+                    styles.uploadActionBtn,
+                    {
+                      backgroundColor: palette.surfaceRaised,
+                      borderColor: palette.line,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="camera-outline" size={16} color={palette.text} />
+                  <Text style={[styles.uploadActionBtnText, { color: palette.text }]}>Take photo</Text>
+                </Pressable>
+              </View>
+
+              {photoError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{photoError}</Text> : null}
+              {submitError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{submitError}</Text> : null}
             </View>
           ) : null}
 
           {/* I have paid Button */}
           <Pressable
-            disabled={!selectedMethodId}
-            style={[styles.primaryPayBtn, { backgroundColor: colors.primary, opacity: selectedMethodId ? 1 : 0.6, marginTop: 4 }]}
-            onPress={() => setStep("upload")}
+            disabled={!selectedMethodId || submitting}
+            style={[
+              styles.primaryPayBtn,
+              {
+                backgroundColor: colors.primary,
+                opacity: !selectedMethodId || submitting ? 0.6 : 1,
+                marginTop: 6,
+              },
+            ]}
+            onPress={() => {
+              if (!receiptUri) {
+                promptPhotoPick();
+                return;
+              }
+              void submit();
+            }}
             accessibilityRole="button"
           >
-            <Ionicons name="checkmark-circle-outline" size={19} color="#FFFFFF" />
-            <Text style={styles.primaryPayBtnText}>I have paid</Text>
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle-outline" size={19} color="#FFFFFF" />
+                <Text style={styles.primaryPayBtnText}>I have paid</Text>
+              </>
+            )}
           </Pressable>
         </ScrollView>
       </View>
@@ -1846,6 +1981,78 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontFamily: "Inter_400Regular",
     lineHeight: 18,
+  },
+  proofCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+    marginTop: 4,
+  },
+  proofHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  proofTitleBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  proofTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
+  },
+  attachedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  attachedBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  previewContainer: {
+    width: "100%",
+    height: 180,
+    borderRadius: 12,
+    overflow: "hidden",
+    position: "relative",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  removePhotoBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+  },
+  uploadActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  uploadActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+    paddingHorizontal: 10,
+  },
+  uploadActionBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
   headerBlock: {
     marginBottom: 4,
