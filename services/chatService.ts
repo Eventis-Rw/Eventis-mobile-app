@@ -29,6 +29,14 @@ export interface ChatContactUpdate {
   deviceContactId?: string;
 }
 
+export type GroupMemberRole = "OWNER" | "ADMIN" | "MEMBER";
+export type GroupMemberStatus =
+  | "ACTIVE"
+  | "PENDING_APPROVAL"
+  | "REMOVED"
+  | "LEFT"
+  | "BANNED";
+
 export interface ChatConversation {
   id: string;
   contactId: string;
@@ -39,9 +47,69 @@ export interface ChatConversation {
   muted?: boolean;
   isGroup?: boolean;
   title?: string;
+  description?: string;
+  category?: string;
+  isPublic?: boolean;
+  requiresApproval?: boolean;
+  avatarUrl?: string;
   memberCount?: number;
   memberIds?: string[];
   inviteCode?: string;
+  myRole?: GroupMemberRole;
+  myStatus?: GroupMemberStatus;
+}
+
+export interface ChatGroupMember {
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+  role: GroupMemberRole;
+  status: GroupMemberStatus;
+  joinedAt: string;
+}
+
+export interface ChatGroupSummary {
+  id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  isPublic: boolean;
+  requiresApproval: boolean;
+  avatarUrl?: string;
+  memberCount: number;
+  isMember: boolean;
+  hasPendingRequest: boolean;
+}
+
+export interface GroupSearchInput {
+  query?: string;
+  category?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface GroupSettingsInput {
+  title?: string;
+  description?: string | null;
+  category?: string | null;
+  isPublic?: boolean;
+  requiresApproval?: boolean;
+}
+
+export interface ChatPollOption {
+  id: string;
+  text: string;
+  position: number;
+  /** Who voted for this option — visible to every participant, like WhatsApp's default poll. */
+  voterIds: string[];
+}
+
+export interface ChatPoll {
+  id: string;
+  question: string;
+  createdAt: string;
+  options: ChatPollOption[];
+  totalVotes: number;
 }
 
 export interface ChatMessage {
@@ -65,6 +133,7 @@ export interface ChatMessage {
   attachmentDeferred?: boolean;
   attachmentWidth?: number;
   attachmentHeight?: number;
+  poll?: ChatPoll;
   callInfo?: {
     type: "VOICE" | "VIDEO";
     status: "MISSED" | "ENDED" | "REJECTED";
@@ -105,6 +174,7 @@ export function chatMessagePreview(
     | "attachmentMimeType"
     | "callInfo"
     | "storyReply"
+    | "poll"
   >,
 ) {
   if (message.callInfo?.status === "MISSED") {
@@ -121,6 +191,7 @@ export function chatMessagePreview(
     }
     return `Replied to story: ${message.text || "Photo"}`;
   }
+  if (message.poll) return `📊 ${message.poll.question}`;
   if (message.text) return message.text;
   if (message.audioUri) return "Voice message";
   if (message.videoUri) return "Video";
@@ -173,6 +244,13 @@ export interface ChatService {
     text: string,
   ): Promise<void>;
   deleteMessage(conversationId: string, messageId: string): Promise<void>;
+  createPoll(
+    conversationId: string,
+    question: string,
+    options: string[],
+  ): Promise<ChatMessage>;
+  votePoll(messageId: string, pollOptionId: string): Promise<ChatMessage>;
+  retractPollVote(messageId: string): Promise<ChatMessage>;
   clearConversation(conversationId: string, remove?: boolean): Promise<void>;
   setMuted(conversationId: string, muted: boolean): Promise<void>;
   setBlocked(contactId: string, blocked: boolean): Promise<void>;
@@ -195,9 +273,39 @@ export interface ChatService {
   ): Promise<ChatContact[]>;
   searchUsers(query: string, page?: number): Promise<ChatUserSearchPage>;
   acceptInvitation(token: string): Promise<ChatConversation>;
-  createGroup(title: string, memberContactIds: string[]): Promise<ChatConversation>;
+  createGroup(
+    title: string,
+    memberContactIds: string[],
+    settings?: GroupSettingsInput,
+  ): Promise<ChatConversation>;
   addMembersToGroup(conversationId: string, contactIds: string[]): Promise<ChatConversation>;
-  joinGroup(inviteCodeOrId: string): Promise<ChatConversation>;
+  searchGroups(input: GroupSearchInput): Promise<{ items: ChatGroupSummary[]; total: number }>;
+  joinGroupById(groupId: string): Promise<ChatConversation>;
+  joinGroupByInviteCode(inviteCode: string): Promise<ChatConversation>;
+  leaveGroup(conversationId: string): Promise<void>;
+  listJoinRequests(conversationId: string): Promise<ChatGroupMember[]>;
+  approveJoinRequest(conversationId: string, userId: string): Promise<void>;
+  rejectJoinRequest(conversationId: string, userId: string): Promise<void>;
+  removeGroupMember(conversationId: string, userId: string): Promise<void>;
+  setGroupMemberBan(
+    conversationId: string,
+    userId: string,
+    banned: boolean,
+  ): Promise<void>;
+  setGroupMemberRole(
+    conversationId: string,
+    userId: string,
+    role: Extract<GroupMemberRole, "ADMIN" | "MEMBER">,
+  ): Promise<void>;
+  transferGroupOwnership(conversationId: string, userId: string): Promise<void>;
+  updateGroupSettings(
+    conversationId: string,
+    input: GroupSettingsInput,
+  ): Promise<ChatConversation>;
+  updateGroupAvatar(conversationId: string, imageUri: string): Promise<ChatConversation>;
+  refreshGroup(
+    conversationId: string,
+  ): Promise<{ conversation: ChatConversation; members: ChatGroupMember[] }>;
   logCall(
     conversationId: string,
     type: "VOICE" | "VIDEO",
@@ -211,6 +319,8 @@ interface StoredChatState extends ChatSnapshot {
 }
 
 const CHAT_STATE_KEY = "@eventis_chat_demo_v1";
+/** Demo mode simulates a single device, so poll votes are tracked under this fixed id. */
+export const DEMO_SELF_ID = "me";
 let idSequence = 0;
 function localId(prefix: string) {
   return `${prefix}-${Date.now()}-${++idSequence}`;
@@ -495,7 +605,11 @@ export class MockChatService implements ChatService {
     return { ...conversation };
   }
 
-  async createGroup(title: string, memberContactIds: string[]): Promise<ChatConversation> {
+  async createGroup(
+    title: string,
+    memberContactIds: string[],
+    settings?: GroupSettingsInput,
+  ): Promise<ChatConversation> {
     const state = await this.getState();
     const groupName = title.trim() || "Eventis Group";
     const groupId = localId(`group-${Date.now()}`);
@@ -519,9 +633,14 @@ export class MockChatService implements ChatService {
       unreadCount: 0,
       isGroup: true,
       title: groupName,
+      description: settings?.description ?? undefined,
+      category: settings?.category ?? undefined,
+      isPublic: settings?.isPublic ?? false,
+      requiresApproval: settings?.requiresApproval ?? false,
       memberCount: memberContactIds.length + 1,
       memberIds: memberContactIds,
       inviteCode: code,
+      myRole: "OWNER",
     };
     const initialMessage: ChatMessage = {
       id: localId("msg"),
@@ -581,39 +700,168 @@ export class MockChatService implements ChatService {
     return { ...updatedConversation };
   }
 
-  async joinGroup(inviteCodeOrId: string): Promise<ChatConversation> {
+  async searchGroups(
+    input: GroupSearchInput,
+  ): Promise<{ items: ChatGroupSummary[]; total: number }> {
     const state = await this.getState();
-    const query = inviteCodeOrId.trim();
-    const queryLower = query.toLowerCase();
-
-    // 1. Look for existing conversation by ID, title, or invite code
-    const existing = state.conversations.find(
+    const query = input.query?.trim().toLowerCase() ?? "";
+    const matches = state.conversations.filter(
       (item) =>
         item.isGroup &&
-        (item.id === query ||
-          (item.title && item.title.toLowerCase().includes(queryLower)) ||
-          (item.inviteCode && item.inviteCode.toUpperCase() === query.toUpperCase())),
+        item.isPublic &&
+        (!query ||
+          item.title?.toLowerCase().includes(query) ||
+          item.description?.toLowerCase().includes(query)) &&
+        (!input.category || item.category?.toLowerCase() === input.category.toLowerCase()),
     );
-    if (existing) {
-      return { ...existing };
-    }
+    return {
+      items: matches.map((item) => ({
+        id: item.id,
+        title: item.title ?? "Group chat",
+        description: item.description,
+        category: item.category,
+        isPublic: item.isPublic ?? false,
+        requiresApproval: item.requiresApproval ?? false,
+        avatarUrl: item.avatarUrl,
+        memberCount: item.memberCount ?? 0,
+        isMember: true,
+        hasPendingRequest: false,
+      })),
+      total: matches.length,
+    };
+  }
 
-    // 2. Discoverable public groups catalog (e.g. Chelsea, Arsenal, Fiesta, etc.)
-    const catalog = [
-      { name: "Chelsea FC Rwanda Fans", members: ["contact-aline", "contact-kevin"] },
-      { name: "Chelsea Blues Worldwide", members: ["contact-kevin", "contact-eric"] },
-      { name: "Arsenal Supporters Kigali", members: ["contact-aline", "contact-eric"] },
-      { name: "Eventis Fiesta 2026", members: ["contact-aline", "contact-kevin"] },
-      { name: "BK Arena Fans Club", members: ["contact-kevin", "contact-eric"] },
-      { name: "Kigali Nightlife VIP", members: ["contact-aline", "contact-kevin"] },
-      { name: "Kigali Tech & Developers", members: ["contact-aline", "contact-eric"] },
+  private findGroupOrThrow(state: StoredChatState, conversationId: string) {
+    const conversation = state.conversations.find(
+      (item) => item.id === conversationId && item.isGroup,
+    );
+    if (!conversation) throw new Error("This group is no longer available.");
+    return conversation;
+  }
+
+  async joinGroupById(groupId: string): Promise<ChatConversation> {
+    const state = await this.getState();
+    const conversation = this.findGroupOrThrow(state, groupId);
+    return { ...conversation };
+  }
+
+  async joinGroupByInviteCode(inviteCode: string): Promise<ChatConversation> {
+    const state = await this.getState();
+    const code = inviteCode.trim().toUpperCase();
+    const existing = state.conversations.find(
+      (item) => item.isGroup && item.inviteCode?.toUpperCase() === code,
+    );
+    if (!existing) throw new Error("No group matches that invite code.");
+    return { ...existing };
+  }
+
+  async leaveGroup(conversationId: string): Promise<void> {
+    const state = await this.getState();
+    this.findGroupOrThrow(state, conversationId);
+    await this.persist({
+      ...state,
+      conversations: state.conversations.filter((item) => item.id !== conversationId),
+    });
+  }
+
+  async listJoinRequests(_conversationId: string): Promise<ChatGroupMember[]> {
+    return [];
+  }
+
+  async approveJoinRequest(_conversationId: string, _userId: string): Promise<void> {}
+
+  async rejectJoinRequest(_conversationId: string, _userId: string): Promise<void> {}
+
+  async removeGroupMember(conversationId: string, userId: string): Promise<void> {
+    const state = await this.getState();
+    const conversation = this.findGroupOrThrow(state, conversationId);
+    const memberIds = (conversation.memberIds ?? []).filter((id) => id !== userId);
+    await this.persist({
+      ...state,
+      conversations: state.conversations.map((item) =>
+        item.id === conversationId
+          ? { ...item, memberIds, memberCount: memberIds.length + 1 }
+          : item,
+      ),
+    });
+  }
+
+  async setGroupMemberBan(
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.removeGroupMember(conversationId, userId);
+  }
+
+  async setGroupMemberRole(_conversationId: string, _userId: string): Promise<void> {}
+
+  async transferGroupOwnership(_conversationId: string, _userId: string): Promise<void> {}
+
+  async updateGroupSettings(
+    conversationId: string,
+    input: GroupSettingsInput,
+  ): Promise<ChatConversation> {
+    const state = await this.getState();
+    const conversation = this.findGroupOrThrow(state, conversationId);
+    const updated: ChatConversation = {
+      ...conversation,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.description !== undefined ? { description: input.description ?? undefined } : {}),
+      ...(input.category !== undefined ? { category: input.category ?? undefined } : {}),
+      ...(input.isPublic !== undefined ? { isPublic: input.isPublic } : {}),
+      ...(input.requiresApproval !== undefined
+        ? { requiresApproval: input.requiresApproval }
+        : {}),
+    };
+    await this.persist({
+      ...state,
+      conversations: state.conversations.map((item) =>
+        item.id === conversationId ? updated : item,
+      ),
+    });
+    return { ...updated };
+  }
+
+  async updateGroupAvatar(conversationId: string, imageUri: string): Promise<ChatConversation> {
+    const state = await this.getState();
+    const conversation = this.findGroupOrThrow(state, conversationId);
+    const updated: ChatConversation = { ...conversation, avatarUrl: imageUri };
+    await this.persist({
+      ...state,
+      conversations: state.conversations.map((item) =>
+        item.id === conversationId ? updated : item,
+      ),
+    });
+    return { ...updated };
+  }
+
+  async refreshGroup(
+    conversationId: string,
+  ): Promise<{ conversation: ChatConversation; members: ChatGroupMember[] }> {
+    const state = await this.getState();
+    const conversation = this.findGroupOrThrow(state, conversationId);
+    const memberIds = conversation.memberIds ?? [];
+    const members: ChatGroupMember[] = [
+      {
+        userId: DEMO_SELF_ID,
+        name: "You",
+        role: conversation.myRole ?? "OWNER",
+        status: "ACTIVE",
+        joinedAt: conversation.lastMessageAt,
+      },
+      ...memberIds.map((id) => {
+        const member = state.contacts.find((c) => c.id === id);
+        return {
+          userId: id,
+          name: member?.name ?? "Eventis user",
+          avatarUrl: member?.avatarUrl,
+          role: "MEMBER" as const,
+          status: "ACTIVE" as const,
+          joinedAt: conversation.lastMessageAt,
+        };
+      }),
     ];
-
-    const match = catalog.find((g) => g.name.toLowerCase().includes(queryLower));
-    const title = match?.name || (query.charAt(0).toUpperCase() + query.slice(1));
-    const members = match?.members || ["contact-aline", "contact-kevin"];
-
-    return this.createGroup(title, members);
+    return { conversation: { ...conversation }, members };
   }
 
   async sendMessage(
@@ -682,6 +930,105 @@ export class MockChatService implements ChatService {
     return this.sendMessage(conversationId, text, {
       callInfo: { type, status, durationSec },
     });
+  }
+
+  async createPoll(
+    conversationId: string,
+    question: string,
+    options: string[],
+  ): Promise<ChatMessage> {
+    const state = await this.getState();
+    const conversation = state.conversations.find(
+      (item) => item.id === conversationId,
+    );
+    if (!conversation) throw new Error("Conversation not found.");
+    const poll: ChatPoll = {
+      id: localId("poll"),
+      question: question.trim(),
+      createdAt: new Date().toISOString(),
+      options: options.map((text, position) => ({
+        id: localId("poll-option"),
+        text: text.trim(),
+        position,
+        voterIds: [],
+      })),
+      totalVotes: 0,
+    };
+    const message: ChatMessage = {
+      id: localId("message"),
+      conversationId,
+      text: "",
+      sentAt: new Date().toISOString(),
+      direction: "outgoing",
+      status: "sent",
+      poll,
+    };
+    const conversations = state.conversations.map((item) =>
+      item.id === conversationId
+        ? {
+            ...item,
+            lastMessage: chatMessagePreview(message),
+            lastMessageAt: message.sentAt,
+            unreadCount: 0,
+          }
+        : item,
+    );
+    await this.persist({
+      ...state,
+      messages: [...state.messages, message],
+      conversations,
+    });
+    return { ...message };
+  }
+
+  private applyPollVote(
+    poll: ChatPoll,
+    pollOptionId: string | null,
+    userId: string,
+  ): ChatPoll {
+    const options = poll.options.map((option) => ({
+      ...option,
+      voterIds: option.voterIds
+        .filter((id) => id !== userId)
+        .concat(pollOptionId === option.id ? [userId] : []),
+    }));
+    return {
+      ...poll,
+      options,
+      totalVotes: options.reduce((sum, option) => sum + option.voterIds.length, 0),
+    };
+  }
+
+  async votePoll(messageId: string, pollOptionId: string): Promise<ChatMessage> {
+    const state = await this.getState();
+    const message = state.messages.find((item) => item.id === messageId);
+    if (!message?.poll) throw new Error("This poll is no longer available.");
+    if (!message.poll.options.some((option) => option.id === pollOptionId))
+      throw new Error("That option does not belong to this poll.");
+    const updated: ChatMessage = {
+      ...message,
+      poll: this.applyPollVote(message.poll, pollOptionId, DEMO_SELF_ID),
+    };
+    const messages = state.messages.map((item) =>
+      item.id === messageId ? updated : item,
+    );
+    await this.persist({ ...state, messages });
+    return { ...updated };
+  }
+
+  async retractPollVote(messageId: string): Promise<ChatMessage> {
+    const state = await this.getState();
+    const message = state.messages.find((item) => item.id === messageId);
+    if (!message?.poll) throw new Error("This poll is no longer available.");
+    const updated: ChatMessage = {
+      ...message,
+      poll: this.applyPollVote(message.poll, null, DEMO_SELF_ID),
+    };
+    const messages = state.messages.map((item) =>
+      item.id === messageId ? updated : item,
+    );
+    await this.persist({ ...state, messages });
+    return { ...updated };
   }
 
   private updatePreview(

@@ -33,7 +33,7 @@ import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useColors } from "@/hooks/useColors";
 import { useSavedOrganisers } from "@/hooks/useSavedOrganisers";
 import { organiserIdFromName } from "@/services/profileService";
-import { shareEvent } from "@/utils/shareEvent";
+import { eventShareText, shareEvent } from "@/utils/shareEvent";
 import { useAnalytics } from "@/context/AnalyticsContext";
 import type { AnalyticsSource } from "@/services/analyticsService";
 import { admissionLabel, hasTicketPrice, ticketLink } from "@/utils/admission";
@@ -148,7 +148,7 @@ export default function EventDetailScreen() {
       if (!event || sentChatIds[convId]) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSentChatIds((prev) => ({ ...prev, [convId]: true }));
-      const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+      const shareText = eventShareText(event);
       try {
         setShareError("");
         await sendMessage(convId, shareText);
@@ -165,7 +165,7 @@ export default function EventDetailScreen() {
     if (!event || !conversations.length || sendingAll) return;
     setSendingAll(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const shareText = `Check out this event: ${event.title}\n📍 ${formatEventLocation(event)}\n📅 ${formatDate(event.date)} · ${event.time}\nhttps://eventis.app/event/${event.id}`;
+    const shareText = eventShareText(event);
     try {
       setShareError("");
       for (const conv of conversations) {

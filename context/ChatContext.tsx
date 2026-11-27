@@ -22,9 +22,14 @@ import {
   type ChatContact,
   type ChatConversation,
   type ChatContactUpdate,
+  type ChatGroupMember,
+  type ChatGroupSummary,
   type ChatMessage,
   type ChatService,
   type ChatUserSearchPage,
+  type GroupMemberRole,
+  type GroupSearchInput,
+  type GroupSettingsInput,
   type PhoneLookupResult,
   type SendMessageOptions,
 } from "@/services/chatService";
@@ -81,6 +86,17 @@ interface ChatContextValue {
     text: string,
   ) => Promise<void>;
   deleteMessage: (conversationId: string, messageId: string) => Promise<void>;
+  createPoll: (
+    conversationId: string,
+    question: string,
+    options: string[],
+  ) => Promise<void>;
+  votePoll: (
+    conversationId: string,
+    messageId: string,
+    pollOptionId: string,
+  ) => Promise<void>;
+  retractPollVote: (conversationId: string, messageId: string) => Promise<void>;
   clearConversation: (
     conversationId: string,
     remove?: boolean,
@@ -108,9 +124,41 @@ interface ChatContextValue {
   markConversationRead: (conversationId: string) => Promise<void>;
   syncDeviceContacts: () => Promise<number>;
   acceptInvitation: (token: string) => Promise<ChatConversation>;
-  createGroup: (title: string, memberContactIds: string[]) => Promise<ChatConversation>;
+  createGroup: (
+    title: string,
+    memberContactIds: string[],
+    settings?: GroupSettingsInput,
+  ) => Promise<ChatConversation>;
   addMembersToGroup: (conversationId: string, contactIds: string[]) => Promise<ChatConversation>;
-  joinGroup: (inviteCodeOrId: string) => Promise<ChatConversation>;
+  searchGroups: (
+    input: GroupSearchInput,
+  ) => Promise<{ items: ChatGroupSummary[]; total: number }>;
+  joinGroupById: (groupId: string) => Promise<ChatConversation>;
+  joinGroupByInviteCode: (inviteCode: string) => Promise<ChatConversation>;
+  leaveGroup: (conversationId: string) => Promise<void>;
+  listJoinRequests: (conversationId: string) => Promise<ChatGroupMember[]>;
+  approveJoinRequest: (conversationId: string, userId: string) => Promise<void>;
+  rejectJoinRequest: (conversationId: string, userId: string) => Promise<void>;
+  removeGroupMember: (conversationId: string, userId: string) => Promise<void>;
+  setGroupMemberBan: (
+    conversationId: string,
+    userId: string,
+    banned: boolean,
+  ) => Promise<void>;
+  setGroupMemberRole: (
+    conversationId: string,
+    userId: string,
+    role: Extract<GroupMemberRole, "ADMIN" | "MEMBER">,
+  ) => Promise<void>;
+  transferGroupOwnership: (conversationId: string, userId: string) => Promise<void>;
+  updateGroupSettings: (
+    conversationId: string,
+    input: GroupSettingsInput,
+  ) => Promise<ChatConversation>;
+  updateGroupAvatar: (conversationId: string, imageUri: string) => Promise<ChatConversation>;
+  refreshGroup: (
+    conversationId: string,
+  ) => Promise<{ conversation: ChatConversation; members: ChatGroupMember[] }>;
   logCall: (
     conversationId: string,
     type: "VOICE" | "VIDEO",
@@ -261,8 +309,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const createGroup = useCallback(
-    async (title: string, memberContactIds: string[]) => {
-      const conversation = await serviceRef.current.createGroup(title, memberContactIds);
+    async (title: string, memberContactIds: string[], settings?: GroupSettingsInput) => {
+      const conversation = await serviceRef.current.createGroup(
+        title,
+        memberContactIds,
+        settings,
+      );
       await refresh(true);
       return conversation;
     },
@@ -278,13 +330,115 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [refresh],
   );
 
-  const joinGroup = useCallback(
-    async (inviteCodeOrId: string) => {
-      const conversation = await serviceRef.current.joinGroup(inviteCodeOrId);
+  const searchGroups = useCallback(
+    (input: GroupSearchInput) => serviceRef.current.searchGroups(input),
+    [],
+  );
+
+  const joinGroupById = useCallback(
+    async (groupId: string) => {
+      const conversation = await serviceRef.current.joinGroupById(groupId);
       await refresh(true);
       return conversation;
     },
     [refresh],
+  );
+
+  const joinGroupByInviteCode = useCallback(
+    async (inviteCode: string) => {
+      const conversation = await serviceRef.current.joinGroupByInviteCode(inviteCode);
+      await refresh(true);
+      return conversation;
+    },
+    [refresh],
+  );
+
+  const leaveGroup = useCallback(
+    async (conversationId: string) => {
+      await serviceRef.current.leaveGroup(conversationId);
+      await refresh(true);
+    },
+    [refresh],
+  );
+
+  const listJoinRequests = useCallback(
+    (conversationId: string) => serviceRef.current.listJoinRequests(conversationId),
+    [],
+  );
+
+  const approveJoinRequest = useCallback(
+    async (conversationId: string, userId: string) => {
+      await serviceRef.current.approveJoinRequest(conversationId, userId);
+      await refresh(true);
+    },
+    [refresh],
+  );
+
+  const rejectJoinRequest = useCallback(
+    async (conversationId: string, userId: string) => {
+      await serviceRef.current.rejectJoinRequest(conversationId, userId);
+      await refresh(true);
+    },
+    [refresh],
+  );
+
+  const removeGroupMember = useCallback(
+    async (conversationId: string, userId: string) => {
+      await serviceRef.current.removeGroupMember(conversationId, userId);
+      await refresh(true);
+    },
+    [refresh],
+  );
+
+  const setGroupMemberBan = useCallback(
+    async (conversationId: string, userId: string, banned: boolean) => {
+      await serviceRef.current.setGroupMemberBan(conversationId, userId, banned);
+      await refresh(true);
+    },
+    [refresh],
+  );
+
+  const setGroupMemberRole = useCallback(
+    async (
+      conversationId: string,
+      userId: string,
+      role: Extract<GroupMemberRole, "ADMIN" | "MEMBER">,
+    ) => {
+      await serviceRef.current.setGroupMemberRole(conversationId, userId, role);
+      await refresh(true);
+    },
+    [refresh],
+  );
+
+  const transferGroupOwnership = useCallback(
+    async (conversationId: string, userId: string) => {
+      await serviceRef.current.transferGroupOwnership(conversationId, userId);
+      await refresh(true);
+    },
+    [refresh],
+  );
+
+  const updateGroupSettings = useCallback(
+    async (conversationId: string, input: GroupSettingsInput) => {
+      const conversation = await serviceRef.current.updateGroupSettings(conversationId, input);
+      await refresh(true);
+      return conversation;
+    },
+    [refresh],
+  );
+
+  const updateGroupAvatar = useCallback(
+    async (conversationId: string, imageUri: string) => {
+      const conversation = await serviceRef.current.updateGroupAvatar(conversationId, imageUri);
+      await refresh(true);
+      return conversation;
+    },
+    [refresh],
+  );
+
+  const refreshGroup = useCallback(
+    (conversationId: string) => serviceRef.current.refreshGroup(conversationId),
+    [],
   );
 
   const logCall = useCallback(
@@ -404,6 +558,27 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const deleteMessage = useCallback(
     async (conversationId: string, messageId: string) => {
       await serviceRef.current.deleteMessage(conversationId, messageId);
+      await Promise.all([loadMessages(conversationId), refresh()]);
+    },
+    [loadMessages, refresh],
+  );
+  const createPoll = useCallback(
+    async (conversationId: string, question: string, options: string[]) => {
+      await serviceRef.current.createPoll(conversationId, question, options);
+      await Promise.all([loadMessages(conversationId), refresh()]);
+    },
+    [loadMessages, refresh],
+  );
+  const votePoll = useCallback(
+    async (conversationId: string, messageId: string, pollOptionId: string) => {
+      await serviceRef.current.votePoll(messageId, pollOptionId);
+      await Promise.all([loadMessages(conversationId), refresh()]);
+    },
+    [loadMessages, refresh],
+  );
+  const retractPollVote = useCallback(
+    async (conversationId: string, messageId: string) => {
+      await serviceRef.current.retractPollVote(messageId);
       await Promise.all([loadMessages(conversationId), refresh()]);
     },
     [loadMessages, refresh],
@@ -733,6 +908,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       sendMessage,
       editMessage,
       deleteMessage,
+      createPoll,
+      votePoll,
+      retractPollVote,
       clearConversation,
       setMuted,
       setBlocked,
@@ -752,7 +930,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       acceptInvitation,
       createGroup,
       addMembersToGroup,
-      joinGroup,
+      searchGroups,
+      joinGroupById,
+      joinGroupByInviteCode,
+      leaveGroup,
+      listJoinRequests,
+      approveJoinRequest,
+      rejectJoinRequest,
+      removeGroupMember,
+      setGroupMemberBan,
+      setGroupMemberRole,
+      transferGroupOwnership,
+      updateGroupSettings,
+      updateGroupAvatar,
+      refreshGroup,
       logCall,
     }),
     [
@@ -772,6 +963,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       sendMessage,
       editMessage,
       deleteMessage,
+      createPoll,
+      votePoll,
+      retractPollVote,
       clearConversation,
       setMuted,
       setBlocked,
@@ -791,7 +985,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       acceptInvitation,
       createGroup,
       addMembersToGroup,
-      joinGroup,
+      searchGroups,
+      joinGroupById,
+      joinGroupByInviteCode,
+      leaveGroup,
+      listJoinRequests,
+      approveJoinRequest,
+      rejectJoinRequest,
+      removeGroupMember,
+      setGroupMemberBan,
+      setGroupMemberRole,
+      transferGroupOwnership,
+      updateGroupSettings,
+      updateGroupAvatar,
+      refreshGroup,
       logCall,
     ],
   );
