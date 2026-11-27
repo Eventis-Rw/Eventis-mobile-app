@@ -380,13 +380,13 @@ function ManualSubscribeCheckout() {
             </View>
 
             <Text style={[styles.statusTitle, { color: palette.text, fontSize: 24, letterSpacing: -0.3 }]}>
-              Payment submitted
+              You're all set!
             </Text>
 
             <Text style={[styles.statusText, { color: palette.muted, fontSize: 14.5, lineHeight: 23 }]}>
-              Your payment of <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>{formattedAmount}</Text> for the <Text style={{ fontFamily: "Inter_600SemiBold", color: palette.text }}>{submission.plan.name}</Text> package has been received.
+              We've received your payment of <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>{formattedAmount}</Text> for <Text style={{ fontFamily: "Inter_600SemiBold", color: palette.text }}>{submission.plan.name}</Text>!
               {"\n\n"}
-              Our team is reviewing it. You will be notified once review is done.
+              Our team is reviewing your confirmation right now, and we'll let you know as soon as your organiser access is activated so you can start creating events.
               {"\n\n"}
               <Text style={{ fontSize: 13, color: palette.muted }}>Reference: #{submission.reference}</Text>
             </Text>
