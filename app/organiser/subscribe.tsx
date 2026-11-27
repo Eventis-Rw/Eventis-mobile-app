@@ -617,109 +617,102 @@ function ManualSubscribeCheckout() {
                 <Text style={[styles.nbTitle, { color: palette.accent }]}>NB:</Text>
               </View>
               <Text style={[styles.nbBodyText, { color: palette.text }]}>
-                Please keep a screenshot of your payment confirmation message for verification. Upload your screenshot below as proof of payment to activate your package.
+                Please keep a screenshot of your payment confirmation message for verification. Tap <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>I have paid</Text> below to upload your screenshot or take a photo as proof of payment.
               </Text>
             </View>
           ) : null}
 
-          {/* Proof of Payment Upload Card */}
-          {selectedMethod && activePlan ? (
-            <View style={[styles.proofCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-              <View style={styles.proofHeaderRow}>
-                <View style={styles.proofTitleBlock}>
-                  <Ionicons name="document-attach-outline" size={18} color={palette.accent} />
-                  <Text style={[styles.proofTitle, { color: palette.text }]}>Proof of payment</Text>
-                </View>
-                {receiptUri ? (
-                  <View style={[styles.attachedBadge, { backgroundColor: colors.success + "20", borderColor: colors.success + "50" }]}>
-                    <Ionicons name="checkmark-circle" size={13} color={colors.success} />
-                    <Text style={[styles.attachedBadgeText, { color: colors.success }]}>Attached</Text>
-                  </View>
-                ) : null}
-              </View>
+          {/* I have paid Button & Screenshot Upload Area */}
+          {!receiptUri ? (
+            <View style={styles.iHavePaidArea}>
+              <Pressable
+                disabled={!selectedMethodId || submitting}
+                style={[
+                  styles.primaryPayBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: !selectedMethodId || submitting ? 0.6 : 1,
+                  },
+                ]}
+                onPress={() => promptPhotoPick()}
+                accessibilityRole="button"
+              >
+                <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.primaryPayBtnText}>I have paid</Text>
+              </Pressable>
 
-              {receiptUri ? (
-                <View style={styles.previewContainer}>
-                  <Image source={{ uri: receiptUri }} style={styles.previewImage} resizeMode="cover" />
-                  <Pressable
-                    onPress={() => setReceiptUri(undefined)}
-                    style={styles.removePhotoBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="Remove photo"
-                  >
-                    <Ionicons name="close-circle" size={24} color="#EF4444" />
-                  </Pressable>
-                </View>
-              ) : null}
-
-              <View style={styles.uploadActionsRow}>
+              <View style={styles.photoPickerSubRow}>
                 <Pressable
                   onPress={() => void chooseFromGallery()}
-                  style={[
-                    styles.uploadActionBtn,
-                    {
-                      backgroundColor: receiptUri ? palette.surfaceRaised : palette.accent,
-                      borderColor: palette.line,
-                    },
-                  ]}
+                  style={styles.photoPickerSubBtn}
                   accessibilityRole="button"
+                  accessibilityLabel="Upload screenshot"
                 >
-                  <Ionicons name="images-outline" size={16} color={receiptUri ? palette.text : "#000000"} />
-                  <Text style={[styles.uploadActionBtnText, { color: receiptUri ? palette.text : "#000000" }]}>
-                    {receiptUri ? "Change photo" : "Upload screenshot"}
-                  </Text>
+                  <Ionicons name="images-outline" size={15} color={palette.accent} />
+                  <Text style={[styles.photoPickerSubText, { color: palette.accent }]}>Upload screenshot</Text>
                 </Pressable>
-
+                <Text style={[styles.photoPickerSubDot, { color: palette.muted }]}>•</Text>
                 <Pressable
                   onPress={() => void takeCameraPhoto()}
-                  style={[
-                    styles.uploadActionBtn,
-                    {
-                      backgroundColor: palette.surfaceRaised,
-                      borderColor: palette.line,
-                    },
-                  ]}
+                  style={styles.photoPickerSubBtn}
                   accessibilityRole="button"
+                  accessibilityLabel="Take photo"
                 >
-                  <Ionicons name="camera-outline" size={16} color={palette.text} />
-                  <Text style={[styles.uploadActionBtnText, { color: palette.text }]}>Take photo</Text>
+                  <Ionicons name="camera-outline" size={15} color={palette.accent} />
+                  <Text style={[styles.photoPickerSubText, { color: palette.accent }]}>Take photo</Text>
                 </Pressable>
               </View>
 
-              {photoError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{photoError}</Text> : null}
-              {submitError ? <Text style={[styles.errorText, { color: colors.destructive }]}>{submitError}</Text> : null}
+              {photoError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{photoError}</Text> : null}
+              {submitError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{submitError}</Text> : null}
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.iHavePaidArea}>
+              {/* Attached screenshot preview bar */}
+              <View style={[styles.attachedScreenshotBar, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+                <Image source={{ uri: receiptUri }} style={styles.attachedThumbnail} resizeMode="cover" />
+                <View style={{ flex: 1, paddingLeft: 10 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Ionicons name="checkmark-circle" size={15} color={colors.success} />
+                    <Text style={[styles.attachedTitle, { color: palette.text }]}>Screenshot attached</Text>
+                  </View>
+                  <Text style={[styles.attachedSub, { color: palette.muted }]}>Tap submit below</Text>
+                </View>
+                <Pressable onPress={() => promptPhotoPick()} style={styles.changePhotoBtn} accessibilityRole="button">
+                  <Text style={[styles.changePhotoText, { color: palette.accent }]}>Change</Text>
+                </Pressable>
+                <Pressable onPress={() => setReceiptUri(undefined)} style={styles.removePhotoSmallBtn} accessibilityRole="button">
+                  <Ionicons name="close" size={18} color={palette.muted} />
+                </Pressable>
+              </View>
 
-          {/* I have paid Button */}
-          <Pressable
-            disabled={!selectedMethodId || submitting}
-            style={[
-              styles.primaryPayBtn,
-              {
-                backgroundColor: colors.primary,
-                opacity: !selectedMethodId || submitting ? 0.6 : 1,
-                marginTop: 6,
-              },
-            ]}
-            onPress={() => {
-              if (!receiptUri) {
-                promptPhotoPick();
-                return;
-              }
-              void submit();
-            }}
-            accessibilityRole="button"
-          >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={19} color="#FFFFFF" />
-                <Text style={styles.primaryPayBtnText}>I have paid</Text>
-              </>
-            )}
-          </Pressable>
+              <Pressable
+                disabled={!selectedMethodId || submitting}
+                style={[
+                  styles.primaryPayBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: !selectedMethodId || submitting ? 0.6 : 1,
+                    marginTop: 4,
+                  },
+                ]}
+                onPress={() => void submit()}
+                accessibilityRole="button"
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-done" size={20} color="#FFFFFF" />
+                    <Text style={styles.primaryPayBtnText}>Submit payment for review</Text>
+                  </>
+                )}
+              </Pressable>
+
+              {photoError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{photoError}</Text> : null}
+              {submitError ? <Text style={[styles.errorText, { color: colors.destructive, textAlign: "center" }]}>{submitError}</Text> : null}
+            </View>
+          )}
         </ScrollView>
       </View>
     );
@@ -1982,77 +1975,61 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 18,
   },
-  proofCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    gap: 10,
-    marginTop: 4,
-  },
-  proofHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  proofTitleBlock: {
-    flexDirection: "row",
-    alignItems: "center",
+  iHavePaidArea: {
+    marginTop: 10,
     gap: 8,
   },
-  proofTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.2,
-  },
-  attachedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  attachedBadgeText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
-  previewContainer: {
-    width: "100%",
-    height: 180,
-    borderRadius: 12,
-    overflow: "hidden",
-    position: "relative",
-  },
-  previewImage: {
-    width: "100%",
-    height: "100%",
-  },
-  removePhotoBtn: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-  },
-  uploadActionsRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  uploadActionBtn: {
-    flex: 1,
+  photoPickerSubRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 6,
-    paddingHorizontal: 10,
+    gap: 8,
+    paddingVertical: 4,
   },
-  uploadActionBtnText: {
+  photoPickerSubBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+  },
+  photoPickerSubText: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
+  },
+  photoPickerSubDot: {
+    fontSize: 12,
+  },
+  attachedScreenshotBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  attachedThumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+  },
+  attachedTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+  },
+  attachedSub: {
+    fontSize: 11.5,
+    fontFamily: "Inter_400Regular",
+  },
+  changePhotoBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  changePhotoText: {
+    fontSize: 12.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  removePhotoSmallBtn: {
+    padding: 6,
   },
   headerBlock: {
     marginBottom: 4,
