@@ -12,10 +12,12 @@ export function OrganiserFlowHeader({
   title,
   step,
   canGoBack = true,
+  onBack,
 }: {
   title: string;
   step: number;
   canGoBack?: boolean;
+  onBack?: () => void;
 }) {
   const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
@@ -26,7 +28,15 @@ export function OrganiserFlowHeader({
       <View style={styles.row}>
         {canGoBack ? (
           <Pressable
-            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
+            onPress={() => {
+              if (onBack) {
+                onBack();
+              } else if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace("/(tabs)" as any);
+              }
+            }}
             style={({ pressed }) => [styles.back, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }, pressed && { backgroundColor: palette.surfacePressed }]}
             accessibilityRole="button"
             accessibilityLabel="Go back"

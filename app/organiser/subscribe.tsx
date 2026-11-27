@@ -347,14 +347,8 @@ function ManualSubscribeCheckout() {
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
         <OrganiserAtmosphere />
         <Stack.Screen options={{ gestureEnabled: !submitting }} />
-        <OrganiserFlowHeader title="Upload receipt" step={2} canGoBack={false} />
+        <OrganiserFlowHeader title="Upload receipt" step={2} canGoBack={!submitting} onBack={() => setStep("method")} />
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
-          {!submitting ? (
-            <Pressable onPress={() => setStep("method")} style={styles.backLink} accessibilityRole="button">
-              <Ionicons name="chevron-back" size={16} color={palette.accent} />
-              <Text style={[styles.backLinkText, { color: palette.accent }]}>Back to payment details</Text>
-            </Pressable>
-          ) : null}
           <Text style={[styles.title, { color: palette.text, fontSize: 22 }]}>Add your payment screenshot</Text>
           <Text style={[styles.subtitle, { color: palette.muted }]}>
             A clear screenshot of the mobile money confirmation is enough. An admin reviews it and your organiser
@@ -398,12 +392,8 @@ function ManualSubscribeCheckout() {
     return (
       <View style={[styles.root, { backgroundColor: palette.canvas }]}>
         <OrganiserAtmosphere />
-        <OrganiserFlowHeader title="Pay and continue" step={2} canGoBack={false} />
+        <OrganiserFlowHeader title="Pay and continue" step={2} canGoBack={true} onBack={() => setStep("plan")} />
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
-          <Pressable onPress={() => setStep("plan")} style={styles.backLink} accessibilityRole="button">
-            <Ionicons name="chevron-back" size={16} color={palette.accent} />
-            <Text style={[styles.backLinkText, { color: palette.accent }]}>Back to plans</Text>
-          </Pressable>
           {methodsError && !methods.length ? (
             <OrganiserSurface style={[styles.errorCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
               <Ionicons name="cloud-offline-outline" size={36} color={colors.destructive} />
