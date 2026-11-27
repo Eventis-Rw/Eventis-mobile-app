@@ -118,6 +118,16 @@ function ManualSubscribeCheckout() {
   const [plansError, setPlansError] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
+  const sortedPlans = useMemo(() => {
+    const ORDER: Record<SubscriptionInterval, number> = {
+      month: 1, // Hero 1-Month at the top
+      post: 2,
+      quarter: 3,
+      year: 4,
+    };
+    return [...plans].sort((a, b) => (ORDER[a.interval] ?? 99) - (ORDER[b.interval] ?? 99));
+  }, [plans]);
+
   const [step, setStep] = useState<RealStep>("plan");
   const [methods, setMethods] = useState<ManualPaymentMethod[]>([]);
   const [methodsError, setMethodsError] = useState<string | null>(null);
@@ -457,10 +467,16 @@ function ManualSubscribeCheckout() {
       <OrganiserAtmosphere />
       <OrganiserFlowHeader title="Choose access" step={2} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.title, { color: palette.text }]}>Choose your organiser access</Text>
-        <Text style={[styles.subtitle, { color: palette.muted }]}>
-          Pay once for a few posts, or subscribe to keep posting. Complete payment with Mobile Money.
-        </Text>
+        <View style={styles.headerBlock}>
+          <View style={styles.kickerRow}>
+            <View style={styles.kickerDot} />
+            <Text style={[styles.kickerText, { color: palette.accent }]}>EVENTIS ORGANISER PASS</Text>
+          </View>
+          <Text style={[styles.title, { color: palette.text }]}>Choose your organiser access</Text>
+          <Text style={[styles.subtitle, { color: palette.muted }]}>
+            Pick the pass that fits your hosting needs. The 1-month plan is recommended for active organizers.
+          </Text>
+        </View>
 
         {plansLoading ? (
           <View style={styles.inlineState}>
@@ -475,16 +491,16 @@ function ManualSubscribeCheckout() {
               <Text style={styles.smallBtnText}>Try again</Text>
             </Pressable>
           </OrganiserSurface>
-        ) : plans.length === 0 ? (
+        ) : sortedPlans.length === 0 ? (
           <OrganiserSurface style={[styles.errorCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
             <Ionicons name="pricetags-outline" size={36} color={colors.mutedForeground} />
             <Text style={[styles.statusText, { color: colors.mutedForeground }]}>No plans are available right now.</Text>
           </OrganiserSurface>
         ) : (
-          <View style={{ gap: 12 }}>
-            {plans.map((plan) => {
+          <View style={{ gap: 14 }}>
+            {sortedPlans.map((plan) => {
               const selected = plan.id === selectedPlanId;
-              const isRecommended = Boolean(plan.recommended || plan.interval === "month");
+              const isRecommended = plan.interval === "month";
               return (
                 <Pressable
                   key={plan.id}
@@ -496,80 +512,85 @@ function ManualSubscribeCheckout() {
                   }}
                   accessibilityRole="radio"
                   accessibilityState={{ selected }}
+                  style={{ borderRadius: 20 }}
                 >
-                  <OrganiserSurface
+                  <View
                     style={[
-                      styles.mainPlanCard,
+                      styles.premiumCard,
                       {
-                        padding: 18,
                         backgroundColor: selected
-                          ? (palette.dark ? "rgba(56,189,248,0.08)" : "rgba(14,165,233,0.06)")
+                          ? (palette.dark ? "rgba(56,189,248,0.07)" : "rgba(14,165,233,0.05)")
                           : palette.surface,
                         borderColor: selected
                           ? palette.accent
                           : isRecommended
-                          ? (palette.dark ? "rgba(56,189,248,0.35)" : "rgba(14,165,233,0.35)")
+                          ? (palette.dark ? "rgba(56,189,248,0.38)" : "rgba(14,165,233,0.35)")
                           : palette.line,
-                        borderWidth: selected ? 2 : isRecommended ? 1.5 : 1,
+                        borderWidth: selected ? 2 : 1,
                       },
                     ]}
                   >
-                    <View style={styles.planCardHeader}>
-                      <View style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
-                        <View style={styles.planTitleRow}>
-                          <Text style={[styles.planCardTitle, { color: palette.text, fontSize: 18 }]}>{plan.name}</Text>
-                          {isRecommended ? (
-                            <View style={[styles.recommendedBadge, { backgroundColor: palette.accent + "22", borderColor: palette.accent + "55" }]}>
-                              <Ionicons name="sparkles" size={11} color={palette.accent} />
-                              <Text style={[styles.recommendedBadgeText, { color: palette.accent }]}>RECOMMENDED</Text>
-                            </View>
-                          ) : plan.badge ? (
-                            <View style={styles.planBadgeWrap}>
-                              <Text style={[styles.planBadgeText, { color: palette.accent }]}>{plan.badge}</Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        {plan.description ? (
-                          <Text style={[styles.planCardDesc, { color: palette.muted, marginTop: 4, lineHeight: 18 }]}>
-                            {plan.description}
-                          </Text>
+                    {/* Header Row with Plan Name, Badges, and Radio */}
+                    <View style={styles.cardHeaderRow}>
+                      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", paddingRight: 8 }}>
+                        <Text style={[styles.cardPlanTitle, { color: palette.text }]}>{plan.name}</Text>
+                        {isRecommended ? (
+                          <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
+                            <Ionicons name="sparkles" size={10} color="#000000" />
+                            <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
+                          </View>
+                        ) : plan.badge && plan.badge !== "Recommended" ? (
+                          <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
+                            <Text style={[styles.subBadgeText, { color: palette.muted }]}>{plan.badge}</Text>
+                          </View>
                         ) : null}
                       </View>
+
                       <View
                         style={[
-                          styles.planRadio,
+                          styles.premiumRadio,
                           {
                             borderColor: selected ? palette.accent : palette.line,
-                            backgroundColor: selected ? (palette.dark ? "rgba(56,189,248,0.15)" : "rgba(14,165,233,0.12)") : "transparent",
+                            backgroundColor: selected ? (palette.dark ? "rgba(56,189,248,0.18)" : "rgba(14,165,233,0.12)") : "transparent",
                           },
                         ]}
                       >
-                        {selected ? <View style={[styles.planRadioDot, { backgroundColor: palette.accent }]} /> : null}
+                        {selected ? <View style={[styles.premiumRadioDot, { backgroundColor: palette.accent }]} /> : null}
                       </View>
                     </View>
 
-                    <View style={styles.planCardPriceRow}>
-                      <Text style={[styles.priceCurrency, { color: palette.accent, fontSize: 16 }]}>RWF</Text>
-                      <Text style={[styles.priceNumber, { color: palette.text, fontSize: 26, letterSpacing: -0.5 }]}>
+                    {/* Subtitle / Description */}
+                    {plan.description ? (
+                      <Text style={[styles.cardPlanDesc, { color: palette.muted }]}>
+                        {plan.description}
+                      </Text>
+                    ) : null}
+
+                    {/* Price section */}
+                    <View style={styles.cardPriceRow}>
+                      <Text style={[styles.cardPriceCurrency, { color: palette.accent }]}>RWF</Text>
+                      <Text style={[styles.cardPriceAmount, { color: palette.text }]}>
                         {plan.price.toLocaleString()}
                       </Text>
-                      <Text style={[styles.priceSubtext, { color: palette.muted, marginTop: 0, alignSelf: "baseline" }]}>
+                      <Text style={[styles.cardPricePeriod, { color: palette.muted }]}>
                         {plan.interval === "post" ? "/ post" : plan.interval === "month" ? "/ month" : plan.interval === "quarter" ? "/ 3 months" : "/ year"}
                       </Text>
                     </View>
 
-                    {selected && plan.features && plan.features.length > 0 ? (
-                      <View style={styles.planFeaturesWrap}>
-                        <View style={[styles.planFeaturesDivider, { backgroundColor: palette.line }]} />
-                        {plan.features.map((feature, idx) => (
-                          <View key={idx} style={styles.planFeatureRow}>
-                            <Ionicons name="checkmark-circle" size={16} color={palette.accent} />
-                            <Text style={[styles.planFeatureText, { color: palette.text }]}>{feature}</Text>
+                    {/* Feature items: displayed on 1-month recommended tier or whenever selected */}
+                    {(isRecommended || selected) && plan.features && plan.features.length > 0 ? (
+                      <View style={[styles.cardFeaturesWrap, { borderTopColor: palette.line }]}>
+                        {plan.features.slice(0, selected ? plan.features.length : 3).map((feat, idx) => (
+                          <View key={idx} style={styles.cardFeatureRow}>
+                            <View style={[styles.cardFeatureCheck, { backgroundColor: palette.accent + "18" }]}>
+                              <Ionicons name="checkmark" size={11} color={palette.accent} />
+                            </View>
+                            <Text style={[styles.cardFeatureText, { color: palette.text }]}>{feat}</Text>
                           </View>
                         ))}
                       </View>
                     ) : null}
-                  </OrganiserSurface>
+                  </View>
                 </Pressable>
               );
             })}
@@ -904,14 +925,14 @@ function DemoSubscribeCheckout() {
                       <Text style={[styles.planCardTitle, { color: palette.text }]}>
                         {activePlan.name} access
                       </Text>
-                      {activePlan.recommended || activePlan.interval === "month" ? (
-                        <View style={[styles.recommendedBadge, { backgroundColor: palette.accent + "22", borderColor: palette.accent + "55" }]}>
-                          <Ionicons name="sparkles" size={11} color={palette.accent} />
-                          <Text style={[styles.recommendedBadgeText, { color: palette.accent }]}>RECOMMENDED</Text>
+                      {activePlan.interval === "month" ? (
+                        <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
+                          <Ionicons name="sparkles" size={10} color="#000000" />
+                          <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
                         </View>
-                      ) : activePlan.badge ? (
-                        <View style={styles.planBadgeWrap}>
-                          <Text style={[styles.planBadgeText, { color: palette.accent }]}>{activePlan.badge}</Text>
+                      ) : activePlan.badge && activePlan.badge !== "Recommended" ? (
+                        <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
+                          <Text style={[styles.subBadgeText, { color: palette.muted }]}>{activePlan.badge}</Text>
                         </View>
                       ) : null}
                     </View>
@@ -1464,6 +1485,111 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     marginLeft: -2,
+  },
+  headerBlock: {
+    marginBottom: 4,
+  },
+  premiumCard: {
+    borderRadius: 20,
+    padding: 18,
+    gap: 10,
+  },
+  cardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardPlanTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.3,
+  },
+  heroBadgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 5,
+  },
+  heroBadgeText: {
+    fontSize: 9.5,
+    fontFamily: "Inter_700Bold",
+    color: "#000000",
+    letterSpacing: 0.6,
+  },
+  subBadgePill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 5,
+    borderWidth: 1,
+  },
+  subBadgeText: {
+    fontSize: 9.5,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.3,
+  },
+  premiumRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  premiumRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  cardPlanDesc: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+    marginTop: -2,
+  },
+  cardPriceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+    marginTop: 2,
+  },
+  cardPriceCurrency: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  cardPriceAmount: {
+    fontSize: 27,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.6,
+  },
+  cardPricePeriod: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+  },
+  cardFeaturesWrap: {
+    borderTopWidth: 1,
+    paddingTop: 12,
+    marginTop: 2,
+    gap: 8,
+  },
+  cardFeatureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  cardFeatureCheck: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardFeatureText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+    lineHeight: 18,
   },
   // Main plan card
   mainPlanCard: {
