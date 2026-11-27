@@ -488,13 +488,16 @@ export default function HomeScreen() {
         visible={showOrganizerModal}
         transparent
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={() => setShowOrganizerModal(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowOrganizerModal(false)}
-        >
+        <View style={styles.modalOverlay}>
           <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowOrganizerModal(false)}
+            accessibilityLabel="Dismiss modal"
+          />
+          <View
             style={[
               styles.modalSheet,
               {
@@ -503,7 +506,6 @@ export default function HomeScreen() {
                 paddingBottom: Math.max(insets.bottom, 16) + 16,
               },
             ]}
-            onPress={(e) => e.stopPropagation()}
           >
             <View style={[styles.modalHandle, { backgroundColor: colors.primary + "80" }]} />
             <View
@@ -567,8 +569,8 @@ export default function HomeScreen() {
             >
               <Text style={[styles.modalDismiss, { color: colors.foreground }]}>Maybe later</Text>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );

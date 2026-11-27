@@ -197,7 +197,7 @@ export function EventInteractions({ event, viewer, onCommentCount }: {
       </Pressable>
     </View>
     {error && !open ? <Text style={[styles.error, { color: "#d33" }]}>{error}</Text> : null}
-    <Modal visible={open} animationType="slide" transparent onRequestClose={closeComments}>
+    <Modal visible={open} animationType="slide" transparent statusBarTranslucent onRequestClose={closeComments}>
       <KeyboardAvoidingView style={styles.backdrop} behavior="padding" automaticOffset={Platform.OS !== "web"}>
         <Pressable style={StyleSheet.absoluteFill} onPress={closeComments} accessibilityRole="button" accessibilityLabel="Close comments" />
         <View style={[styles.sheet, { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 16) }]}>

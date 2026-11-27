@@ -526,15 +526,23 @@ export default function ChatScreen() {
         visible={actionSheetOpen}
         transparent
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={() => setActionSheetOpen(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setActionSheetOpen(false)}
-        >
+        <View style={styles.modalOverlay}>
           <Pressable
-            style={[styles.modalSheet, { backgroundColor: colors.card }]}
-            onPress={(e) => e.stopPropagation()}
+            style={StyleSheet.absoluteFill}
+            onPress={() => setActionSheetOpen(false)}
+            accessibilityLabel="Dismiss actions"
+          />
+          <View
+            style={[
+              styles.modalSheet,
+              {
+                backgroundColor: colors.card,
+                paddingBottom: Math.max(insets.bottom, 16) + 12,
+              },
+            ]}
           >
             <View style={styles.sheetHandle} />
             <Text style={[styles.sheetTitle, { color: colors.foreground }]}>
@@ -729,8 +737,8 @@ export default function ChatScreen() {
                 Cancel
               </Text>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Create Group Modal */}
@@ -738,6 +746,7 @@ export default function ChatScreen() {
         visible={createGroupOpen}
         animationType="slide"
         transparent
+        statusBarTranslucent
         onRequestClose={() => setCreateGroupOpen(false)}
       >
         <KeyboardAvoidingView
@@ -875,6 +884,7 @@ export default function ChatScreen() {
         visible={joinGroupOpen}
         animationType="slide"
         transparent
+        statusBarTranslucent
         onRequestClose={() => setJoinGroupOpen(false)}
       >
         <KeyboardAvoidingView

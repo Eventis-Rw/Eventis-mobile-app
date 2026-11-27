@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { useChatColors } from "@/hooks/useChatColors";
 
 export interface ChatAction {
@@ -36,6 +37,7 @@ export function ChatActionSheet({
   onClose: () => void;
 }) {
   const colors = useChatColors();
+  const insets = useAppSafeAreaInsets();
   const isGrid = layout === "grid";
 
   return (
@@ -43,9 +45,10 @@ export function ChatActionSheet({
       visible={visible}
       transparent
       animationType="slide"
+      statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={[styles.overlay, { backgroundColor: "rgba(0, 0, 0, 0.52)" }]}>
+      <View style={[styles.overlay, { backgroundColor: "rgba(0, 0, 0, 0.55)" }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
@@ -58,6 +61,7 @@ export function ChatActionSheet({
             {
               backgroundColor: colors.card,
               borderColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, 16) + 12,
             },
           ]}
         >
@@ -233,7 +237,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: Platform.OS === "ios" ? 36 : 24,
     elevation: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },

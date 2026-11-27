@@ -471,23 +471,24 @@ function TabLayout() {
         visible={showOrganizerSheet}
         transparent
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={() => setShowOrganizerSheet(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowOrganizerSheet(false)}
-        >
+        <View style={styles.modalOverlay}>
           <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowOrganizerSheet(false)}
+            accessibilityLabel="Dismiss modal"
+          />
+          <View
             style={[
               styles.modalSheet,
               {
                 backgroundColor: colors.background,
                 borderColor: `${colors.primary}55`,
                 paddingBottom: Math.max(insets.bottom, 16) + 16,
-                overflow: "hidden",
               },
             ]}
-            onPress={(e) => e.stopPropagation()}
           >
             <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
             {isRestoringOrganiser ? (
@@ -591,8 +592,8 @@ function TabLayout() {
               <Text style={[styles.modalDismiss, { color: colors.foreground }]}>Maybe later</Text>
             </Pressable>
             </>}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </>
   );
