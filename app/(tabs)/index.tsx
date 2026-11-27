@@ -354,10 +354,33 @@ export default function HomeScreen() {
             >
               <View style={styles.headerRow}>
                 <View style={styles.leftActions}>
+                  {/* Dedicated Profile Avatar Button -> goes to Profile & Settings */}
+                  <Pressable
+                    onPress={() => router.push("/(tabs)/profile" as any)}
+                    style={[styles.profileAvatarBtn, { borderColor: colors.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open profile and settings"
+                  >
+                    {user?.avatarUrl ? (
+                      <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />
+                    ) : user?.username ? (
+                      <View style={[styles.avatarLetterWrap, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.avatarLetterText}>
+                          {user.username.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.avatarLetterWrap, { backgroundColor: colors.secondary }]}>
+                        <Ionicons name="person" size={17} color={colors.foreground} />
+                      </View>
+                    )}
+                  </Pressable>
+
+                  {/* Distinct Organizer / Dashboard Pill */}
                   <Pressable
                     onPress={handleOrganizerPress}
                     style={[
-                      styles.combinedProfilePill,
+                      styles.organizerPill,
                       {
                         backgroundColor: organizerConfig.bg,
                         borderColor: organizerConfig.border,
@@ -366,25 +389,13 @@ export default function HomeScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={organizerConfig.label}
                   >
-                    {(user?.organisation?.logoUrl || user?.avatarUrl) ? (
-                      <Image source={{ uri: user?.organisation?.logoUrl || user?.avatarUrl }} style={styles.combinedAvatarImg} />
-                    ) : (user?.organisation?.name || user?.username) ? (
-                      <View style={[styles.combinedAvatarLetterWrap, { backgroundColor: colors.primary }]}>
-                        <Text style={styles.combinedAvatarLetterText}>
-                          {(user?.organisation?.name || user?.username || "U").charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.combinedAvatarLetterWrap, { backgroundColor: colors.primary }]}>
-                        <Ionicons name="person" size={13} color="#FFFFFF" />
-                      </View>
-                    )}
-                    <Text style={[styles.combinedProfileText, { color: organizerConfig.color }]}>
+                    <Ionicons name={organizerConfig.icon} size={14} color={organizerConfig.color} />
+                    <Text style={[styles.organizerPillText, { color: organizerConfig.color }]}>
                       {organizerConfig.label}
                     </Text>
                     <Ionicons
                       name="chevron-forward"
-                      size={12}
+                      size={11}
                       color={organizerConfig.color}
                       style={{ opacity: 0.6 }}
                     />
@@ -727,39 +738,46 @@ const styles = StyleSheet.create({
   leftActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 9,
   },
-  combinedProfilePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
+  profileAvatarBtn: {
+    width: 38,
     height: 38,
-    paddingLeft: 4,
-    paddingRight: 11,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  combinedAvatarImg: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-  combinedAvatarLetterWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
-  combinedAvatarLetterText: {
-    fontSize: 13,
+  avatarImg: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 19,
+  },
+  avatarLetterWrap: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarLetterText: {
+    fontSize: 14.5,
     fontFamily: "Inter_700Bold",
     color: "#FFFFFF",
   },
-  combinedProfileText: {
+  organizerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 11,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  organizerPillText: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.2,
+    fontFamily: "Inter_600SemiBold",
+    letterSpacing: -0.1,
   },
   headerActions: {
     flexDirection: "row",

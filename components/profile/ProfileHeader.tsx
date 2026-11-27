@@ -32,6 +32,7 @@ interface ProfileHeaderProps {
   /** Only shown for business accounts, from the actual verification record. */
   verificationStatus?: BusinessVerificationStatus;
   onEditProfile: () => void;
+  onOpenSettings?: () => void;
   onOpenOrganiser?: () => void;
   isPublisher?: boolean;
 }
@@ -48,6 +49,7 @@ export function ProfileHeader({
   location,
   verificationStatus,
   onEditProfile,
+  onOpenSettings,
   onOpenOrganiser,
   isPublisher,
 }: ProfileHeaderProps) {
@@ -170,6 +172,21 @@ export function ProfileHeader({
           <Text style={[styles.actionBtnText, { color: colors.foreground }]}>Edit Profile</Text>
         </Pressable>
 
+        {onOpenSettings ? (
+          <Pressable
+            onPress={onOpenSettings}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+          >
+            <Ionicons name="settings-outline" size={15} color={colors.foreground} />
+            <Text style={[styles.actionBtnText, { color: colors.foreground }]}>Settings</Text>
+          </Pressable>
+        ) : null}
+
         {onOpenOrganiser ? (
           <Pressable
             onPress={onOpenOrganiser}
@@ -195,7 +212,7 @@ export function ProfileHeader({
                 { color: isPublisher ? "#00A3FF" : colors.primary, fontFamily: "Inter_700Bold" },
               ]}
             >
-              {isPublisher ? "Dashboard" : "Become Organizer"}
+              {isPublisher ? "Dashboard" : "Organizer"}
             </Text>
           </Pressable>
         ) : null}
@@ -238,7 +255,7 @@ const styles = StyleSheet.create({
   actionButtonsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     marginTop: 4,
   },
   actionBtn: {
@@ -246,11 +263,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
+    gap: 5,
+    minHeight: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
   },
   editBtn: {},
-  actionBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  actionBtnText: { fontSize: 12.5, fontFamily: "Inter_600SemiBold" },
 });
