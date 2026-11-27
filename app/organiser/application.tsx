@@ -14,8 +14,6 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 
-import { OrganiserAtmosphere } from "@/components/OrganiserAtmosphere";
-import { OrganiserFlowHeader } from "@/components/OrganiserFlowHeader";
 import {
   organisationFormValues,
   toOrganisationInput,
@@ -45,6 +43,14 @@ export default function OrganiserApplicationScreen() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const errors = validateOrganisation(values);
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(tabs)" as any);
+    }
+  };
 
   const updateField = (key: keyof OrganisationFormValues, val: string) => {
     if (!created) {
@@ -110,8 +116,41 @@ export default function OrganiserApplicationScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: palette.canvas }]}>
-      <OrganiserAtmosphere />
-      <OrganiserFlowHeader title="Application" step={1} />
+      {/* Clean Home-styled Top Header with Chevron Back */}
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + 8,
+            backgroundColor: palette.canvas,
+            borderBottomColor: palette.line,
+          },
+        ]}
+      >
+        <View style={styles.headerRow}>
+          <Pressable
+            onPress={handleBack}
+            style={({ pressed }) => [
+              styles.backBtn,
+              {
+                backgroundColor: palette.surface,
+                borderColor: palette.line,
+              },
+              pressed && { backgroundColor: palette.surfaceRaised },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={8}
+          >
+            <Ionicons name="chevron-back" size={20} color={palette.text} />
+          </Pressable>
+
+          <Text style={[styles.headerTitle, { color: palette.text }]}>Application</Text>
+
+          {/* Spacer to balance back button */}
+          <View style={styles.headerSpacer} />
+        </View>
+      </View>
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -125,7 +164,7 @@ export default function OrganiserApplicationScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Streamlined human intro */}
+          {/* Header intro seamlessly on the canvas */}
           <View style={styles.introHeader}>
             <Text style={[styles.heading, { color: palette.text }]}>
               Tell us about your organization
@@ -135,13 +174,8 @@ export default function OrganiserApplicationScreen() {
             </Text>
           </View>
 
-          {/* Unified Compact Form Card */}
-          <View
-            style={[
-              styles.formCard,
-              { backgroundColor: palette.surface, borderColor: palette.line },
-            ]}
-          >
+          {/* Form fields directly sharing the page background (no outer div / box) */}
+          <View style={styles.fieldsContainer}>
             {/* Organization Name */}
             <View style={styles.fieldItem}>
               <Text style={[styles.fieldLabel, { color: palette.text }]}>
@@ -151,7 +185,7 @@ export default function OrganiserApplicationScreen() {
                 style={[
                   styles.inputContainer,
                   {
-                    backgroundColor: palette.surfaceRaised,
+                    backgroundColor: palette.surface,
                     borderColor:
                       submitted && errors.name
                         ? palette.danger
@@ -195,7 +229,7 @@ export default function OrganiserApplicationScreen() {
                 style={[
                   styles.inputContainer,
                   {
-                    backgroundColor: palette.surfaceRaised,
+                    backgroundColor: palette.surface,
                     borderColor:
                       submitted && errors.activities
                         ? palette.danger
@@ -245,7 +279,7 @@ export default function OrganiserApplicationScreen() {
                   styles.inputContainer,
                   styles.textAreaContainer,
                   {
-                    backgroundColor: palette.surfaceRaised,
+                    backgroundColor: palette.surface,
                     borderColor:
                       submitted && errors.description
                         ? palette.danger
@@ -277,7 +311,7 @@ export default function OrganiserApplicationScreen() {
               ) : null}
             </View>
 
-            {/* Location & Website in clean unified layout */}
+            {/* Location */}
             <View style={styles.fieldItem}>
               <Text style={[styles.fieldLabel, { color: palette.text }]}>
                 Location <Text style={{ color: palette.blue }}>*</Text>
@@ -286,7 +320,7 @@ export default function OrganiserApplicationScreen() {
                 style={[
                   styles.inputContainer,
                   {
-                    backgroundColor: palette.surfaceRaised,
+                    backgroundColor: palette.surface,
                     borderColor:
                       submitted && errors.location
                         ? palette.danger
@@ -321,6 +355,7 @@ export default function OrganiserApplicationScreen() {
               ) : null}
             </View>
 
+            {/* Website or Social */}
             <View style={styles.fieldItem}>
               <Text style={[styles.fieldLabel, { color: palette.text }]}>
                 Website or social{" "}
@@ -330,7 +365,7 @@ export default function OrganiserApplicationScreen() {
                 style={[
                   styles.inputContainer,
                   {
-                    backgroundColor: palette.surfaceRaised,
+                    backgroundColor: palette.surface,
                     borderColor:
                       submitted && errors.website
                         ? palette.danger
@@ -417,9 +452,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  header: {
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
+  },
+  headerSpacer: {
+    width: 40,
+  },
   scrollContent: {
-    padding: 18,
-    gap: 16,
+    padding: 20,
+    gap: 18,
   },
   introHeader: {
     gap: 4,
@@ -436,10 +497,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontFamily: "Inter_400Regular",
   },
-  formCard: {
-    padding: 16,
-    borderRadius: 18,
-    borderWidth: 1,
+  fieldsContainer: {
     gap: 14,
   },
   fieldItem: {
@@ -459,15 +517,15 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
   inputContainer: {
-    minHeight: 46,
-    borderRadius: 12,
+    minHeight: 48,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
   },
   textAreaContainer: {
-    minHeight: 84,
+    minHeight: 88,
     alignItems: "flex-start",
     paddingVertical: 10,
   },
@@ -476,13 +534,13 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 14.5,
     fontFamily: "Inter_500Medium",
     paddingVertical: 0,
   },
   textArea: {
-    minHeight: 64,
-    lineHeight: 20,
+    minHeight: 68,
+    lineHeight: 21,
     paddingTop: 0,
   },
   fieldError: {
@@ -511,7 +569,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 20,
-    marginTop: 2,
+    marginTop: 6,
   },
   buttonText: {
     fontSize: 15,
