@@ -426,26 +426,24 @@ function ManualSubscribeCheckout() {
               </View>
             </View>
 
-            <View style={[styles.statusActions, { marginTop: 14 }]}>
+            <View style={[styles.statusActions, { marginTop: 18 }]}>
               <Pressable
                 style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]}
-                onPress={() => router.push("/organiser/payments" as any)}
-                accessibilityRole="button"
-                accessibilityLabel="Track this payment"
-              >
-                <Ionicons name="receipt-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.primaryPayBtnText}>Track this payment</Text>
-              </Pressable>
-
-              <Pressable
                 onPress={() => router.replace("/(tabs)" as any)}
-                style={styles.cancelSheetBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Back to Discover"
               >
-                <Text style={[styles.cancelSheetText, { color: palette.accent, fontSize: 15, fontFamily: "Inter_600SemiBold" }]}>
-                  Back to Discover
-                </Text>
+                <Text style={styles.primaryPayBtnText}>Back to Discover</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => router.push("/organiser/payments" as any)}
+                style={styles.trackTextLink}
+                accessibilityRole="link"
+                accessibilityLabel="Track this payment"
+              >
+                <Text style={[styles.trackTextLinkText, { color: palette.muted }]}>Track this payment</Text>
+                <Ionicons name="chevron-forward" size={14} color={palette.muted} />
               </Pressable>
             </View>
           </Animated.View>
@@ -2387,6 +2385,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     marginBottom: 16,
     borderRadius: 1,
+  },
+  trackTextLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 8,
+  },
+  trackTextLinkText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
   },
   headerBlock: {
     marginBottom: 4,
