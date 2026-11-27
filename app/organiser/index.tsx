@@ -8,6 +8,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSafeAreaInsets } from "@/hooks/useAppSafeAreaInsets";
 import { getOrganiserDestination, useOrganiserAccess } from "@/hooks/useOrganiserAccess";
+import { useOrganiserPalette } from "@/hooks/useOrganiserPalette";
 import { USE_ORGANISER_API } from "@/services/organiserService";
 
 const heroArt = require("@/assets/images/organiser-onboarding.jpg");
@@ -16,6 +17,7 @@ const enter = (delay: number) =>
   Platform.OS !== "web" ? FadeInDown.delay(delay).springify() : undefined;
 
 export default function BecomeOrganiserScreen() {
+  const palette = useOrganiserPalette();
   const insets = useAppSafeAreaInsets();
   const router = useRouter();
   const { from } = useLocalSearchParams<{ from?: string }>();
@@ -56,7 +58,7 @@ export default function BecomeOrganiserScreen() {
     : "Get started";
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: palette.canvas }]}>
       {/* Hero Visual Area with Vintage Partnership Illustration */}
       <View style={styles.heroWrapper}>
         <Image
@@ -66,34 +68,59 @@ export default function BecomeOrganiserScreen() {
           accessibilityLabel="Eventis organiser collaboration visual"
         />
 
-        {/* Ambient Overlay & Seamless Fade to AMOLED Black */}
+        {/* Ambient Overlay & Seamless Fade into Canvas Background (Dark or Light) */}
         <LinearGradient
-          colors={[
-            "rgba(0, 0, 0, 0.45)",
-            "rgba(0, 0, 0, 0.15)",
-            "rgba(0, 0, 0, 0.6)",
-            "rgba(0, 0, 0, 0.92)",
-            "#000000",
-          ]}
+          colors={
+            palette.dark
+              ? [
+                  "rgba(0, 0, 0, 0.45)",
+                  "rgba(0, 0, 0, 0.15)",
+                  "rgba(0, 0, 0, 0.6)",
+                  "rgba(0, 0, 0, 0.92)",
+                  palette.canvas,
+                ]
+              : [
+                  "rgba(255, 255, 255, 0.15)",
+                  "rgba(255, 255, 255, 0.05)",
+                  "rgba(255, 255, 255, 0.55)",
+                  "rgba(255, 255, 255, 0.9)",
+                  palette.canvas,
+                ]
+          }
           locations={[0, 0.35, 0.65, 0.88, 1]}
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Top Floating Navigation Bar with Chevron Back */}
+        {/* Top Floating Navigation Bar with Chevron Back (No Steps) */}
         <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
           <Pressable
             onPress={handleBack}
-            style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
+            style={({ pressed }) => [
+              styles.backBtn,
+              {
+                backgroundColor: palette.dark
+                  ? "rgba(0, 0, 0, 0.55)"
+                  : "rgba(255, 255, 255, 0.88)",
+                borderColor: palette.dark
+                  ? "rgba(255, 255, 255, 0.2)"
+                  : "rgba(0, 0, 0, 0.12)",
+              },
+              pressed && {
+                backgroundColor: palette.dark
+                  ? "rgba(255, 255, 255, 0.15)"
+                  : "rgba(0, 0, 0, 0.08)",
+              },
+            ]}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             hitSlop={12}
           >
-            <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+            <Ionicons
+              name="chevron-back"
+              size={22}
+              color={palette.dark ? "#FFFFFF" : "#111827"}
+            />
           </Pressable>
-
-          <View style={styles.stepBadge}>
-            <Text style={styles.stepBadgeText}>Step 1 of 3</Text>
-          </View>
         </View>
       </View>
 
@@ -101,12 +128,26 @@ export default function BecomeOrganiserScreen() {
       <View
         style={[
           styles.contentWrapper,
-          { paddingBottom: Math.max(insets.bottom, 16) + 12 },
+          {
+            backgroundColor: palette.canvas,
+            paddingBottom: Math.max(insets.bottom, 16) + 16,
+          },
         ]}
       >
         {/* Status Callout if Application is In-Review or Rejected */}
         {application?.status === "IN_REVIEW" ? (
-          <Animated.View entering={enter(30)} style={styles.statusPill}>
+          <Animated.View
+            entering={enter(30)}
+            style={[
+              styles.statusPill,
+              {
+                backgroundColor: palette.dark
+                  ? "rgba(245, 158, 11, 0.14)"
+                  : "rgba(245, 158, 11, 0.1)",
+                borderColor: "rgba(245, 158, 11, 0.35)",
+              },
+            ]}
+          >
             <Ionicons name="time-outline" size={15} color="#F59E0B" />
             <Text style={styles.statusPillText}>Application under review</Text>
           </Animated.View>
@@ -117,19 +158,30 @@ export default function BecomeOrganiserScreen() {
               styles.statusPill,
               {
                 borderColor: "rgba(239, 68, 68, 0.4)",
-                backgroundColor: "rgba(239, 68, 68, 0.14)",
+                backgroundColor: palette.dark
+                  ? "rgba(239, 68, 68, 0.14)"
+                  : "rgba(239, 68, 68, 0.08)",
               },
             ]}
           >
-            <Ionicons name="alert-circle-outline" size={15} color="#EF4444" />
-            <Text style={[styles.statusPillText, { color: "#EF4444" }]}>
+            <Ionicons name="alert-circle-outline" size={15} color={palette.danger} />
+            <Text style={[styles.statusPillText, { color: palette.danger }]}>
               Application not approved · Tap to reapply
             </Text>
           </Animated.View>
         ) : from === "create-post" ? (
-          <Animated.View entering={enter(30)} style={styles.statusPill}>
-            <Ionicons name="lock-closed-outline" size={14} color="#38BDF8" />
-            <Text style={[styles.statusPillText, { color: "#38BDF8" }]}>
+          <Animated.View
+            entering={enter(30)}
+            style={[
+              styles.statusPill,
+              {
+                backgroundColor: palette.blueSoft,
+                borderColor: `${palette.blue}40`,
+              },
+            ]}
+          >
+            <Ionicons name="lock-closed-outline" size={14} color={palette.blue} />
+            <Text style={[styles.statusPillText, { color: palette.blue }]}>
               Organiser pass required to publish
             </Text>
           </Animated.View>
@@ -137,31 +189,16 @@ export default function BecomeOrganiserScreen() {
 
         {/* Text Block */}
         <Animated.View entering={enter(60)} style={styles.textBlock}>
-          <Text style={styles.eyebrow}>CREATE ON EVENTIS</Text>
-          <Text style={styles.title}>Give every event a place to grow.</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: palette.text }]}>
+            Give every event a place to grow.
+          </Text>
+          <Text style={[styles.subtitle, { color: palette.muted }]}>
             Publish event pages, share live stories, and manage attendees from one focused workspace.
           </Text>
         </Animated.View>
 
-        {/* Compact Value Chips Row */}
-        <Animated.View entering={enter(100)} style={styles.valueRow}>
-          <View style={styles.valueChip}>
-            <Ionicons name="calendar-outline" size={14} color="#38BDF8" />
-            <Text style={styles.valueChipText}>Event pages</Text>
-          </View>
-          <View style={styles.valueChip}>
-            <Ionicons name="megaphone-outline" size={14} color="#F59E0B" />
-            <Text style={styles.valueChipText}>Live stories</Text>
-          </View>
-          <View style={styles.valueChip}>
-            <Ionicons name="people-outline" size={14} color="#10B981" />
-            <Text style={styles.valueChipText}>Smart reach</Text>
-          </View>
-        </Animated.View>
-
         {/* Actions Section */}
-        <Animated.View entering={enter(140)} style={styles.actionSection}>
+        <Animated.View entering={enter(100)} style={styles.actionSection}>
           <Pressable
             onPress={continueFlow}
             disabled={isRestoringOrganiser || application?.status === "IN_REVIEW"}
@@ -170,8 +207,8 @@ export default function BecomeOrganiserScreen() {
               {
                 backgroundColor:
                   isRestoringOrganiser || application?.status === "IN_REVIEW"
-                    ? "rgba(255, 255, 255, 0.12)"
-                    : "#0284C7",
+                    ? palette.surfaceRaised
+                    : palette.blue,
                 opacity: pressed ? 0.9 : 1,
               },
             ]}
@@ -183,8 +220,8 @@ export default function BecomeOrganiserScreen() {
                 {
                   color:
                     isRestoringOrganiser || application?.status === "IN_REVIEW"
-                      ? "rgba(255, 255, 255, 0.45)"
-                      : "#FFFFFF",
+                      ? palette.muted
+                      : palette.onBlue,
                 },
               ]}
             >
@@ -199,7 +236,9 @@ export default function BecomeOrganiserScreen() {
               accessibilityRole="button"
               hitSlop={8}
             >
-              <Text style={styles.secondaryBtnText}>Maybe later</Text>
+              <Text style={[styles.secondaryBtnText, { color: palette.muted }]}>
+                Maybe later
+              </Text>
             </Pressable>
           ) : null}
         </Animated.View>
@@ -211,7 +250,6 @@ export default function BecomeOrganiserScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#000000",
   },
   heroWrapper: {
     flex: 1,
@@ -230,7 +268,6 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 20,
     zIndex: 10,
   },
@@ -238,33 +275,13 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
   },
-  backBtnPressed: {
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-  },
-  stepBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-  },
-  stepBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.2,
-  },
   contentWrapper: {
     paddingHorizontal: 24,
-    gap: 20,
-    backgroundColor: "#000000",
+    gap: 24,
   },
   statusPill: {
     flexDirection: "row",
@@ -274,9 +291,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 14,
-    backgroundColor: "rgba(245, 158, 11, 0.14)",
     borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.35)",
   },
   statusPillText: {
     color: "#F59E0B",
@@ -284,52 +299,22 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   textBlock: {
-    gap: 8,
-  },
-  eyebrow: {
-    color: "#38BDF8",
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 1.6,
+    gap: 12,
   },
   title: {
-    color: "#FFFFFF",
-    fontSize: 31,
-    lineHeight: 37,
+    fontSize: 32,
+    lineHeight: 38,
     fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -0.7,
+    letterSpacing: -0.8,
   },
   subtitle: {
-    color: "rgba(255, 255, 255, 0.76)",
-    fontSize: 14.5,
-    lineHeight: 21,
+    fontSize: 15,
+    lineHeight: 22,
     fontFamily: "Inter_400Regular",
   },
-  valueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  valueChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
-  valueChipText: {
-    color: "rgba(255, 255, 255, 0.9)",
-    fontSize: 12.5,
-    fontFamily: "Inter_600SemiBold",
-  },
   actionSection: {
-    gap: 10,
-    marginTop: 4,
+    gap: 12,
+    marginTop: 6,
   },
   primaryBtn: {
     height: 52,
@@ -349,7 +334,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   secondaryBtnText: {
-    color: "rgba(255, 255, 255, 0.6)",
     fontSize: 13.5,
     fontFamily: "Inter_600SemiBold",
   },
