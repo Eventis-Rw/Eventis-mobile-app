@@ -376,23 +376,24 @@ function ManualSubscribeCheckout() {
             </View>
 
             <Text style={[styles.statusTitle, { color: palette.text, fontSize: 24, letterSpacing: -0.3 }]}>
-              Payment submitted
+              Payment under review
             </Text>
 
-            <Text style={[styles.statusText, { color: palette.muted, fontSize: 14.5, lineHeight: 22 }]}>
-              Reference <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>#{submission.reference}</Text> · {formatMinorAmount(submission.amountMinor, submission.currency)}
+            <Text style={[styles.statusText, { color: palette.muted, fontSize: 14.5, lineHeight: 23 }]}>
+              Thank you for choosing the <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>{submission.plan.name}</Text> package.
               {"\n\n"}
-              We've sent your <Text style={{ fontFamily: "Inter_600SemiBold", color: palette.text }}>{submission.plan.name}</Text> payment screenshot for review. An admin has received it and will activate your organiser access shortly. You'll get an email as soon as it's approved or if we need anything else.
+              Our admin team has received your proof of payment (Ref: <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>#{submission.reference}</Text> · {formatMinorAmount(submission.amountMinor, submission.currency)}) and is verifying the transfer.
+              {"\n\n"}
+              Once verified, your organiser privileges will be activated automatically so you can start creating and publishing events. You will receive an email confirmation as soon as it is approved.
             </Text>
 
-            <View style={[styles.statusActions, { marginTop: 20 }]}>
+            <View style={[styles.statusActions, { marginTop: 24 }]}>
               <Pressable
                 style={[styles.primaryPayBtn, { backgroundColor: palette.accent }]}
                 onPress={() => router.replace("/(tabs)" as any)}
                 accessibilityRole="button"
                 accessibilityLabel="Back to Discover"
               >
-                <Ionicons name="sparkles" size={19} color="#000000" />
                 <Text style={[styles.primaryPayBtnText, { color: "#000000", fontFamily: "Inter_700Bold", fontSize: 16 }]}>
                   Back to Discover
                 </Text>
