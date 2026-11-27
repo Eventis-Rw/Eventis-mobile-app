@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: 26,
     marginTop: 6,
   },
   modalCtaText: {
