@@ -1,7 +1,9 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import * as Location from "expo-location";
 import { Redirect, useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -34,7 +36,7 @@ import {
   type PlaceSuggestion,
 } from "@/services/placeSuggestions";
 
-const LIMITS = { name: 80, description: 1000, activities: 140, location: 100 };
+const LIMITS = { name: 80, description: 1000, activities: 140, location: 120 };
 
 const EVENT_CATEGORIES = [
   "Music",
@@ -63,6 +65,8 @@ export default function OrganiserApplicationScreen() {
   const insets = useAppSafeAreaInsets();
   const { user, isLoading, refreshOrganiserSubscription } = useAuth();
 
+  const draftStorageKey = `@eventis_organiser_app_draft_${user?.id ?? "guest"}`;
+
   const [values, setValues] = useState<OrganisationFormValues>(() => organisationFormValues());
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -89,19 +93,71 @@ export default function OrganiserApplicationScreen() {
     return unknown.join(", ");
   });
 
-  // Location suggestions state
+  // Location suggestions and coordinates state
   const [locationSuggestions, setLocationSuggestions] = useState<PlaceSuggestion[]>([]);
   const [searchingLocation, setSearchingLocation] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [copiedCoordsNotice, setCopiedCoordsNotice] = useState<string | null>(null);
   const locationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const locationAbortRef = useRef<AbortController | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mutedPlaceholder = palette.dark
     ? "rgba(255, 255, 255, 0.32)"
     : "rgba(0, 0, 0, 0.32)";
 
   const errors = validateOrganisation(values);
+
+  // Autosave: Restore draft on initial mount
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(draftStorageKey);
+        if (!raw || !isMounted) return;
+        const draft = JSON.parse(raw);
+        if (draft && typeof draft === "object") {
+          setValues((prev) => ({
+            name: draft.name ?? prev.name,
+            activities: draft.activities ?? prev.activities,
+            description: draft.description ?? prev.description,
+            location: draft.location ?? prev.location,
+            website: draft.website ?? prev.website,
+          }));
+          if (Array.isArray(draft.selectedCategories)) {
+            setSelectedCategories(draft.selectedCategories);
+          }
+          if (typeof draft.otherCategory === "string") {
+            setOtherCategory(draft.otherCategory);
+          }
+        }
+      } catch {
+        // Non-blocking read
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [draftStorageKey]);
+
+  // Autosave: Persist fields whenever values, categories, or otherCategory change
+  useEffect(() => {
+    if (created) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      const draft = {
+        ...values,
+        selectedCategories,
+        otherCategory,
+      };
+      AsyncStorage.setItem(draftStorageKey, JSON.stringify(draft)).catch(() => {});
+    }, 350);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [values, selectedCategories, otherCategory, created, draftStorageKey]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -170,6 +226,7 @@ export default function OrganiserApplicationScreen() {
     setShowLocationDropdown(false);
   };
 
+  // Detect GPS coordinates, copy full coordinates to clipboard, and format location
   const detectCurrentLocation = async () => {
     setLocating(true);
     try {
@@ -178,30 +235,48 @@ export default function OrganiserApplicationScreen() {
         return;
       }
       const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+        accuracy: Location.Accuracy.High,
       });
-      const geocode = await Location.reverseGeocodeAsync({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      });
-      if (geocode && geocode.length > 0) {
-        const place = geocode[0];
-        const parts = [
-          place.district || place.street || place.name,
-          place.city || place.subregion,
-          place.country || "Rwanda",
-        ].filter((p): p is string => Boolean(p && !p.match(/^[0-9]+$/)));
-        const resolved = Array.from(new Set(parts)).join(", ");
-        if (resolved) {
-          updateField("location", resolved);
-          setShowLocationDropdown(false);
-          if (Platform.OS !== "web") {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+      const lat = position.coords.latitude.toFixed(6);
+      const lng = position.coords.longitude.toFixed(6);
+      const fullCoords = `${lat}, ${lng}`;
+
+      // Copy exact coordinates to clipboard
+      await Clipboard.setStringAsync(fullCoords);
+      setCopiedCoordsNotice(`Coordinates copied: ${fullCoords}`);
+      setTimeout(() => setCopiedCoordsNotice(null), 4000);
+
+      // Reverse geocode to add district/city context alongside coordinates
+      let resolved = fullCoords;
+      try {
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        if (geocode && geocode.length > 0) {
+          const place = geocode[0];
+          const parts = [
+            place.district || place.street || place.name,
+            place.city || place.subregion,
+            place.country || "Rwanda",
+          ].filter((p): p is string => Boolean(p && !p.match(/^[0-9]+$/)));
+          const placeName = Array.from(new Set(parts)).join(", ");
+          if (placeName) {
+            resolved = `${placeName} (${fullCoords})`;
           }
         }
+      } catch {
+        // Fallback to coordinates
+      }
+
+      updateField("location", resolved.slice(0, LIMITS.location));
+      setShowLocationDropdown(false);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
     } catch {
-      // Graceful fallback
+      // Graceful error fallback
     } finally {
       setLocating(false);
     }
@@ -232,6 +307,10 @@ export default function OrganiserApplicationScreen() {
         }
       }
       setCreated(application);
+
+      // Successfully submitted: clear draft
+      AsyncStorage.removeItem(draftStorageKey).catch(() => {});
+
       await refreshOrganiserSubscription();
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -506,7 +585,7 @@ export default function OrganiserApplicationScreen() {
               ) : null}
             </View>
 
-            {/* Location with Real-time Suggestions & Current Location Detection */}
+            {/* Location with GPS Coordinates Detection & Real-time Suggestions */}
             <View style={styles.fieldItem}>
               <View style={styles.labelWithAction}>
                 <Text style={[styles.fieldLabel, { color: palette.text }]}>
@@ -518,7 +597,7 @@ export default function OrganiserApplicationScreen() {
                   style={styles.gpsActionBtn}
                   hitSlop={6}
                   accessibilityRole="button"
-                  accessibilityLabel="Use current location"
+                  accessibilityLabel="Use current location and copy coordinates"
                 >
                   {locating ? (
                     <ActivityIndicator size="small" color={palette.blue} />
@@ -564,7 +643,7 @@ export default function OrganiserApplicationScreen() {
                     setFocusedField(null);
                     setTimeout(() => setShowLocationDropdown(false), 200);
                   }}
-                  placeholder="Search city, district, or venue..."
+                  placeholder="Search city, district, venue, or coordinates..."
                   placeholderTextColor={mutedPlaceholder}
                   maxLength={LIMITS.location}
                   style={[styles.textInput, { color: palette.text }]}
@@ -583,6 +662,24 @@ export default function OrganiserApplicationScreen() {
                   </Pressable>
                 ) : null}
               </View>
+
+              {/* Copied Coordinates Toast Banner */}
+              {copiedCoordsNotice ? (
+                <View
+                  style={[
+                    styles.copiedNotice,
+                    {
+                      backgroundColor: `${palette.blue}14`,
+                      borderColor: `${palette.blue}40`,
+                    },
+                  ]}
+                >
+                  <Ionicons name="copy-outline" size={13} color={palette.blue} />
+                  <Text style={[styles.copiedNoticeText, { color: palette.blue }]}>
+                    {copiedCoordsNotice}
+                  </Text>
+                </View>
+              ) : null}
 
               {/* Quick suggestion chips (when input is short/focused) */}
               {focusedField === "location" && (!values.location || values.location.length < 3) ? (
@@ -832,6 +929,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   gpsActionText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  copiedNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 2,
+  },
+  copiedNoticeText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
