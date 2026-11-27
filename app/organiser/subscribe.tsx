@@ -362,97 +362,51 @@ function ManualSubscribeCheckout() {
         <OrganiserAtmosphere />
         <ScrollView
           contentContainerStyle={[
-            styles.resultContainer,
+            styles.statusWrap,
             {
-              paddingTop: insets.top + 32,
+              paddingTop: insets.top + 36,
               paddingBottom: insets.bottom + 28,
             },
           ]}
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={FadeIn} style={{ alignItems: "center", gap: 14, width: "100%" }}>
-            {/* Glowing Success Icon */}
-            <View style={[styles.resultIconGlow, { backgroundColor: palette.accent + "18" }]}>
-              <View style={[styles.resultIconInner, { backgroundColor: palette.accent }]}>
-                <Ionicons name="checkmark-done" size={38} color="#000000" />
-              </View>
+          <Animated.View entering={FadeIn} style={styles.status}>
+            <View style={[styles.statusIconWrap, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
+              <Ionicons name="checkmark-circle" size={44} color={palette.accent} />
             </View>
 
-            {/* Admin Verified Badge */}
-            <View style={[styles.resultBadgePill, { backgroundColor: colors.success + "18", borderColor: colors.success + "40" }]}>
-              <Ionicons name="shield-checkmark" size={14} color={colors.success} />
-              <Text style={[styles.resultBadgeText, { color: colors.success }]}>Payment Received by Admin</Text>
-            </View>
-
-            {/* Title & Message */}
-            <Text style={[styles.resultHeroTitle, { color: palette.text }]}>Payment Received!</Text>
-            <Text style={[styles.resultHeroText, { color: palette.muted }]}>
-              Our admin team has received your payment confirmation for the{" "}
-              <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>{submission.plan.name}</Text>{" "}
-              package. We are reviewing your payment now and your organiser access will be activated shortly.
+            <Text style={[styles.statusTitle, { color: palette.text, fontSize: 24, letterSpacing: -0.3 }]}>
+              Payment submitted
             </Text>
 
-            {/* Polished Receipt Card */}
-            <View style={[styles.resultReceiptCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-              <View style={styles.resultReceiptRow}>
-                <Text style={[styles.resultReceiptLabel, { color: palette.muted }]}>Amount Paid</Text>
-                <Text style={[styles.resultReceiptValue, { color: palette.text, fontFamily: "Inter_700Bold" }]}>
-                  {formatMinorAmount(submission.amountMinor, submission.currency)}
-                </Text>
-              </View>
-              <View style={[styles.resultDivider, { backgroundColor: palette.line }]} />
-              <View style={styles.resultReceiptRow}>
-                <Text style={[styles.resultReceiptLabel, { color: palette.muted }]}>Selected Package</Text>
-                <Text style={[styles.resultReceiptValue, { color: palette.text }]}>
-                  {submission.plan.name}
-                </Text>
-              </View>
-              <View style={[styles.resultDivider, { backgroundColor: palette.line }]} />
-              <View style={styles.resultReceiptRow}>
-                <Text style={[styles.resultReceiptLabel, { color: palette.muted }]}>Paid To</Text>
-                <Text style={[styles.resultReceiptValue, { color: palette.text }]}>
-                  Travelis Rwanda Ltd
-                </Text>
-              </View>
-              <View style={[styles.resultDivider, { backgroundColor: palette.line }]} />
-              <View style={styles.resultReceiptRow}>
-                <Text style={[styles.resultReceiptLabel, { color: palette.muted }]}>Reference</Text>
-                <Text style={[styles.resultReceiptValue, { color: palette.accent, fontFamily: "Inter_600SemiBold" }]}>
-                  #{submission.reference}
-                </Text>
-              </View>
-              <View style={[styles.resultDivider, { backgroundColor: palette.line }]} />
-              <View style={styles.resultReceiptRow}>
-                <Text style={[styles.resultReceiptLabel, { color: palette.muted }]}>Status</Text>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <Ionicons name="time-outline" size={14} color={palette.accent} />
-                  <Text style={[styles.resultReceiptValue, { color: palette.accent, fontFamily: "Inter_600SemiBold" }]}>
-                    Under review
-                  </Text>
-                </View>
-              </View>
-            </View>
+            <Text style={[styles.statusText, { color: palette.muted, fontSize: 14.5, lineHeight: 22 }]}>
+              Reference <Text style={{ fontFamily: "Inter_700Bold", color: palette.text }}>#{submission.reference}</Text> · {formatMinorAmount(submission.amountMinor, submission.currency)}
+              {"\n\n"}
+              We've sent your <Text style={{ fontFamily: "Inter_600SemiBold", color: palette.text }}>{submission.plan.name}</Text> payment screenshot for review. An admin has received it and will activate your organiser access shortly. You'll get an email as soon as it's approved or if we need anything else.
+            </Text>
 
-            {/* Hero Actions */}
-            <View style={styles.resultActions}>
+            <View style={[styles.statusActions, { marginTop: 20 }]}>
               <Pressable
-                style={[styles.discoverHeroBtn, { backgroundColor: palette.accent }]}
+                style={[styles.primaryPayBtn, { backgroundColor: palette.accent }]}
                 onPress={() => router.replace("/(tabs)" as any)}
                 accessibilityRole="button"
                 accessibilityLabel="Back to Discover"
               >
                 <Ionicons name="sparkles" size={19} color="#000000" />
-                <Text style={styles.discoverHeroBtnText}>Back to Discover</Text>
+                <Text style={[styles.primaryPayBtnText, { color: "#000000", fontFamily: "Inter_700Bold", fontSize: 16 }]}>
+                  Back to Discover
+                </Text>
               </Pressable>
 
               <Pressable
                 onPress={() => router.push("/organiser/payments" as any)}
-                style={[styles.secondaryTrackBtn, { borderColor: palette.line, backgroundColor: palette.surfaceRaised }]}
+                style={styles.cancelSheetBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Track this payment"
               >
-                <Ionicons name="receipt-outline" size={16} color={palette.muted} />
-                <Text style={[styles.secondaryTrackText, { color: palette.text }]}>View payment history</Text>
+                <Text style={[styles.cancelSheetText, { color: palette.muted, fontSize: 14 }]}>
+                  Track this payment
+                </Text>
               </Pressable>
             </View>
           </Animated.View>
