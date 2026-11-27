@@ -630,8 +630,7 @@ function ManualSubscribeCheckout() {
                         <Text style={[styles.compactPlanName, { color: palette.text }]}>{plan.name}</Text>
                         {isRecommended ? (
                           <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
-                            <Ionicons name="sparkles" size={9} color="#000000" />
-                            <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
+                            <Text style={styles.heroBadgeText}>Recommended</Text>
                           </View>
                         ) : plan.badge && plan.badge !== "Recommended" ? (
                           <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
@@ -950,11 +949,7 @@ function DemoSubscribeCheckout() {
                   >
                     {tab.label}
                   </Text>
-                  {tab.id === "month" ? (
-                    <View style={[styles.tabMiniBadge, { backgroundColor: palette.accent + "25" }]}>
-                      <Ionicons name="sparkles" size={9} color={palette.accent} />
-                    </View>
-                  ) : null}
+
                 </Pressable>
               );
             })}
@@ -993,8 +988,7 @@ function DemoSubscribeCheckout() {
                       </Text>
                       {activePlan.interval === "month" ? (
                         <View style={[styles.heroBadgePill, { backgroundColor: palette.accent }]}>
-                          <Ionicons name="sparkles" size={10} color="#000000" />
-                          <Text style={styles.heroBadgeText}>RECOMMENDED</Text>
+                          <Text style={styles.heroBadgeText}>Recommended</Text>
                         </View>
                       ) : activePlan.badge && activePlan.badge !== "Recommended" ? (
                         <View style={[styles.subBadgePill, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
@@ -1670,18 +1664,17 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   heroBadgePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 2.5,
     borderRadius: 5,
+    alignItems: "center",
+    justifyContent: "center",
   },
   heroBadgeText: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontFamily: "Inter_700Bold",
     color: "#000000",
-    letterSpacing: 0.6,
+    letterSpacing: 0.2,
   },
   subBadgePill: {
     paddingHorizontal: 7,
