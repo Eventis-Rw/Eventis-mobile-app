@@ -391,14 +391,61 @@ function ManualSubscribeCheckout() {
               <Text style={{ fontSize: 13, color: palette.muted }}>Reference: #{submission.reference}</Text>
             </Text>
 
-            <View style={[styles.statusActions, { marginTop: 24 }]}>
+            {/* Enhanced Live Tracking Card */}
+            <View style={[styles.enhancedTrackCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+              <View style={styles.trackCardHeader}>
+                <View style={styles.trackStatusIndicatorRow}>
+                  <View style={[styles.pulseDot, { backgroundColor: palette.accent }]} />
+                  <Text style={[styles.trackStatusLabel, { color: palette.accent }]}>Under review</Text>
+                </View>
+                <Text style={[styles.trackReferenceTag, { color: palette.muted }]}>#{submission.reference}</Text>
+              </View>
+
+              {/* Progress Steps Timeline */}
+              <View style={styles.trackTimeline}>
+                <View style={styles.timelineItem}>
+                  <View style={[styles.timelineIconActive, { backgroundColor: colors.success }]}>
+                    <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                  </View>
+                  <Text style={[styles.timelineTextActive, { color: palette.text }]}>Submitted</Text>
+                </View>
+                <View style={[styles.timelineLine, { backgroundColor: palette.accent }]} />
+                <View style={styles.timelineItem}>
+                  <View style={[styles.timelineIconPending, { backgroundColor: palette.accent }]}>
+                    <Ionicons name="time" size={12} color="#000000" />
+                  </View>
+                  <Text style={[styles.timelineTextPending, { color: palette.accent }]}>Reviewing</Text>
+                </View>
+                <View style={[styles.timelineLine, { backgroundColor: palette.line }]} />
+                <View style={styles.timelineItem}>
+                  <View style={[styles.timelineIconUpcoming, { backgroundColor: palette.surfaceRaised, borderColor: palette.line }]}>
+                    <Ionicons name="shield-checkmark-outline" size={12} color={palette.muted} />
+                  </View>
+                  <Text style={[styles.timelineTextUpcoming, { color: palette.muted }]}>Activated</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={[styles.statusActions, { marginTop: 14 }]}>
               <Pressable
                 style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]}
+                onPress={() => router.push("/organiser/payments" as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Track this payment"
+              >
+                <Ionicons name="receipt-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.primaryPayBtnText}>Track this payment</Text>
+              </Pressable>
+
+              <Pressable
                 onPress={() => router.replace("/(tabs)" as any)}
+                style={styles.cancelSheetBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Back to Discover"
               >
-                <Text style={styles.primaryPayBtnText}>Back to Discover</Text>
+                <Text style={[styles.cancelSheetText, { color: palette.accent, fontSize: 15, fontFamily: "Inter_600SemiBold" }]}>
+                  Back to Discover
+                </Text>
               </Pressable>
             </View>
           </Animated.View>
@@ -2257,6 +2304,89 @@ const styles = StyleSheet.create({
   secondaryTrackText: {
     fontSize: 13.5,
     fontFamily: "Inter_600SemiBold",
+  },
+  enhancedTrackCard: {
+    width: "100%",
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    gap: 14,
+    marginTop: 6,
+  },
+  trackCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  trackStatusIndicatorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  trackStatusLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.2,
+  },
+  trackReferenceTag: {
+    fontSize: 12.5,
+    fontFamily: "Inter_600SemiBold",
+  },
+  trackTimeline: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
+  timelineItem: {
+    alignItems: "center",
+    gap: 6,
+  },
+  timelineIconActive: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineIconPending: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineIconUpcoming: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineTextActive: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  timelineTextPending: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+  },
+  timelineTextUpcoming: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+  },
+  timelineLine: {
+    flex: 1,
+    height: 2,
+    marginHorizontal: 8,
+    marginBottom: 16,
+    borderRadius: 1,
   },
   headerBlock: {
     marginBottom: 4,
