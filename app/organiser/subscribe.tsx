@@ -385,10 +385,9 @@ function ManualSubscribeCheckout() {
         <Stack.Screen options={{ gestureEnabled: !submitting }} />
         <OrganiserFlowHeader title="Upload receipt" step={2} canGoBack={!submitting} onBack={() => setStep("method")} />
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]} showsVerticalScrollIndicator={false}>
-          <Text style={[styles.title, { color: palette.text, fontSize: 22 }]}>Add your payment screenshot</Text>
+          <Text style={[styles.title, { color: palette.text, fontSize: 22 }]}>Upload proof of payment</Text>
           <Text style={[styles.subtitle, { color: palette.muted }]}>
-            A clear screenshot of the mobile money confirmation is enough. An admin reviews it and your organiser
-            access starts as soon as it's approved.
+            Please upload a clear screenshot of your payment confirmation message as proof of payment. An admin reviews it and your organiser access is activated once verified.
           </Text>
           <ReceiptPhotoPicker
             uri={receiptUri}
@@ -563,18 +562,15 @@ function ManualSubscribeCheckout() {
             </Pressable>
           ) : null}
 
-          {/* Quick Steps Guide */}
+          {/* NB Notice Card */}
           {selectedMethod && activePlan ? (
-            <View style={[styles.simpleGuideCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
-              <Text style={[styles.simpleGuideTitle, { color: palette.text }]}>Quick steps:</Text>
-              <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
-                <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>1.</Text> Tap <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>Dial to pay</Text> (or copy code <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>{activeUssdCode}</Text>).
-              </Text>
-              <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
-                <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>2.</Text> Pay <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>{formatPlanPrice(activePlan)}</Text> to <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>{MERCHANT_NAME}</Text> with PIN.
-              </Text>
-              <Text style={[styles.simpleGuideStep, { color: palette.muted }]}>
-                <Text style={{ color: palette.text, fontFamily: "Inter_600SemiBold" }}>3.</Text> Screenshot the confirmation SMS and tap <Text style={{ color: palette.accent, fontFamily: "Inter_600SemiBold" }}>I have paid</Text> below.
+            <View style={[styles.nbNoticeCard, { backgroundColor: palette.surface, borderColor: palette.line }]}>
+              <View style={styles.nbHeaderRow}>
+                <Ionicons name="information-circle" size={17} color={palette.accent} />
+                <Text style={[styles.nbTitle, { color: palette.accent }]}>NB:</Text>
+              </View>
+              <Text style={[styles.nbBodyText, { color: palette.text }]}>
+                Please keep a screenshot of your payment confirmation message for verification. Once you complete the payment, tap <Text style={{ color: palette.accent, fontFamily: "Inter_700Bold" }}>I have paid</Text> below to upload your screenshot as proof of payment.
               </Text>
             </View>
           ) : null}
@@ -1829,20 +1825,24 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     marginTop: 2,
   },
-  simpleGuideCard: {
+  nbNoticeCard: {
     borderRadius: 16,
     borderWidth: 1,
-    padding: 16,
-    gap: 8,
+    padding: 14,
+    gap: 6,
     marginTop: 4,
   },
-  simpleGuideTitle: {
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 0.2,
-    marginBottom: 2,
+  nbHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  simpleGuideStep: {
+  nbTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 0.5,
+  },
+  nbBodyText: {
     fontSize: 12.5,
     fontFamily: "Inter_400Regular",
     lineHeight: 18,
