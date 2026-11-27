@@ -140,7 +140,9 @@ const DEMO_PLANS: SubscriptionPlan[] = [
       "Featured placement in Discover",
       "Comprehensive revenue & analytics",
     ],
+    recommended: true,
     durations: [1],
+    badge: "Recommended",
   },
   {
     id: "organiser_quarterly",
@@ -154,7 +156,6 @@ const DEMO_PLANS: SubscriptionPlan[] = [
       "Top priority discovery & push alerts",
       "Export guest lists & CSV reports",
     ],
-    recommended: true,
     durations: [1],
     badge: "Popular",
   },
@@ -201,10 +202,10 @@ function normalizeRemotePlan(value: unknown): SubscriptionPlan | null {
     price: Number(BigInt(String(row.priceMinor ?? "0"))),
     interval,
     features: Array.isArray(row.features) ? row.features.map(String) : [],
-    recommended: Boolean(row.recommended),
+    recommended: Boolean(row.recommended) || interval === "month",
     // The real plan has one fixed term; the demo's multi-duration bundles don't apply.
     durations: [1],
-    badge: typeof row.badge === "string" && row.badge ? row.badge : undefined,
+    badge: typeof row.badge === "string" && row.badge ? row.badge : (interval === "month" ? "Recommended" : undefined),
   };
 }
 

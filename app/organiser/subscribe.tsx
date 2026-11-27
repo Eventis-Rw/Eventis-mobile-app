@@ -138,7 +138,7 @@ function ManualSubscribeCheckout() {
     try {
       const list = await fetchSubscriptionPlans();
       setPlans(list);
-      setSelectedPlanId((current) => current ?? list.find((p) => p.recommended)?.id ?? list[0]?.id ?? null);
+      setSelectedPlanId((current) => current ?? list.find((p) => p.interval === "month")?.id ?? list.find((p) => p.recommended)?.id ?? list[0]?.id ?? null);
     } catch (error) {
       setPlansError(describeError(error, "We couldn't load subscription plans."));
     } finally {
@@ -251,7 +251,6 @@ function ManualSubscribeCheckout() {
                 onPress={() => router.push("/organiser/payments" as any)}
               >
                 <Text style={styles.primaryPayBtnText}>Track this payment</Text>
-                <Ionicons name="arrow-forward" size={18} color="#fff" />
               </Pressable>
               <Pressable
                 onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}
@@ -285,7 +284,6 @@ function ManualSubscribeCheckout() {
                 onPress={() => router.push("/organiser/payments" as any)}
               >
                 <Text style={styles.primaryPayBtnText}>View my payments</Text>
-                <Ionicons name="arrow-forward" size={18} color="#fff" />
               </Pressable>
               <Pressable
                 onPress={() => router.replace("/(tabs)" as any)}
@@ -483,33 +481,94 @@ function ManualSubscribeCheckout() {
             <Text style={[styles.statusText, { color: colors.mutedForeground }]}>No plans are available right now.</Text>
           </OrganiserSurface>
         ) : (
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 12 }}>
             {plans.map((plan) => {
               const selected = plan.id === selectedPlanId;
+              const isRecommended = Boolean(plan.recommended || plan.interval === "month");
               return (
                 <Pressable
                   key={plan.id}
-                  onPress={() => setSelectedPlanId(plan.id)}
+                  onPress={() => {
+                    if (Platform.OS !== "web") {
+                      Haptics.selectionAsync().catch(() => {});
+                    }
+                    setSelectedPlanId(plan.id);
+                  }}
                   accessibilityRole="radio"
                   accessibilityState={{ selected }}
                 >
                   <OrganiserSurface
-                    style={[styles.mainPlanCard, { padding: 16, backgroundColor: selected ? palette.blueSoft : palette.surface, borderColor: selected ? palette.blue : palette.line }]}
+                    style={[
+                      styles.mainPlanCard,
+                      {
+                        padding: 18,
+                        backgroundColor: selected
+                          ? (palette.dark ? "rgba(56,189,248,0.08)" : "rgba(14,165,233,0.06)")
+                          : palette.surface,
+                        borderColor: selected
+                          ? palette.accent
+                          : isRecommended
+                          ? (palette.dark ? "rgba(56,189,248,0.35)" : "rgba(14,165,233,0.35)")
+                          : palette.line,
+                        borderWidth: selected ? 2 : isRecommended ? 1.5 : 1,
+                      },
+                    ]}
                   >
                     <View style={styles.planCardHeader}>
-                      <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
                         <View style={styles.planTitleRow}>
-                          <Text style={[styles.planCardTitle, { color: palette.text, fontSize: 17 }]}>{plan.name}</Text>
-                          {plan.badge ? (
+                          <Text style={[styles.planCardTitle, { color: palette.text, fontSize: 18 }]}>{plan.name}</Text>
+                          {isRecommended ? (
+                            <View style={[styles.recommendedBadge, { backgroundColor: palette.accent + "22", borderColor: palette.accent + "55" }]}>
+                              <Ionicons name="sparkles" size={11} color={palette.accent} />
+                              <Text style={[styles.recommendedBadgeText, { color: palette.accent }]}>RECOMMENDED</Text>
+                            </View>
+                          ) : plan.badge ? (
                             <View style={styles.planBadgeWrap}>
                               <Text style={[styles.planBadgeText, { color: palette.accent }]}>{plan.badge}</Text>
                             </View>
                           ) : null}
                         </View>
-                        <Text style={[styles.priceSubtext, { color: palette.muted, marginTop: 4 }]}>{formatPlanPrice(plan)}</Text>
+                        {plan.description ? (
+                          <Text style={[styles.planCardDesc, { color: palette.muted, marginTop: 4, lineHeight: 18 }]}>
+                            {plan.description}
+                          </Text>
+                        ) : null}
                       </View>
-                      <Ionicons name={selected ? "radio-button-on" : "radio-button-off"} size={22} color={selected ? palette.blue : palette.muted} />
+                      <View
+                        style={[
+                          styles.planRadio,
+                          {
+                            borderColor: selected ? palette.accent : palette.line,
+                            backgroundColor: selected ? (palette.dark ? "rgba(56,189,248,0.15)" : "rgba(14,165,233,0.12)") : "transparent",
+                          },
+                        ]}
+                      >
+                        {selected ? <View style={[styles.planRadioDot, { backgroundColor: palette.accent }]} /> : null}
+                      </View>
                     </View>
+
+                    <View style={styles.planCardPriceRow}>
+                      <Text style={[styles.priceCurrency, { color: palette.accent, fontSize: 16 }]}>RWF</Text>
+                      <Text style={[styles.priceNumber, { color: palette.text, fontSize: 26, letterSpacing: -0.5 }]}>
+                        {plan.price.toLocaleString()}
+                      </Text>
+                      <Text style={[styles.priceSubtext, { color: palette.muted, marginTop: 0, alignSelf: "baseline" }]}>
+                        {plan.interval === "post" ? "/ post" : plan.interval === "month" ? "/ month" : plan.interval === "quarter" ? "/ 3 months" : "/ year"}
+                      </Text>
+                    </View>
+
+                    {selected && plan.features && plan.features.length > 0 ? (
+                      <View style={styles.planFeaturesWrap}>
+                        <View style={[styles.planFeaturesDivider, { backgroundColor: palette.line }]} />
+                        {plan.features.map((feature, idx) => (
+                          <View key={idx} style={styles.planFeatureRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={palette.accent} />
+                            <Text style={[styles.planFeatureText, { color: palette.text }]}>{feature}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
                   </OrganiserSurface>
                 </Pressable>
               );
@@ -522,7 +581,7 @@ function ManualSubscribeCheckout() {
           style={[styles.primaryPayBtn, { backgroundColor: colors.primary, marginTop: 4, opacity: activePlan ? 1 : 0.6 }]}
           onPress={() => void goToMethods()}
         >
-          {resolvingMethods ? <ActivityIndicator color="#fff" /> : <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />}
+          {resolvingMethods ? <ActivityIndicator color="#fff" /> : null}
           <Text style={styles.primaryPayBtnText}>{resolvingMethods ? "Loading…" : "Continue"}</Text>
         </Pressable>
         <Text style={[styles.guaranteeText, { color: palette.muted }]}>
@@ -549,7 +608,7 @@ function DemoSubscribeCheckout() {
   const [plansLoading, setPlansLoading] = useState(true);
   const [plansError, setPlansError] = useState<string | null>(null);
 
-  const [selectedInterval, setSelectedInterval] = useState<SubscriptionInterval>("post");
+  const [selectedInterval, setSelectedInterval] = useState<SubscriptionInterval>("month");
   const [selectedDuration, setSelectedDuration] = useState<number>(1);
 
   const [method, setMethod] = useState<PaymentMethod>("mtn_momo");
@@ -586,7 +645,8 @@ function DemoSubscribeCheckout() {
 
   useEffect(() => {
     if (intervalTabs.length && !intervalTabs.some((tab) => tab.id === selectedInterval)) {
-      setSelectedInterval(intervalTabs[0].id);
+      const preferred = intervalTabs.find((t) => t.id === "month") ?? intervalTabs[0];
+      setSelectedInterval(preferred.id);
     }
   }, [intervalTabs, selectedInterval]);
 
@@ -803,6 +863,11 @@ function DemoSubscribeCheckout() {
                   >
                     {tab.label}
                   </Text>
+                  {tab.id === "month" ? (
+                    <View style={[styles.tabMiniBadge, { backgroundColor: palette.accent + "25" }]}>
+                      <Ionicons name="sparkles" size={9} color={palette.accent} />
+                    </View>
+                  ) : null}
                 </Pressable>
               );
             })}
@@ -839,7 +904,12 @@ function DemoSubscribeCheckout() {
                       <Text style={[styles.planCardTitle, { color: palette.text }]}>
                         {activePlan.name} access
                       </Text>
-                      {activePlan.badge ? (
+                      {activePlan.recommended || activePlan.interval === "month" ? (
+                        <View style={[styles.recommendedBadge, { backgroundColor: palette.accent + "22", borderColor: palette.accent + "55" }]}>
+                          <Ionicons name="sparkles" size={11} color={palette.accent} />
+                          <Text style={[styles.recommendedBadgeText, { color: palette.accent }]}>RECOMMENDED</Text>
+                        </View>
+                      ) : activePlan.badge ? (
                         <View style={styles.planBadgeWrap}>
                           <Text style={[styles.planBadgeText, { color: palette.accent }]}>{activePlan.badge}</Text>
                         </View>
@@ -1270,7 +1340,6 @@ function StatusResult({
           <>
             <Pressable style={[styles.primaryPayBtn, { backgroundColor: colors.primary }]} onPress={postPack ? onPostNow : onContinue}>
               <Text style={styles.primaryPayBtnText}>{postPack ? "Post My Event Now" : "Set Up Organisation"}</Text>
-              <Ionicons name="arrow-forward" size={18} color="#fff" />
             </Pressable>
             {postPack ? (
               <Pressable onPress={onContinue} style={styles.cancelSheetBtn} accessibilityRole="button">
@@ -1336,6 +1405,66 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
 
+  recommendedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  recommendedBadgeText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.5,
+  },
+  planRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+    marginTop: 2,
+  },
+  planRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  planCardPriceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+    marginTop: 12,
+  },
+  planFeaturesWrap: {
+    marginTop: 12,
+    gap: 8,
+  },
+  planFeaturesDivider: {
+    height: 1,
+    marginBottom: 6,
+  },
+  planFeatureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  planFeatureText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    flex: 1,
+    lineHeight: 18,
+  },
+  tabMiniBadge: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: -2,
+  },
   // Main plan card
   mainPlanCard: {
     borderRadius: 20,
